@@ -1,5 +1,4 @@
-import { initializeApp, getApps, cert } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { initDb } from "./_firebase.js";
 
 const TN_TOKEN   = process.env.TN_ACCESS_TOKEN;
 const TN_STOREID = process.env.TN_STORE_ID;
@@ -25,17 +24,17 @@ function parsearDatepicker(notas) {
 }
 
 function ordenAEnvio(order) {
-  const ship    = order.shipping_address || {};
-  const cp      = String(ship.zipcode || "").replace(/\D/g, "");
-  const dir     = [ship.address, ship.number, ship.floor, ship.apartment].filter(Boolean).join(" ");
-  const ciudad  = ship.city || "";
+  const ship = order.shipping_address || {};
+  const cp = String(ship.zipcode || "").replace(/\D/g, "");
+  const dir = [ship.address, ship.number, ship.floor, ship.apartment].filter(Boolean).join(" ");
+  const ciudad = ship.city || "";
   const partido = cpAPartido(cp) || ciudad;
   const alertaSinDireccion = !dir || !cp;
-  const notasOrden   = order.note || "";
+  const notasOrden = order.note || "";
   const notasCliente = order.customer_note || "";
   const { fecha, turno, datepickerRaw } = parsearDatepicker(notasOrden);
   const pagoMethods = order.payment_details || [];
-  const formaPago   = Array.isArray(pagoMethods) && pagoMethods.length
+  const formaPago = Array.isArray(pagoMethods) && pagoMethods.length
     ? pagoMethods.map(p => p.payment_method || p.method || "").filter(Boolean).join(", ")
     : (order.gateway || "");
   const efectivo = formaPago.toLowerCase().includes("efectivo") || formaPago.toLowerCase().includes("cash");
@@ -43,15 +42,12 @@ function ordenAEnvio(order) {
   return {
     id: String(order.id), origen: "Tienda Nube", idTN: order.id,
     nroOrdenTN: String(order.number || order.id),
-    nroSeguimiento: "",
-    linkTN: `https://mitienda.mitiendanube.com/admin/orders/${order.id}`,
-    linkML: "",
-    clienteNombre: `${order.customer?.name || ""} ${order.customer?.lastname || ""}`.trim(),
+    nroSeguimiento: "", linkTN: `https://mitienda.mitiendanube.com/admin/orders/${order.id}`,
+    linkML: "", clienteNombre: `${order.customer?.name || ""} ${order.customer?.lastname || ""}`.trim(),
     telefono: order.customer?.phone || ship.phone || "",
     direccion: dir || "SIN DIRECCION", ciudad, cp, partido,
     provincia: ship.province || "", alertaDireccion: alertaSinDireccion,
-    formaPago, importeOrden,
-    cobranza: efectivo ? importeOrden : null,
+    formaPago, importeOrden, cobranza: efectivo ? importeOrden : null,
     notasOrden, notasCliente, datepickerRaw,
     fechaVenta: (order.created_at || "").split("T")[0],
     fecha, turno, trans: "", estado: "sin_asignar",
@@ -61,20 +57,22 @@ function ordenAEnvio(order) {
   };
 }
 
-function initDb() {
-  if (getApps().length === 0) {
-    initializeApp({ credential: cert({ projectId: process.env.FIREBASE_PROJECT_ID, clientEmail: process.env.FIREBASE_CLIENT_EMAIL, privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g,"\n") }) });
-  }
-  return getFirestore();
-}
-
 export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
-  const db = initDb();
+  
+  let db;
+  try {
+    db = initDb();
+  } catch(e) {
+    return res.status(500).json({ error: "Firebase init failed", detail: e.message });
+  }
+
   let page = 1, guardados = 0, saltados = 0;
   while (true) {
     const url = `https://api.tiendanube.com/v1/${TN_STOREID}/orders?page=${page}&per_page=50&status=open`;
-    const resp = await fetch(url, { headers: { "Authentication": `bearer ${TN_TOKEN}`, "User-Agent": "EnviosHub (maxidottori@gmail.com)" } });
+    const resp = await fetch(url, {
+      headers: { "Authentication": `bearer ${TN_TOKEN}`, "User-Agent": "EnviosHub (maxidottori@gmail.com)" }
+    });
     if (!resp.ok) break;
     const orders = await resp.json();
     if (!orders || orders.length === 0) break;
