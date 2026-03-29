@@ -352,8 +352,25 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
   const eliminarSel=()=>{if(!window.confirm(`Eliminar ${seleccionados.size} envio(s)?`))return;setEnvios(p=>p.filter(e=>!seleccionados.has(e.id)));setSeleccionados(new Set());setModoSel(false);};
   const reasignarSel=()=>{const items=envios.filter(e=>seleccionados.has(e.id));onReasignar(items);setSeleccionados(new Set());setModoSel(false);};
   const cancelarSel=()=>{if(!window.confirm(`Cancelar ${seleccionados.size} envio(s)?`))return;setEnvios(p=>p.map(e=>seleccionados.has(e.id)?{...e,estado:"cancelado"}:e));setSeleccionados(new Set());setModoSel(false);};
-  // Filtrar por logistica al hacer clic en card
-  const filtrarPorLogistica=l=>{setFilTrans(filTrans===l?"TODOS":l);};
+  // Ordenar por nroOrdenTN descendente (mas nuevo arriba)
+  const filtradosOrdenados=[...filtrados].sort((a,b)=>{
+    const nA=parseInt(a.nroOrdenTN||a.id)||0;
+    const nB=parseInt(b.nroOrdenTN||b.id)||0;
+    return nB-nA;
+  });
+
+  // Badge de origen
+  const ORIGEN_C={
+    "Tienda Nube":{label:"TN",bg:"#0d1c2e",t:"#38bdf8",border:"#38bdf8"},
+    "ML":{label:"FLEX",bg:"#0d1c04",t:"#84cc16",border:"#84cc16"},
+    "Manual":{label:"Manual",bg:"#1c1400",t:"#f59e0b",border:"#f59e0b"},
+  };
+  function origenBadge(e){
+    const o=e.origen==="Tienda Nube"?"Tienda Nube":e.origen==="ML"?"ML":"Manual";
+    const c=ORIGEN_C[o]||{label:o,bg:"#1a1f2e",t:"#6b7280",border:"#252d40"};
+    return <span style={{padding:"1px 7px",background:c.bg,color:c.t,borderRadius:"5px",fontSize:"0.65rem",fontWeight:700,border:"1px solid "+c.border,flexShrink:0}}>{c.label}</span>;
+  }
+
   return(
     <div>
       <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.7rem"}}>
@@ -386,12 +403,12 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
         {["TODOS","sin_asignar","asignado","cancelado"].map(k=><button key={k} onClick={()=>setFilEstado(k)} style={S.btnSm(filEstado===k,ESTADO_C[k]?.t||"#6366f1")}>{ESTADO_C[k]?.label||"Todos"}</button>)}
         <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
         <button onClick={()=>{setModoSel(!modoSel);if(modoSel)setSeleccionados(new Set());}} style={S.btnSm(modoSel,"#6366f1")}>{modoSel?"Cancelar seleccion":"Seleccionar"}</button>
-        {modoSel&&<button onClick={()=>setSeleccionados(new Set(filtrados.map(e=>e.id)))} style={S.btnSm(false)}>Todos ({filtrados.length})</button>}
+        {modoSel&&<button onClick={()=>setSeleccionados(new Set(filtradosOrdenados.map(e=>e.id)))} style={S.btnSm(false)}>Todos ({filtrados.length})</button>}
         {modoSel&&seleccionados.size>0&&<button onClick={()=>setSeleccionados(new Set())} style={S.btnSm(false)}>Ninguno</button>}
       </div>
       <div style={{display:"grid",gap:"4px",paddingBottom:"80px"}}>
-        {filtrados.length===0&&<div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📭</div><p>Sin envios</p></div>}
-        {filtrados.map((e,i)=>{
+        {filtradosOrdenados.length===0&&<div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📭</div><p>Sin envios</p></div>}
+        {filtradosOrdenados.map((e,i)=>{
           const zi=getZonaLogistica(zc,e.trans,e.partido);
           const zml=getZonaML(e.partido);
           const isEdit=editId===e.id;
@@ -399,12 +416,14 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
           const imp=getImp(e);
           const estKey=getEstado(e);
           const estC=ESTADO_C[estKey]||ESTADO_C.sin_asignar;
+          const esTN=e.origen==="Tienda Nube";
           return(
             <div key={e.id}>
-              <div style={{...S.card,padding:"0.55rem 0.75rem",display:"flex",alignItems:"flex-start",gap:"0.5rem",opacity:getEstado(e)==="cancelado"?0.45:1,borderColor:isEdit||isSel?"#6366f1":"#252d40",background:isSel?"#12172a":"#1a1f2e"}}>
+              <div style={{...S.card,padding:"0.55rem 0.75rem",display:"flex",alignItems:"flex-start",gap:"0.5rem",opacity:getEstado(e)==="cancelado"?0.45:1,borderColor:isEdit||isSel?"#6366f1":e.alertaDireccion?"#f59e0b":"#252d40",background:isSel?"#12172a":"#1a1f2e"}}>
                 {modoSel?<div style={{paddingTop:"2px"}}><Chk checked={isSel} onChange={()=>toggleSel(e.id)}/></div>:<span style={{color:"#374151",fontSize:"0.65rem",minWidth:"20px",textAlign:"right",paddingTop:"3px"}}>{i+1}</span>}
                 <div style={{flex:1,cursor:"pointer",minWidth:0}} onClick={()=>{if(modoSel)toggleSel(e.id);else setEditId(isEdit?null:e.id);}}>
                   <div style={{display:"flex",gap:"3px",flexWrap:"wrap",alignItems:"center",marginBottom:"3px"}}>
+                    {origenBadge(e)}
                     <Bdg label={estC.label} bg={estC.bg} t={estC.t}/>
                     {e.trans&&<Bdg label={e.trans} bg={lc[e.trans]?.bg||"#1a1f2e"} t={lc[e.trans]?.color||"#6b7280"}/>}
                     {zml&&<Bdg label={zml} bg={ZONA_ML_BG[zml]||"#1a1f2e"} t={ZONA_ML_COLOR[zml]||"#6b7280"}/>}
@@ -415,21 +434,28 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
                     {e.cobranza!==null&&<Bdg label={"$"+Number(e.cobranza).toLocaleString("es-AR")} bg="#1c1500" t="#fbbf24"/>}
                     {e.cambio!==null&&<Bdg label="Cambio" bg="#1c0514" t="#ec4899"/>}
                     {e.retiro!==null&&<Bdg label="Retiro" bg="#1c1000" t="#f97316"/>}
+                    {e.alertaDireccion&&<Bdg label="Sin CP/Dir" bg="#1c0a00" t="#fb923c"/>}
                   </div>
-                  <div style={{color:"#e5e7eb",fontSize:"0.8rem",lineHeight:1.35,textDecoration:getEstado(e)==="cancelado"?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}</div>
+                  {/* Nombre cliente (TN) o direccion como titulo */}
+                  {esTN&&e.clienteNombre&&<div style={{color:"#e5e7eb",fontSize:"0.82rem",fontWeight:600,marginBottom:"1px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.clienteNombre}</div>}
+                  <div style={{color:esTN&&e.clienteNombre?"#9ca3af":"#e5e7eb",fontSize:"0.8rem",lineHeight:1.35,textDecoration:getEstado(e)==="cancelado"?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}</div>
                   <div style={{color:"#374151",fontSize:"0.66rem",marginTop:"1px",display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center"}}>
-                    <span style={{fontFamily:"monospace"}}>...{e.id.slice(-10)}</span>
+                    {esTN?<span style={{fontFamily:"monospace",color:"#6b7280"}}>#{e.nroOrdenTN}</span>:<span style={{fontFamily:"monospace"}}>...{e.id.slice(-10)}</span>}
                     {e.nroSeguimiento&&<span style={{background:"#0f1420",padding:"0 5px",borderRadius:"4px",border:"1px solid #252d40",color:"#9ca3af"}}>📦 {e.nroSeguimiento}</span>}
                     <span style={{color:"#374151"}}>· {e.partido}</span>
+                    {e.fechaVenta&&<span style={{color:"#4b5563"}}>· {fmtCorta(e.fechaVenta)}</span>}
+                    {e.formaPago&&esTN&&<span style={{color:e.formaPago==="Efectivo"?"#fbbf24":"#4b5563"}}>· {e.formaPago}</span>}
                     {e.observaciones&&<span style={{color:"#6b7280",fontStyle:"italic"}}>"{e.observaciones.slice(0,30)}{e.observaciones.length>30?"...":""}"</span>}
                   </div>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"3px",flexShrink:0}}>
                   <div style={{display:"flex",gap:"3px",alignItems:"center"}}>
+                    {esTN&&e.linkTN&&<a href={e.linkTN} target="_blank" rel="noreferrer" onClick={ev=>ev.stopPropagation()} title="Ver en Tienda Nube" style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:"26px",height:"26px",borderRadius:"6px",background:"#0d1c2e",border:"1px solid #38bdf8",textDecoration:"none",flexShrink:0,fontSize:"0.7rem"}}>TN</a>}
                     {e.linkML&&<a href={e.linkML} target="_blank" rel="noreferrer" onClick={ev=>ev.stopPropagation()} title="Ver en ML" style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:"26px",height:"26px",borderRadius:"6px",background:"#0f1420",border:"1px solid #252d40",textDecoration:"none",flexShrink:0}}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>}
                     {!modoSel&&<button onClick={ev=>{ev.stopPropagation();eliminar(e.id);}} style={{...S.btnSm(false),padding:"1px 6px",fontSize:"0.68rem",color:"#f87171"}}>x</button>}
                   </div>
                   {imp>0&&<span style={{color:"#10b981",fontWeight:700,fontSize:"0.82rem"}}>{fmt(imp)}</span>}
+                  {esTN&&e.importeOrden>0&&<span style={{color:"#6b7280",fontSize:"0.7rem"}}>{fmt(e.importeOrden)}</span>}
                 </div>
               </div>
               {isEdit&&!modoSel&&<PanelEdit envio={e} onSave={saveEnvio} onClose={()=>setEditId(null)} lc={lc}/>}
