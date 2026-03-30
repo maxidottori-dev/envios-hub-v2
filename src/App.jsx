@@ -254,7 +254,24 @@ function PanelEdit({envio,onSave,onClose,lc}){
         </div>
       )}
 
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.6rem 1rem",marginBottom:"0.65rem"}}>
+      {/* Bloque pago pendiente — solo TN */}
+      {esTN && e.pagoEstado === "pendiente" && (
+        <div style={{background:"#1c0a00",border:"1px solid #fb923c",borderRadius:"10px",padding:"0.65rem 1rem",marginBottom:"0.75rem",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
+          <span style={{fontSize:"1.1rem"}}>⚠️</span>
+          <div style={{flex:1}}>
+            <div style={{color:"#fb923c",fontWeight:700,fontSize:"0.85rem"}}>Pago pendiente de acreditacion</div>
+            <div style={{color:"#9ca3af",fontSize:"0.72rem",marginTop:"2px"}}>El pago no fue confirmado. Podés esperar o autorizar la entrega igualmente.</div>
+          </div>
+          <button onClick={()=>setE(p=>({...p,pagoEstado:"cuenta_corriente"}))} style={{...S.btn(true,"#7c3aed"),padding:"0.35rem 0.9rem",fontSize:"0.72rem",whiteSpace:"nowrap"}}>Autorizar — Cta. Corriente</button>
+        </div>
+      )}
+      {esTN && e.pagoEstado === "cuenta_corriente" && (
+        <div style={{background:"#130d2a",border:"1px solid #a78bfa",borderRadius:"10px",padding:"0.5rem 1rem",marginBottom:"0.75rem",display:"flex",alignItems:"center",gap:"0.5rem"}}>
+          <span style={{color:"#a78bfa",fontWeight:700,fontSize:"0.82rem"}}>✓ Autorizado como Cuenta Corriente</span>
+        </div>
+      )}
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.6rem 1rem",marginBottom:"0.65rem",opacity:(esTN&&e.pagoEstado==="pendiente")?0.35:1,pointerEvents:(esTN&&e.pagoEstado==="pendiente")?"none":"auto"}}>
         <div>
           <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Logistica</div>
           <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{logActivas.map(l=><button key={l} onClick={()=>handleTrans(l)} style={S.chip(e.trans===l,lc[l].color,lc[l].bg)}>{l}</button>)}</div>
