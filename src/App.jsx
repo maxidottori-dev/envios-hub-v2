@@ -1,15 +1,35 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import * as XLSXLib from "xlsx";
 import { db } from "./firebase.js";
-import { collection, onSnapshot, doc, setDoc, deleteDoc } from "firebase/firestore";
+import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where, getDocs, limit } from "firebase/firestore";
 
-const VERSION = "2.1";
+const VERSION = "3.0";
 
 // Estado derivado: si tiene trans asignado = asignado, si fue cancelado = cancelado, sino = sin_asignar
 function getEstado(e) {
   if (e.estado === "cancelado") return "cancelado";
   if (e.trans) return "asignado";
   return "sin_asignar";
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+// AUTH — sistema de usuarios simple con Firebase
+// ════════════════════════════════════════════════════════════════════
+const AUTH_KEY = "envhub_session";
+
+function getSession() {
+  try { return JSON.parse(localStorage.getItem(AUTH_KEY) || "null"); } catch { return null; }
+}
+function setSession(u) { localStorage.setItem(AUTH_KEY, JSON.stringify(u)); }
+function clearSession() { localStorage.removeItem(AUTH_KEY); }
+
+async function loginUsuario(usuario, password, db) {
+  const snap = await db.collection("usuarios").where("usuario","==",usuario).where("activo","==",true).limit(1).get();
+  if (snap.empty) return null;
+  const data = snap.docs[0].data();
+  if (data.password !== password) return null;
+  return { id: snap.docs[0].id, ...data };
 }
 
 function cargarXLSX() { return Promise.resolve(XLSXLib); }
@@ -81,11 +101,11 @@ function parsearExcel(file) {
 }
 
 const LOGISTICAS_INIT = {
-  CARLOS: {nombre:"CARLOS",color:"#f59e0b",bg:"#1c1400",activa:true,preciosBultos:[{b:1,p:0},{b:2,p:0},{b:3,p:0}]},
-  GUS:    {nombre:"GUS",   color:"#3b82f6",bg:"#0c1a2e",activa:true,preciosBultos:[{b:1,p:0},{b:2,p:0},{b:3,p:0}]},
-  DELFRAN:{nombre:"DELFRAN",color:"#10b981",bg:"#041f14",activa:true,preciosBultos:[{b:1,p:0},{b:2,p:0},{b:3,p:0}]},
-  SYM:    {nombre:"SYM",   color:"#ec4899",bg:"#1c0514",activa:true,preciosBultos:[{b:1,p:0},{b:2,p:0},{b:3,p:0}]},
-  HNOS:   {nombre:"HNOS",  color:"#8b5cf6",bg:"#130d2a",activa:true,preciosBultos:[{b:1,p:0},{b:2,p:0},{b:3,p:0}]},
+  CARLOS:  {nombre:"CARLOS", color:"#f59e0b",bg:"#1c1400",activa:true,preciosBultos:[{b:1,p:0},{b:2,p:0},{b:3,p:0}]},
+  GUS:     {nombre:"GUS",    color:"#3b82f6",bg:"#0c1a2e",activa:true,preciosBultos:[{b:1,p:0},{b:2,p:0},{b:3,p:0}]},
+  SYM:     {nombre:"SYM",    color:"#ec4899",bg:"#1c0514",activa:true,preciosBultos:[{b:1,p:0},{b:2,p:0},{b:3,p:0}]},
+  HNOS:    {nombre:"HNOS",   color:"#8b5cf6",bg:"#130d2a",activa:true,preciosBultos:[{b:1,p:0},{b:2,p:0},{b:3,p:0}]},
+  UMPAPEL: {nombre:"UMPAPEL",color:"#14b8a6",bg:"#042f2e",activa:true,preciosBultos:[{b:1,p:0},{b:2,p:0},{b:3,p:0}]},
 };
 
 const TURNOS=["AM","MD","PM","Turbo"];
@@ -133,6 +153,59 @@ const tdSt={padding:"0.4rem 0.8rem",whiteSpace:"nowrap"};
 
 function Bdg({label,bg,t,style}){return <span style={{padding:"2px 8px",background:bg||"#252d40",color:t||"#9ca3af",borderRadius:"6px",fontSize:"0.67rem",fontWeight:700,whiteSpace:"nowrap",...style}}>{label}</span>;}
 function Chk({checked,onChange,size=16}){return(<div onClick={onChange} style={{width:size,height:size,borderRadius:"4px",border:"1.5px solid "+(checked?"#6366f1":"#374151"),background:checked?"#6366f1":"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}>{checked&&<svg width="10" height="8" viewBox="0 0 10 8"><path d="M1 4L3.5 6.5L9 1" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" fill="none"/></svg>}</div>);}
+
+
+// ════════════════════════════════════════════════════════════════════
+// PANTALLA LOGIN
+// ════════════════════════════════════════════════════════════════════
+function PantallaLogin({onLogin}){
+  const [usuario,setUsuario]=useState("");
+  const [password,setPassword]=useState("");
+  const [error,setError]=useState("");
+  const [loading,setLoading]=useState(false);
+
+  const handleLogin=async()=>{
+    if(!usuario||!password){setError("Completá usuario y contraseña");return;}
+    setLoading(true);setError("");
+    try{
+      const snap=await getDocs(query(collection(db,"usuarios"),where("usuario","==",usuario),where("activo","==",true),limit(1)));
+      if(snap.empty){setError("Usuario o contraseña incorrectos");setLoading(false);return;}
+      const data=snap.docs[0].data();
+      if(data.password!==password){setError("Usuario o contraseña incorrectos");setLoading(false);return;}
+      const sesion={id:snap.docs[0].id,...data};
+      setSession(sesion);
+      onLogin(sesion);
+    }catch(e){setError("Error de conexion. Intentá de nuevo.");}
+    setLoading(false);
+  };
+
+  return(
+    <div style={{minHeight:"100vh",background:"#0a0e1a",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"sans-serif"}}>
+      <style>{`*{box-sizing:border-box;}`}</style>
+      <div style={{width:"100%",maxWidth:"380px",padding:"0 24px"}}>
+        <div style={{textAlign:"center",marginBottom:"32px"}}>
+          <div style={{width:"56px",height:"56px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:"14px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"26px",margin:"0 auto 16px"}}>🛵</div>
+          <div style={{fontWeight:800,fontSize:"1.5rem",color:"#fff"}}>EnviosHub</div>
+          <div style={{color:"#4b5563",fontSize:"0.8rem",marginTop:"4px"}}>v{VERSION} · UMP Papel Distribuidora</div>
+        </div>
+        <div style={{background:"#1a1f2e",border:"1px solid #252d40",borderRadius:"16px",padding:"28px"}}>
+          <div style={{marginBottom:"16px"}}>
+            <div style={{color:"#6b7280",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",marginBottom:"6px"}}>Usuario</div>
+            <input value={usuario} onChange={e=>setUsuario(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()} placeholder="tu usuario" style={{width:"100%",background:"#0f1420",border:"1px solid #252d40",borderRadius:"8px",padding:"0.55rem 0.75rem",color:"#e5e7eb",fontSize:"0.9rem",outline:"none"}}/>
+          </div>
+          <div style={{marginBottom:"20px"}}>
+            <div style={{color:"#6b7280",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",marginBottom:"6px"}}>Contraseña</div>
+            <input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()} placeholder="••••••••" style={{width:"100%",background:"#0f1420",border:"1px solid #252d40",borderRadius:"8px",padding:"0.55rem 0.75rem",color:"#e5e7eb",fontSize:"0.9rem",outline:"none"}}/>
+          </div>
+          {error&&<div style={{background:"#1c0a0a",border:"1px solid #7f1d1d",borderRadius:"8px",padding:"0.5rem 0.75rem",color:"#fca5a5",fontSize:"0.78rem",marginBottom:"16px"}}>{error}</div>}
+          <button onClick={handleLogin} disabled={loading} style={{width:"100%",padding:"0.65rem",borderRadius:"10px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",color:"#fff",fontWeight:700,fontSize:"0.9rem",cursor:"pointer",border:"none",opacity:loading?0.7:1}}>
+            {loading?"Ingresando...":"Ingresar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc}){
   const hoy=fechaHoy();
@@ -517,10 +590,19 @@ function TabImprimir({envios,zc,lc}){
   const [trans,setTrans]=useState("TODOS");
   const [turno,setTurno]=useState("TODOS");
   const [filZona,setFilZona]=useState("TODAS");
+  const [filOrigen,setFilOrigen]=useState("TODOS"); // TODOS | TN | FLEX | Manual
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const tmap=buildTarifaMap(zc);
   const getImp=e=>calcImp(e,tmap,lc);
-  const lista=envios.filter(e=>{const f=e.fecha||e.fechaVenta||"";if(fecha&&f!==fecha)return false;if(trans!=="TODOS"&&e.trans!==trans)return false;if(turno!=="TODOS"&&e.turno!==turno)return false;if(filZona!=="TODAS"&&getZonaML(e.partido)!==filZona)return false;return e.estado!=="cancelado";});
+  const lista=envios.filter(e=>{
+    const f=e.fecha||e.fechaVenta||"";
+    if(fecha&&f!==fecha)return false;
+    if(trans!=="TODOS"&&e.trans!==trans)return false;
+    if(turno!=="TODOS"&&e.turno!==turno)return false;
+    if(filZona!=="TODAS"&&getZonaML(e.partido)!==filZona)return false;
+    if(filOrigen!=="TODOS"){const o=e.origen==="Tienda Nube"?"TN":e.origen==="ML"?"FLEX":"Manual";if(o!==filOrigen)return false;}
+    return e.estado!=="cancelado";
+  });
   const totalImp=lista.reduce((s,e)=>s+getImp(e),0);
   const cobTotal=lista.filter(e=>e.cobranza).reduce((s,e)=>s+(e.cobranza||0),0);
   const hayCobro=lista.some(e=>e.cobranza);
@@ -542,6 +624,13 @@ function TabImprimir({envios,zc,lc}){
         <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["TODOS",...logActivas].map(t=><button key={t} onClick={()=>setTrans(t)} style={S.btnSm(trans===t,lc[t]?.color||"#6366f1")}>{t}</button>)}</div>
         <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["TODAS",...ZONAS_ML_LIST].map(z=><button key={z} onClick={()=>setFilZona(z)} style={S.btnSm(filZona===z,ZONA_ML_COLOR[z]||"#6366f1")}>{z}</button>)}</div>
         <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["TODOS",...TURNOS].map(t=><button key={t} onClick={()=>setTurno(t)} style={S.btnSm(turno===t,"#8b5cf6")}>{t}</button>)}</div>
+        <div style={{display:"flex",gap:"3px",flexWrap:"wrap",alignItems:"center"}}>
+          <span style={{color:"#4b5563",fontSize:"0.6rem"}}>Origen:</span>
+          <button onClick={()=>setFilOrigen("TODOS")} style={S.btnSm(filOrigen==="TODOS")}>Todos</button>
+          <button onClick={()=>setFilOrigen("TN")} style={S.btnSm(filOrigen==="TN","#38bdf8")}>TN</button>
+          <button onClick={()=>setFilOrigen("FLEX")} style={S.btnSm(filOrigen==="FLEX","#84cc16")}>FLEX</button>
+          <button onClick={()=>setFilOrigen("Manual")} style={S.btnSm(filOrigen==="Manual","#f59e0b")}>Manual</button>
+        </div>
         <button onClick={generarPDF} style={{marginLeft:"auto",...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.5rem 1.1rem"}}>Generar PDF</button>
       </div>
       <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.9rem",display:"flex",gap:"1.5rem",flexWrap:"wrap"}}>
@@ -702,7 +791,15 @@ function TabTarifas({zc,setZc,lc,setLc}){
           {Object.entries(lc).map(([k,v])=>(
             <div key={k} style={{...S.card,borderTop:"3px solid "+(v.activa?v.color:"#374151"),overflow:"hidden",opacity:v.activa?1:0.6}}>
               <div style={{padding:"0.75rem 1rem",display:"flex",alignItems:"center",justifyContent:"space-between"}}><span style={{color:v.activa?v.color:"#6b7280",fontWeight:800,fontSize:"1rem"}}>{v.nombre}</span><button onClick={()=>toggleLog(k)} style={{...S.btnSm(v.activa,v.color),padding:"4px 12px"}}>{v.activa?"Activa":"Desactivar"}</button></div>
-              <div style={{padding:"0 1rem 0.75rem",color:"#4b5563",fontSize:"0.75rem"}}>{v.activa?"Visible en la app":"No aparece en asignacion ni filtros"}</div>
+              <div style={{padding:"0 1rem 0.75rem",display:"flex",flexDirection:"column",gap:"6px"}}>
+                <div style={{color:"#4b5563",fontSize:"0.75rem"}}>{v.activa?"Visible en la app":"No aparece en asignacion ni filtros"}</div>
+                {v.activa&&<div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                  <div onClick={()=>setLc(p=>({...p,[k]:{...p[k],mostrarImporteLg:!p[k].mostrarImporteLg}}))} style={{width:"32px",height:"18px",borderRadius:"9px",background:v.mostrarImporteLg?"#6366f1":"#252d40",cursor:"pointer",position:"relative",transition:"background 0.2s"}}>
+                    <div style={{position:"absolute",top:"2px",left:v.mostrarImporteLg?"14px":"2px",width:"14px",height:"14px",borderRadius:"50%",background:"white",transition:"left 0.2s"}}/>
+                  </div>
+                  <span style={{color:"#6b7280",fontSize:"0.7rem"}}>Mostrar importe a logistica</span>
+                </div>}
+              </div>
             </div>
           ))}
         </div>
@@ -1030,6 +1127,7 @@ function TabLiquidacion({ envios, setEnvios, lc }) {
   const [filTrans, setFilTrans] = useState("TODOS");
   const [filEstado, setFilEstado] = useState("pendiente"); // pendiente | recibido | todos
   const [notaModal, setNotaModal] = useState(null); // {id, tipo, nota}
+  const [busqueda, setBusqueda] = useState("");
   const logActivas = Object.entries(lc).filter(([,v]) => v.activa).map(([k]) => k);
 
   // Envios con cobranza
@@ -1041,13 +1139,25 @@ function TabLiquidacion({ envios, setEnvios, lc }) {
     (e.cambio !== null || e.retiro !== null) && getEstado(e) !== "cancelado"
   );
 
-  const lista = (seccion === "cobranzas" ? conCobranza : conRetiro).filter(e => {
+  const lista = [...(seccion === "cobranzas" ? conCobranza : conRetiro)].filter(e => {
     if (filTrans !== "TODOS" && e.trans !== filTrans) return false;
     const campo = seccion === "cobranzas" ? "cobranzaRecibida" : "retiroRecibido";
     const recibido = !!e[campo];
     if (filEstado === "pendiente" && recibido) return false;
     if (filEstado === "recibido" && !recibido) return false;
+    if (busqueda) {
+      const srch = busqueda.toLowerCase();
+      return (e.direccion||"").toLowerCase().includes(srch) ||
+             (e.nroOrdenTN||"").includes(srch) ||
+             (e.id||"").includes(srch) ||
+             (e.clienteNombre||"").toLowerCase().includes(srch);
+    }
     return true;
+  }).sort((a, b) => {
+    // Ordenar por fecha de entrega ascendente (mas proxima primero)
+    const fa = a.fecha || a.fechaVenta || "";
+    const fb = b.fecha || b.fechaVenta || "";
+    return fa.localeCompare(fb);
   });
 
   // Totales cobranzas
@@ -1105,6 +1215,9 @@ function TabLiquidacion({ envios, setEnvios, lc }) {
         {["TODOS", ...logActivas].map(t => (
           <button key={t} onClick={() => setFilTrans(t)} style={S.btnSm(filTrans === t, lc[t]?.color || "#6366f1")}>{t}</button>
         ))}
+        <span style={{ color: "#374151", fontSize: "0.6rem" }}>|</span>
+        <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar nro orden o dirección..." style={{...S.input,width:"220px",padding:"3px 8px",fontSize:"0.75rem"}}/>
+        {busqueda&&<button onClick={()=>setBusqueda("")} style={{...S.btnSm(false),color:"#6b7280"}}>x</button>}
       </div>
 
       {/* Resumen cards */}
@@ -1458,12 +1571,239 @@ function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc}){
   );
 }
 
+
+// ════════════════════════════════════════════════════════════════════
+// TAB USUARIOS — solo admin
+// ════════════════════════════════════════════════════════════════════
+function TabUsuarios({lc}){
+  const [usuarios,setUsuarios]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [form,setForm]=useState({usuario:"",password:"",rol:"colaborador",logistica:"",activo:true});
+  const [editId,setEditId]=useState(null);
+  const [toast,setToast]=useState("");
+  const logActivas=Object.keys(lc).filter(k=>lc[k].activa);
+
+  const mostrarToast=msg=>{setToast(msg);setTimeout(()=>setToast(""),2500);};
+
+  useEffect(()=>{
+    const unsub=onSnapshot(collection(db,"usuarios"),snap=>{
+      setUsuarios(snap.docs.map(d=>({id:d.id,...d.data()})));
+      setLoading(false);
+    });
+    return()=>unsub();
+  },[]);
+
+  const guardar=async()=>{
+    if(!form.usuario||!form.password){mostrarToast("Completá usuario y contraseña");return;}
+    if(form.rol==="logistica"&&!form.logistica){mostrarToast("Selecciona la logistica para este usuario");return;}
+    const id=editId||("usr_"+Date.now());
+    await setDoc(doc(db,"usuarios",id),{...form,usuario:form.usuario.toLowerCase().trim()});
+    setForm({usuario:"",password:"",rol:"colaborador",logistica:"",activo:true});
+    setEditId(null);
+    mostrarToast(editId?"Usuario actualizado":"Usuario creado");
+  };
+
+  const toggleActivo=async(u)=>{
+    await setDoc(doc(db,"usuarios",u.id),{...u,activo:!u.activo});
+  };
+
+  const editar=u=>{setForm({usuario:u.usuario,password:u.password,rol:u.rol,logistica:u.logistica||"",activo:u.activo});setEditId(u.id);};
+
+  const ROL_C={admin:{label:"Admin",color:"#6366f1"},colaborador:{label:"Colaborador",color:"#10b981"},logistica:{label:"Logistica",color:"#8b5cf6"}};
+
+  if(loading)return<div style={{textAlign:"center",padding:"2rem",color:"#4b5563"}}>Cargando...</div>;
+
+  return(
+    <div>
+      {toast&&<div style={{position:"fixed",top:"16px",right:"16px",zIndex:999,background:"#041f14",border:"1px solid #10b981",borderRadius:"10px",padding:"0.6rem 1.1rem",color:"#34d399",fontWeight:700,fontSize:"0.82rem"}}>{toast}</div>}
+
+      {/* Formulario nuevo/editar */}
+      <div style={{...S.card,padding:"1.1rem",marginBottom:"1rem"}}>
+        <div style={{fontWeight:700,fontSize:"0.9rem",marginBottom:"0.85rem",color:"#e5e7eb"}}>{editId?"Editar usuario":"Nuevo usuario"}</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:"0.65rem",marginBottom:"0.75rem"}}>
+          <div>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Usuario</div>
+            <input value={form.usuario} onChange={e=>setForm(p=>({...p,usuario:e.target.value}))} placeholder="nombre.usuario" style={{...S.input,width:"100%"}}/>
+          </div>
+          <div>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Contraseña</div>
+            <input value={form.password} onChange={e=>setForm(p=>({...p,password:e.target.value}))} placeholder="contraseña" style={{...S.input,width:"100%"}}/>
+          </div>
+          <div>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Rol</div>
+            <select value={form.rol} onChange={e=>setForm(p=>({...p,rol:e.target.value,logistica:""}))} style={{...S.input,width:"100%"}}>
+              <option value="admin">Administrador</option>
+              <option value="colaborador">Colaborador</option>
+              <option value="logistica">Logistica</option>
+            </select>
+          </div>
+          {form.rol==="logistica"&&<div>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Logistica asignada</div>
+            <select value={form.logistica} onChange={e=>setForm(p=>({...p,logistica:e.target.value}))} style={{...S.input,width:"100%"}}>
+              <option value="">Elegir...</option>
+              {logActivas.map(l=><option key={l} value={l}>{l}</option>)}
+            </select>
+          </div>}
+        </div>
+        <div style={{display:"flex",gap:"0.5rem"}}>
+          <button onClick={guardar} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)"}}>{editId?"Guardar cambios":"Crear usuario"}</button>
+          {editId&&<button onClick={()=>{setEditId(null);setForm({usuario:"",password:"",rol:"colaborador",logistica:"",activo:true});}} style={S.btn(false)}>Cancelar</button>}
+        </div>
+      </div>
+
+      {/* Lista usuarios */}
+      <div style={{...S.card,padding:0,overflow:"hidden"}}>
+        <div style={{padding:"0.75rem 1rem",background:"#12172a",borderBottom:"1px solid #252d40",fontSize:"0.72rem",fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.06em"}}>Usuarios del sistema</div>
+        {usuarios.length===0&&<div style={{padding:"2rem",textAlign:"center",color:"#4b5563"}}>No hay usuarios creados</div>}
+        {usuarios.map(u=>{
+          const rc=ROL_C[u.rol]||ROL_C.colaborador;
+          return(
+            <div key={u.id} style={{padding:"0.75rem 1rem",borderBottom:"1px solid #1a1f2e",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap",opacity:u.activo?1:0.5}}>
+              <div style={{flex:1,minWidth:"120px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                  <span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.88rem"}}>{u.usuario}</span>
+                  <span style={{padding:"1px 8px",background:rc.color+"22",color:rc.color,borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>{rc.label}</span>
+                  {u.rol==="logistica"&&u.logistica&&<span style={{padding:"1px 8px",background:lc[u.logistica]?.bg||"#1a1f2e",color:lc[u.logistica]?.color||"#6b7280",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>{u.logistica}</span>}
+                  {!u.activo&&<span style={{padding:"1px 8px",background:"#1c0a0a",color:"#f87171",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>Inactivo</span>}
+                </div>
+              </div>
+              <div style={{display:"flex",gap:"0.4rem"}}>
+                <button onClick={()=>editar(u)} style={{...S.btnSm(false),color:"#6366f1"}}>Editar</button>
+                <button onClick={()=>toggleActivo(u)} style={S.btnSm(u.activo,u.activo?"#ef4444":"#10b981")}>{u.activo?"Desactivar":"Activar"}</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+// VISTA LOGISTICA — solo lectura, filtrada por su empresa
+// ════════════════════════════════════════════════════════════════════
+function VistaLogistica({envios,sesion,lc}){
+  const [modFecha,setModFecha]=useState("todos");
+  const [filTurno,setFilTurno]=useState("TODOS");
+  const [busqueda,setBusqueda]=useState("");
+  const hoy=fechaHoy();
+  const logNombre=sesion.logistica;
+  const mostrarImporte=lc[logNombre]?.mostrarImporteLg===true;
+
+  const filtrados=[...envios].filter(e=>{
+    if(e.trans!==logNombre)return false;
+    if(getEstado(e)==="cancelado")return false;
+    const fEnv=e.fecha||e.fechaVenta||"";
+    if(modFecha==="hoy"&&fEnv!==hoy)return false;
+    if(modFecha==="semana"){const d=new Date(hoy+"T00:00:00");d.setDate(d.getDate()-7);const desde=d.toISOString().split("T")[0];if(fEnv<desde)return false;}
+    if(filTurno!=="TODOS"&&e.turno!==filTurno)return false;
+    if(busqueda){const srch=busqueda.toLowerCase();return e.direccion.toLowerCase().includes(srch)||e.partido.toLowerCase().includes(srch)||(e.clienteNombre||"").toLowerCase().includes(srch);}
+    return true;
+  }).sort((a,b)=>{const fa=a.fecha||a.fechaVenta||"";const fb=b.fecha||b.fechaVenta||"";return fa.localeCompare(fb);});
+
+  const lcD=lc[logNombre]||{color:"#6366f1",bg:"#0c1a2e"};
+
+  return(
+    <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif"}}>
+      <style>{`*{box-sizing:border-box;}::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-thumb{background:#252d40;border-radius:3px;}`}</style>
+      <div style={{position:"sticky",top:0,zIndex:100,background:"#0f1420",borderBottom:"1px solid #1a1f2e",padding:"0.7rem 1rem",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
+        <div style={{width:"26px",height:"26px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:"7px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>🛵</div>
+        <div>
+          <div style={{fontWeight:800,fontSize:"0.92rem"}}>EnviosHub <span style={{color:"#374151",fontSize:"0.6rem",fontWeight:400}}>v{VERSION}</span></div>
+          <div style={{color:lcD.color,fontSize:"0.65rem",fontWeight:700}}>{logNombre}</div>
+        </div>
+        <div style={{display:"flex",gap:"3px",flexWrap:"wrap",marginLeft:"8px"}}>
+          {[{k:"todos",l:"Todos"},{k:"hoy",l:"Hoy"},{k:"semana",l:"Ultima semana"}].map(x=><button key={x.k} onClick={()=>setModFecha(x.k)} style={{...S.btn(modFecha===x.k),padding:"0.28rem 0.6rem",fontSize:"0.72rem"}}>{x.l}</button>)}
+          <span style={{color:"#374151",fontSize:"0.6rem",alignSelf:"center"}}>|</span>
+          {["TODOS",...TURNOS].map(t=><button key={t} onClick={()=>setFilTurno(t)} style={{...S.btnSm(filTurno===t,"#8b5cf6"),padding:"0.28rem 0.6rem",fontSize:"0.72rem"}}>{t}</button>)}
+        </div>
+        <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar..." style={{...S.input,width:"160px",padding:"0.3rem 0.65rem",fontSize:"0.78rem"}}/>
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:"0.75rem"}}>
+          <span style={{color:"#4b5563",fontSize:"0.72rem"}}>{sesion.usuario}</span>
+          <button onClick={()=>{clearSession();window.location.reload();}} style={{...S.btnSm(false),color:"#f87171"}}>Salir</button>
+        </div>
+      </div>
+      <div style={{padding:"0.85rem 1rem",maxWidth:"900px",margin:"0 auto"}}>
+        <div style={{display:"flex",gap:"8px",marginBottom:"0.75rem"}}>
+          <div style={{...S.card,padding:"0.75rem 1rem",flex:1}}>
+            <div style={{color:lcD.color,fontWeight:800,fontSize:"1.6rem",lineHeight:1}}>{filtrados.length}</div>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",marginTop:"2px"}}>Envios</div>
+          </div>
+          <div style={{...S.card,padding:"0.75rem 1rem",flex:1}}>
+            <div style={{color:"#10b981",fontWeight:800,fontSize:"1.1rem"}}>{filtrados.filter(e=>getEstado(e)==="asignado").length}</div>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",marginTop:"2px"}}>Asignados</div>
+          </div>
+          {mostrarImporte&&<div style={{...S.card,padding:"0.75rem 1rem",flex:1}}>
+            <div style={{color:"#10b981",fontWeight:800,fontSize:"0.95rem"}}>${filtrados.reduce((s,e)=>s+(e.importe||0),0).toLocaleString("es-AR")}</div>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",marginTop:"2px"}}>Total</div>
+          </div>}
+        </div>
+        <div style={{display:"grid",gap:"4px"}}>
+          {filtrados.length===0&&<div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📭</div><p>Sin envios en este periodo</p></div>}
+          {filtrados.map(e=>{
+            const zml=getZonaML(e.partido);
+            const estKey=getEstado(e);
+            const estC=ESTADO_C[estKey]||ESTADO_C.sin_asignar;
+            const esTN=e.origen==="Tienda Nube";
+            return(
+              <div key={e.id} style={{...S.card,padding:"0.55rem 0.75rem",opacity:estKey==="cancelado"?0.4:1}}>
+                <div style={{display:"flex",gap:"3px",flexWrap:"wrap",alignItems:"center",marginBottom:"3px"}}>
+                  <Bdg label={estC.label} bg={estC.bg} t={estC.t}/>
+                  {zml&&<Bdg label={zml} bg={ZONA_ML_BG[zml]||"#1a1f2e"} t={ZONA_ML_COLOR[zml]||"#6b7280"}/>}
+                  {e.turno&&<Bdg label={e.turno} bg={TURNO_C[e.turno]?.bg||"#130d2a"} t={TURNO_C[e.turno]?.c||"#a78bfa"}/>}
+                  {e.fecha&&<Bdg label={fmtCorta(e.fecha)} bg="#12172a" t="#6b7280"/>}
+                  {(e.bultos||1)>1&&<Bdg label={e.bultos+" bultos"} bg="#0c1a2e" t="#60a5fa"/>}
+                  {e.cobranza!==null&&<Bdg label={"$"+Number(e.cobranza).toLocaleString("es-AR")} bg="#1c1500" t="#fbbf24"/>}
+                  {e.cambio!==null&&<Bdg label="Cambio" bg="#1c0514" t="#ec4899"/>}
+                  {e.retiro!==null&&<Bdg label="Retiro" bg="#1c1000" t="#f97316"/>}
+                </div>
+                {esTN&&<div style={{display:"flex",gap:"8px",alignItems:"baseline",marginBottom:"1px"}}>
+                  <span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.8rem"}}>#{e.nroOrdenTN}</span>
+                  {e.clienteNombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.8rem"}}>{e.clienteNombre}</span>}
+                </div>}
+                <div style={{color:esTN&&e.clienteNombre?"#9ca3af":"#e5e7eb",fontSize:"0.8rem",fontWeight:500}}>{e.direccion}</div>
+                <div style={{color:"#9ca3af",fontSize:"0.72rem",marginTop:"2px"}}>{e.localidad?e.localidad+" · ":""}{e.partido}</div>
+                {(e.notasOrden||e.observaciones)&&<div style={{marginTop:"4px",padding:"4px 8px",background:"#0f1420",borderRadius:"6px",fontSize:"0.72rem",color:"#9ca3af",fontStyle:"italic"}}>{e.notasOrden||e.observaciones}</div>}
+                {mostrarImporte&&e.importe>0&&<div style={{marginTop:"4px",color:"#10b981",fontWeight:700,fontSize:"0.78rem"}}>{fmt(e.importe)}</div>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App(){
+  const [sesion,setSesion]=useState(()=>getSession());
   const [pantalla,setPantalla]=useState("dashboard");
   const [borrador,setBorrador]=useState([]);
   const [envios,setEnviosLocal]=useState([]);
   const [zc,setZc]=useState(ZONAS_INIT);
   const [lc,setLc]=useState(LOGISTICAS_INIT);
+
+  // Cargar lc desde Firebase al iniciar
+  useEffect(()=>{
+    const ref=doc(db,"config","logisticas");
+    const unsub=onSnapshot(ref,snap=>{
+      if(snap.exists()){
+        const data=snap.data();
+        // Merge con LOGISTICAS_INIT para no perder nuevas logisticas del codigo
+        setLc(p=>({...LOGISTICAS_INIT,...p,...data}));
+      }
+    });
+    return()=>unsub();
+  },[]);
+
+  // Guardar lc en Firebase cada vez que cambia
+  const setLcPersist=useCallback((updater)=>{
+    setLc(prev=>{
+      const next=typeof updater==="function"?updater(prev):updater;
+      setDoc(doc(db,"config","logisticas"),next).catch(console.error);
+      return next;
+    });
+  },[]);
   const [tab,setTab]=useState("envios");
   const [error,setError]=useState("");
   const [loading,setLoading]=useState(false);
@@ -1507,10 +1847,25 @@ export default function App(){
   const confirmarAsignacion=async(asignados)=>{for(const e of asignados){await guardarEnvio(e);}setPantalla("dashboard");setTab("envios");mostrarToast(asignados.length+" envios guardados");};
   const reasignarSel=items=>{setBorrador(items);setPantalla("asignacion");};
 
+  // Auth gates
+  if(!sesion)return<PantallaLogin onLogin={s=>{setSession(s);setSesion(s);}}/>;
+  if(sesion.rol==="logistica")return<VistaLogistica envios={envios} sesion={sesion} lc={lc}/>;
+
   if(pantalla==="asignacion"){return<PantallaAsignacion borrador={borrador} fileName={fileName} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc}/>;}
   if(pantalla==="asignacion-tn"){return<PantallaAsignacionTN borrador={borrador} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc}/>;}
 
-  const TABS=[{id:"envios",l:"Envios"},{id:"imprimir",l:"Imprimir"},{id:"manual",l:"+ Manual"},{id:"tarifas",l:"Tarifas / Log."},{id:"informe",l:"Informe"},{id:"liquidacion",l:"Liquidacion"},{id:"localidades",l:"Localidades"}];
+  const esAdmin=sesion?.rol==="admin";
+  const esColaborador=sesion?.rol==="colaborador";
+  const TABS=[
+    {id:"envios",l:"Envios"},
+    {id:"imprimir",l:"Imprimir"},
+    {id:"manual",l:"+ Manual"},
+    ...(esAdmin?[{id:"tarifas",l:"Tarifas / Log."}]:[]),
+    {id:"informe",l:"Informe"},
+    {id:"liquidacion",l:"Liquidacion"},
+    {id:"localidades",l:"Localidades"},
+    ...(esAdmin?[{id:"usuarios",l:"Usuarios"}]:[]),
+  ];
 
   return(
     <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif"}}>
@@ -1529,6 +1884,8 @@ export default function App(){
             <input type="file" accept=".xlsx,.xls" style={{display:"none"}} onChange={e=>{if(e.target.files[0]){cargarArchivo(e.target.files[0]);e.target.value="";}}}/>
             <span style={{display:"inline-block",padding:"0.33rem 0.75rem",borderRadius:"7px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",color:"#fff",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>{loading?"...":"Cargar Excel"}</span>
           </label>
+          <span style={{color:"#4b5563",fontSize:"0.7rem",borderLeft:"1px solid #1a1f2e",paddingLeft:"0.5rem"}}>{sesion?.usuario}</span>
+          <button onClick={()=>{clearSession();setSesion(null);}} style={{...S.btnSm(false),color:"#f87171",fontSize:"0.7rem"}}>Salir</button>
         </div>
       </div>
       <div style={{padding:"0.85rem 1rem",maxWidth:"1400px",margin:"0 auto"}}>
@@ -1536,10 +1893,11 @@ export default function App(){
         {tab==="envios"  &&<TabEnvios   envios={envios} setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel}/>}
         {tab==="imprimir"&&<TabImprimir envios={envios} zc={zc} lc={lc}/>}
         {tab==="manual"  &&<TabManual   setEnvios={setEnvios} onSuccess={()=>{setTab("envios");mostrarToast("Envio agregado");}} lc={lc} enviosExistentes={envios}/>}
-        {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZc} lc={lc} setLc={setLc}/>}
+        {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZc} lc={lc} setLc={setLcPersist}/>}
         {tab==="informe"     &&<TabInforme     envios={envios} zc={zc} lc={lc}/>}
         {tab==="liquidacion" &&<TabLiquidacion envios={envios} setEnvios={setEnvios} lc={lc}/>}
         {tab==="localidades" &&<TabLocalidades/>}
+        {tab==="usuarios"   &&esAdmin&&<TabUsuarios lc={lc} setLc={setLcPersist}/>}
       </div>
     </div>
   );
