@@ -26,10 +26,8 @@ export function getNombreCliente(order) {
 }
 
 export function getFormaPago(order) {
-  // Usar gateway_name que es legible, o mapear gateway
-  const gw   = (order.gateway || "").toLowerCase();
+  const gw     = (order.gateway || "").toLowerCase();
   const gwName = order.gateway_name || "";
-  if (gw === "offline" || gw === "cash") return "Efectivo";
   if (gwName) return gwName;
   if (gw === "mercadopago") return "Mercado Pago";
   if (gw === "pago-nube")   return "Pago Nube";
@@ -37,8 +35,19 @@ export function getFormaPago(order) {
 }
 
 export function esEfectivo(order) {
-  const gw = (order.gateway || "").toLowerCase();
-  return gw === "offline" || gw === "cash";
+  // Solo es efectivo si gateway=offline Y gateway_name contiene "EFECTIVO"
+  const gw     = (order.gateway || "").toLowerCase();
+  const gwName = (order.gateway_name || "").toUpperCase();
+  return gw === "offline" && gwName.includes("EFECTIVO");
+}
+
+export function getPagoEstadoInicial(order) {
+  // Pagado: payment_status = paid
+  if (order.payment_status === "paid") return "pagado";
+  // Efectivo contra entrega: se cobra en el momento, no bloquear
+  if (esEfectivo(order)) return "pagado";
+  // Todo lo demás (A convenir, transferencia pendiente, etc): pendiente
+  return "pendiente";
 }
 
 export function ordenAEnvio(order) {
@@ -90,7 +99,7 @@ export function ordenAEnvio(order) {
     fecha,
     turno,
     trans:         "",
-    pagoEstado:    order.payment_status === "paid" ? "pagado" : "pendiente",
+    pagoEstado:    getPagoEstadoInicial(order),
     estado:        "sin_asignar",
     importe:       0,
     bultos:        1,

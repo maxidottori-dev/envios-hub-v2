@@ -51,7 +51,8 @@ export default async function handler(req, res) {
 
     // Actualizar estado de pago si cambio (solo si no fue forzado a cuenta_corriente)
     if (order.payment_status && data.pagoEstado !== "cuenta_corriente") {
-      update.pagoEstado = order.payment_status === "paid" ? "pagado" : "pendiente";
+      const { getPagoEstadoInicial } = await import("./_tn.js");
+      update.pagoEstado = getPagoEstadoInicial(order);
     }
 
     // Solo completar fecha/turno si el datepicker trae info y no estaban asignados
