@@ -1202,8 +1202,8 @@ function TabLocalidades() {
   const filas = Object.entries(tabla)
     .filter(([cp, p]) => {
       if (!busqueda) return true;
-      const q = busqueda.toLowerCase();
-      return cp.includes(q) || p.toLowerCase().includes(q);
+      const srch = busqueda.toLowerCase();
+      return cp.includes(srch) || p.toLowerCase().includes(srch);
     })
     .sort(([a], [b]) => parseInt(a) - parseInt(b));
 
