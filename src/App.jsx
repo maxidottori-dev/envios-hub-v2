@@ -339,13 +339,18 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
     if(filEstado!=="TODOS"&&est!==filEstado)return false;
     if(filZona!=="TODAS"&&getZonaML(e.partido)!==filZona)return false;
     if(filTurno!=="TODOS"&&e.turno!==filTurno)return false;
-    if(busqueda){const q=busqueda.toLowerCase();return e.direccion.toLowerCase().includes(q)||e.id.includes(q)||e.partido.toLowerCase().includes(q)||(e.nroSeguimiento||"").includes(q);}
+    if(filOrigen!=="TODOS"){
+      const o=e.origen==="Tienda Nube"?"TN":e.origen==="ML"?"FLEX":"Manual";
+      if(o!==filOrigen)return false;
+    }
+    if(busqueda){const q=busqueda.toLowerCase();return e.direccion.toLowerCase().includes(q)||e.id.includes(q)||e.partido.toLowerCase().includes(q)||(e.nroSeguimiento||"").includes(q)||(e.clienteNombre||"").toLowerCase().includes(q)||(e.nroOrdenTN||"").includes(q);}
     return true;
   });
   const activos=filtrados.filter(e=>getEstado(e)!=="cancelado");
   const totalImp=activos.reduce((s,e)=>s+getImp(e),0);
   const sinAsig=filtrados.filter(e=>getEstado(e)==="sin_asignar").length;
   const porTrans=logActivas.map(l=>({l,n:activos.filter(e=>e.trans===l).length,v:activos.filter(e=>e.trans===l).reduce((s,e)=>s+getImp(e),0)})).filter(x=>x.n>0);
+  const [filOrigen,setFilOrigen]=useState("TODOS");
   const toggleSel=id=>setSeleccionados(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
   const saveEnvio=updated=>{setEnvios(p=>p.map(e=>e.id===updated.id?{...updated,estado:getEstado(updated)}:e));setEditId(null);};
   const eliminar=id=>{if(window.confirm("Eliminar este envio?"))setEnvios(p=>p.filter(e=>e.id!==id));};
@@ -405,6 +410,9 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
         <button onClick={()=>{setModoSel(!modoSel);if(modoSel)setSeleccionados(new Set());}} style={S.btnSm(modoSel,"#6366f1")}>{modoSel?"Cancelar seleccion":"Seleccionar"}</button>
         {modoSel&&<button onClick={()=>setSeleccionados(new Set(filtradosOrdenados.map(e=>e.id)))} style={S.btnSm(false)}>Todos ({filtrados.length})</button>}
         {modoSel&&seleccionados.size>0&&<button onClick={()=>setSeleccionados(new Set())} style={S.btnSm(false)}>Ninguno</button>}
+        <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
+        <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Origen</span>
+        {[{k:"TODOS",l:"Todos"},{k:"TN",l:"TN"},{k:"FLEX",l:"FLEX"},{k:"Manual",l:"Manual"}].map(x=><button key={x.k} onClick={()=>setFilOrigen(x.k)} style={S.btnSm(filOrigen===x.k,x.k==="TN"?"#38bdf8":x.k==="FLEX"?"#84cc16":x.k==="Manual"?"#f59e0b":"#6366f1")}>{x.l}</button>)}
       </div>
       <div style={{display:"grid",gap:"4px",paddingBottom:"80px"}}>
         {filtradosOrdenados.length===0&&<div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📭</div><p>Sin envios</p></div>}
@@ -439,13 +447,13 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
                   {/* Nombre cliente (TN) o direccion como titulo */}
                   {esTN&&e.clienteNombre&&<div style={{color:"#e5e7eb",fontSize:"0.82rem",fontWeight:600,marginBottom:"1px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.clienteNombre}</div>}
                   <div style={{color:esTN&&e.clienteNombre?"#9ca3af":"#e5e7eb",fontSize:"0.8rem",lineHeight:1.35,textDecoration:getEstado(e)==="cancelado"?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}</div>
-                  <div style={{color:"#374151",fontSize:"0.66rem",marginTop:"1px",display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center"}}>
-                    {esTN?<span style={{fontFamily:"monospace",color:"#6b7280"}}>#{e.nroOrdenTN}</span>:<span style={{fontFamily:"monospace"}}>...{e.id.slice(-10)}</span>}
+                  <div style={{color:"#9ca3af",fontSize:"0.74rem",marginTop:"2px",display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center"}}>
+                    {esTN?<span style={{fontFamily:"monospace",color:"#7dd3fc",fontWeight:600}}>#{e.nroOrdenTN}</span>:<span style={{fontFamily:"monospace",color:"#9ca3af"}}>...{e.id.slice(-10)}</span>}
                     {e.nroSeguimiento&&<span style={{background:"#0f1420",padding:"0 5px",borderRadius:"4px",border:"1px solid #252d40",color:"#9ca3af"}}>📦 {e.nroSeguimiento}</span>}
-                    <span style={{color:"#374151"}}>· {e.partido}</span>
-                    {e.fechaVenta&&<span style={{color:"#4b5563"}}>· {fmtCorta(e.fechaVenta)}</span>}
-                    {e.formaPago&&esTN&&<span style={{color:e.formaPago==="Efectivo"?"#fbbf24":"#4b5563"}}>· {e.formaPago}</span>}
-                    {e.observaciones&&<span style={{color:"#6b7280",fontStyle:"italic"}}>"{e.observaciones.slice(0,30)}{e.observaciones.length>30?"...":""}"</span>}
+                    <span style={{color:"#9ca3af"}}>· {e.localidad?e.localidad+" · ":""}{e.partido}</span>
+                    {e.fechaVenta&&<span style={{color:"#6b7280"}}>· venta {fmtCorta(e.fechaVenta)}</span>}
+                    {e.formaPago&&esTN&&<span style={{color:e.formaPago==="Efectivo"?"#fbbf24":"#9ca3af",fontWeight:e.formaPago==="Efectivo"?700:400}}>· {e.formaPago}</span>}
+                    {e.observaciones&&<span style={{color:"#6b7280",fontStyle:"italic"}}>· "{e.observaciones.slice(0,30)}{e.observaciones.length>30?"...":""}"</span>}
                   </div>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"3px",flexShrink:0}}>

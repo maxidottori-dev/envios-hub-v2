@@ -21,28 +21,18 @@ export function parsearDatepicker(notas) {
 }
 
 export function getNombreCliente(order) {
-  // Intentar billing_address primero, luego customer, luego shipping_address
-  const b = order.billing_address || {};
-  const c = order.customer || {};
-  const s = order.shipping_address || {};
-  const nombre = [
-    b.first_name || c.name || s.first_name || "",
-    b.last_name  || c.lastname || s.last_name || ""
-  ].filter(Boolean).join(" ").trim();
-  return nombre;
+  // TN devuelve el nombre en contact_name o en shipping_address.name
+  return order.contact_name || order.shipping_address?.name || "";
 }
 
 export function getFormaPago(order) {
-  // gateway puede ser: "offline" (efectivo), "mercadopago", "paypal", etc.
-  const gw = (order.gateway || "").toLowerCase();
+  // Usar gateway_name que es legible, o mapear gateway
+  const gw   = (order.gateway || "").toLowerCase();
+  const gwName = order.gateway_name || "";
   if (gw === "offline" || gw === "cash") return "Efectivo";
+  if (gwName) return gwName;
   if (gw === "mercadopago") return "Mercado Pago";
-  if (gw === "paypal") return "PayPal";
-  // Intentar payment_details
-  const pd = order.payment_details || [];
-  if (Array.isArray(pd) && pd.length) {
-    return pd.map(p => p.payment_method || p.method || "").filter(Boolean).join(", ") || gw;
-  }
+  if (gw === "pago-nube")   return "Pago Nube";
   return gw || "Online";
 }
 
@@ -53,16 +43,24 @@ export function esEfectivo(order) {
 
 export function ordenAEnvio(order) {
   const ship = order.shipping_address || {};
-  const cp   = String(ship.zipcode || "").replace(/\D/g, "");
-  const dir  = [ship.address, ship.number, ship.floor, ship.apartment].filter(Boolean).join(" ");
-  const ciudad  = ship.city || "";
-  const partido = cpAPartido(cp) || ciudad;
+  const cp   = String(ship.zipcode || order.billing_zipcode || "").replace(/\D/g, "");
+  // Armado de direccion completa
+  const calleNum = [ship.address, ship.number].filter(Boolean).join(" ");
+  const pisoDepto = ship.floor ? "Piso/Dto " + ship.floor : "";
+  const dir  = [calleNum, pisoDepto].filter(Boolean).join(", ");
+  const ciudad   = ship.city || order.billing_city || "";
+  const localidad = ship.locality || order.billing_locality || ""; // barrio
+  const partido  = cpAPartido(cp) || localidad || ciudad;
   const alertaSinDireccion = !dir || !cp;
-  const notasOrden   = order.note || "";
-  const notasCliente = order.customer_note || "";
+
+  // IMPORTANTE: en TN, owner_note son MIS notas (donde va el datepicker)
+  //             note son las notas del CLIENTE
+  const notasOrden   = order.owner_note || "";   // mis notas — editable, contiene datepicker
+  const notasCliente = order.note || "";          // notas del cliente — solo lectura
+
   const { fecha, turno, datepickerRaw } = parsearDatepicker(notasOrden);
-  const formaPago    = getFormaPago(order);
-  const efectivo     = esEfectivo(order);
+  const formaPago  = getFormaPago(order);
+  const efectivo   = esEfectivo(order);
   const importeOrden = parseFloat(order.total) || 0;
 
   return {
@@ -71,15 +69,16 @@ export function ordenAEnvio(order) {
     idTN:          order.id,
     nroOrdenTN:    String(order.number || order.id),
     nroSeguimiento: "",
-    linkTN:        `https://mitienda.mitiendanube.com/admin/orders/${order.id}`,
+    linkTN:        `https://umpapeldistribuidora.mitiendanube.com/admin/orders/${order.id}`,
     linkML:        "",
     clienteNombre: getNombreCliente(order),
-    telefono:      order.customer?.phone || ship.phone || "",
+    telefono:      order.contact_phone || ship.phone || "",
     direccion:     dir || "SIN DIRECCION",
     ciudad,
+    localidad,     // barrio
     cp,
     partido,
-    provincia:     ship.province || "",
+    provincia:     ship.province || order.billing_province || "",
     alertaDireccion: alertaSinDireccion,
     formaPago,
     importeOrden,
@@ -97,6 +96,6 @@ export function ordenAEnvio(order) {
     cambio:        null,
     retiro:        null,
     observaciones: alertaSinDireccion ? "ALERTA: sin direccion o CP" : "",
-    metodEnvio:    order.shipping_option || order.shipping?.name || "",
+    metodEnvio:    order.shipping_option || "",
   };
 }

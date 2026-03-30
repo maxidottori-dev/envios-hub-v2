@@ -29,7 +29,8 @@ export default async function handler(req, res) {
 
   // ORDER UPDATED — actualizar notas y datepicker si no fue asignado aun
   if (topic === "order/updated") {
-    const notasOrden = order.note || "";
+    const notasOrden = order.owner_note || "";  // mis notas con datepicker
+    const notasCliente = order.note || "";       // notas del cliente
     const { fecha, turno, datepickerRaw } = parsearDatepicker(notasOrden);
 
     if (!existing.exists) {
@@ -45,8 +46,8 @@ export default async function handler(req, res) {
 
     if (yaCancelado) return res.status(200).json({ ok: true, skipped: "cancelled" });
 
-    // Siempre actualizar notas de la orden
-    const update = { notasOrden };
+    // Siempre actualizar notas de la orden y del cliente
+    const update = { notasOrden, notasCliente };
 
     // Solo completar fecha/turno si el datepicker trae info y no estaban asignados
     if (datepickerRaw) {
