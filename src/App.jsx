@@ -340,10 +340,10 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
     if(filZona!=="TODAS"&&getZonaML(e.partido)!==filZona)return false;
     if(filTurno!=="TODOS"&&e.turno!==filTurno)return false;
     if(filOrigen!=="TODOS"){
-      const o=e.origen==="Tienda Nube"?"TN":e.origen==="ML"?"FLEX":"Manual";
-      if(o!==filOrigen)return false;
+      const origenVal=e.origen==="Tienda Nube"?"TN":e.origen==="ML"?"FLEX":"Manual";
+      if(origenVal!==filOrigen)return false;
     }
-    if(busqueda){const q=busqueda.toLowerCase();return e.direccion.toLowerCase().includes(q)||e.id.includes(q)||e.partido.toLowerCase().includes(q)||(e.nroSeguimiento||"").includes(q)||(e.clienteNombre||"").toLowerCase().includes(q)||(e.nroOrdenTN||"").includes(q);}
+    if(busqueda){const srch=busqueda.toLowerCase();return e.direccion.toLowerCase().includes(srch)||e.id.includes(srch)||e.partido.toLowerCase().includes(srch)||(e.nroSeguimiento||"").includes(srch)||(e.clienteNombre||"").toLowerCase().includes(srch)||(e.nroOrdenTN||"").includes(srch);}
     return true;
   });
   const activos=filtrados.filter(e=>getEstado(e)!=="cancelado");
