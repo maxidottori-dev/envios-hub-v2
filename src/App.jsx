@@ -314,6 +314,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
   const [filEstado,setFilEstado]=useState("TODOS");
   const [filZona,setFilZona]=useState("TODAS");
   const [filTurno,setFilTurno]=useState("TODOS");
+  const [filOrigen,setFilOrigen]=useState("TODOS");
   const [busqueda,setBusqueda]=useState("");
   const [editId,setEditId]=useState(null);
   const [seleccionados,setSeleccionados]=useState(new Set());
@@ -350,7 +351,6 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
   const totalImp=activos.reduce((s,e)=>s+getImp(e),0);
   const sinAsig=filtrados.filter(e=>getEstado(e)==="sin_asignar").length;
   const porTrans=logActivas.map(l=>({l,n:activos.filter(e=>e.trans===l).length,v:activos.filter(e=>e.trans===l).reduce((s,e)=>s+getImp(e),0)})).filter(x=>x.n>0);
-  const [filOrigen,setFilOrigen]=useState("TODOS");
   const toggleSel=id=>setSeleccionados(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
   const saveEnvio=updated=>{setEnvios(p=>p.map(e=>e.id===updated.id?{...updated,estado:getEstado(updated)}:e));setEditId(null);};
   const eliminar=id=>{if(window.confirm("Eliminar este envio?"))setEnvios(p=>p.filter(e=>e.id!==id));};
