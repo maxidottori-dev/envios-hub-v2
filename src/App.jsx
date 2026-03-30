@@ -3,7 +3,7 @@ import * as XLSXLib from "xlsx";
 import { db } from "./firebase.js";
 import { collection, onSnapshot, doc, setDoc, deleteDoc } from "firebase/firestore";
 
-const VERSION = "2.0";
+const VERSION = "2.1";
 
 // Estado derivado: si tiene trans asignado = asignado, si fue cancelado = cancelado, sino = sin_asignar
 function getEstado(e) {
@@ -91,6 +91,9 @@ const LOGISTICAS_INIT = {
 const TURNOS=["AM","MD","PM","Turbo"];
 const TURNO_C={AM:{c:"#60a5fa",bg:"#0c1a2e"},MD:{c:"#a78bfa",bg:"#130d2a"},PM:{c:"#93c5fd",bg:"#0c1a2e"},Turbo:{c:"#f472b6",bg:"#1c0514"}};
 const ESTADO_C={sin_asignar:{t:"#f59e0b",bg:"#1c1400",label:"Sin asignar"},asignado:{t:"#34d399",bg:"#041f14",label:"Asignado"},cancelado:{t:"#f87171",bg:"#1c0a0a",label:"Cancelado"}};
+const PAGO_C={pagado:{t:"#34d399",bg:"#041f14",label:"Pagado"},pendiente:{t:"#fb923c",bg:"#1c0a00",label:"Pago pendiente"},cuenta_corriente:{t:"#a78bfa",bg:"#130d2a",label:"Cta. Corriente"}};
+function getPagoEstado(e){return e.pagoEstado||"pagado";}
+function puedeAsignar(e){const p=getPagoEstado(e);return p==="pagado"||p==="cuenta_corriente";}
 
 const ZONAS_INIT={
   HNOS:{zonas:[{id:"CABA",nombre:"CABA",color:"#84cc16",precio:5808,partidos:["CABA"]},{id:"ZONA1",nombre:"ZONA 1",color:"#f97316",precio:5808,partidos:["San Isidro","Vicente Lopez","San Martin","Tres de Febrero","Moron","Hurlingham","La Matanza Norte","Lanus","Avellaneda"]},{id:"ZONA2",nombre:"ZONA 2",color:"#3b82f6",precio:7986,partidos:["Tigre","Malvinas Argentinas","Jose C Paz","San Miguel","Ituzaingo","Merlo","Ezeiza","Esteban Echeverria","Almirante Brown","Lomas de Zamora","Quilmes","Florencio Varela","Berazategui","San Fernando","La Matanza Sur"]},{id:"ZONA3",nombre:"ZONA 3",color:"#6b7280",precio:10164,partidos:["La Plata","Zarate","Ensenada","Berisso","Escobar","Marcos Paz","Pilar","Presidente Peron","Canuelas","Lujan","Gral. Rodriguez","Ex.de la Cruz","San Vicente","Campana","Moreno"]}]},
@@ -228,6 +231,8 @@ function PanelEdit({envio,onSave,onClose,lc}){
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const handleTrans=l=>{const t=e.trans===l?"":l;setE(p=>({...p,trans:t,estado:t?"asignado":(p.estado==="cancelado"?"cancelado":"sin_asignar")}));};
   const esTN = e.origen === "Tienda Nube";
+  const pagoOk = puedeAsignar(e);
+  const autorizarCC=()=>setE(p=>({...p,pagoEstado:"cuenta_corriente"}));
   return(
     <div style={{background:"#12172a",border:"1px solid #6366f1",borderRadius:"12px",padding:"0.9rem 1rem",marginTop:"2px"}}>
 
@@ -443,12 +448,17 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
                     {e.cambio!==null&&<Bdg label="Cambio" bg="#1c0514" t="#ec4899"/>}
                     {e.retiro!==null&&<Bdg label="Retiro" bg="#1c1000" t="#f97316"/>}
                     {e.alertaDireccion&&<Bdg label="Sin CP/Dir" bg="#1c0a00" t="#fb923c"/>}
+                    {getPagoEstado(e)==="pendiente"&&<Bdg label="Pago pendiente" bg="#1c0a00" t="#fb923c" style={{border:"1px solid #fb923c"}}/>}
+                    {getPagoEstado(e)==="cuenta_corriente"&&<Bdg label="Cta. Corriente" bg="#130d2a" t="#a78bfa"/>}
                   </div>
-                  {/* Nombre cliente (TN) o direccion como titulo */}
-                  {esTN&&e.clienteNombre&&<div style={{color:"#e5e7eb",fontSize:"0.82rem",fontWeight:600,marginBottom:"1px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.clienteNombre}</div>}
+                  {/* Nro orden + Nombre en la misma linea, luego direccion */}
+                  {esTN&&<div style={{display:"flex",gap:"8px",alignItems:"baseline",marginBottom:"1px",overflow:"hidden"}}>
+                    <span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.82rem",flexShrink:0}}>#{e.nroOrdenTN}</span>
+                    {e.clienteNombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.clienteNombre}</span>}
+                  </div>}
                   <div style={{color:esTN&&e.clienteNombre?"#9ca3af":"#e5e7eb",fontSize:"0.8rem",lineHeight:1.35,textDecoration:getEstado(e)==="cancelado"?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}</div>
                   <div style={{color:"#9ca3af",fontSize:"0.74rem",marginTop:"2px",display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center"}}>
-                    {esTN?<span style={{fontFamily:"monospace",color:"#7dd3fc",fontWeight:600}}>#{e.nroOrdenTN}</span>:<span style={{fontFamily:"monospace",color:"#9ca3af"}}>...{e.id.slice(-10)}</span>}
+                    {!esTN&&<span style={{fontFamily:"monospace",color:"#9ca3af"}}>...{e.id.slice(-10)}</span>}
                     {e.nroSeguimiento&&<span style={{background:"#0f1420",padding:"0 5px",borderRadius:"4px",border:"1px solid #252d40",color:"#9ca3af"}}>📦 {e.nroSeguimiento}</span>}
                     <span style={{color:"#9ca3af"}}>· {e.localidad?e.localidad+" · ":""}{e.partido}</span>
                     {e.fechaVenta&&<span style={{color:"#6b7280"}}>· venta {fmtCorta(e.fechaVenta)}</span>}
@@ -670,13 +680,35 @@ function TabTarifas({zc,setZc,lc,setLc}){
         </table>
         <div style={{padding:"0.75rem 1rem"}}><button onClick={()=>addBulto(logSel)} style={{...S.btn(false),border:"1px dashed #252d40"}}>+ Agregar fila de bultos</button></div>
       </div>}
-      {subTab==="logisticas"&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:"0.85rem"}}>
-        {Object.entries(lc).map(([k,v])=>(
-          <div key={k} style={{...S.card,borderTop:"3px solid "+(v.activa?v.color:"#374151"),overflow:"hidden",opacity:v.activa?1:0.6}}>
-            <div style={{padding:"0.75rem 1rem",display:"flex",alignItems:"center",justifyContent:"space-between"}}><span style={{color:v.activa?v.color:"#6b7280",fontWeight:800,fontSize:"1rem"}}>{v.nombre}</span><button onClick={()=>toggleLog(k)} style={{...S.btnSm(v.activa,v.color),padding:"4px 12px"}}>{v.activa?"Activa":"Desactivada"}</button></div>
-            <div style={{padding:"0 1rem 0.75rem",color:"#4b5563",fontSize:"0.75rem"}}>{v.activa?"Visible en la app":"No aparece en asignacion ni filtros"}</div>
+      {subTab==="logisticas"&&<div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:"0.85rem",marginBottom:"1rem"}}>
+          {Object.entries(lc).map(([k,v])=>(
+            <div key={k} style={{...S.card,borderTop:"3px solid "+(v.activa?v.color:"#374151"),overflow:"hidden",opacity:v.activa?1:0.6}}>
+              <div style={{padding:"0.75rem 1rem",display:"flex",alignItems:"center",justifyContent:"space-between"}}><span style={{color:v.activa?v.color:"#6b7280",fontWeight:800,fontSize:"1rem"}}>{v.nombre}</span><button onClick={()=>toggleLog(k)} style={{...S.btnSm(v.activa,v.color),padding:"4px 12px"}}>{v.activa?"Activa":"Desactivar"}</button></div>
+              <div style={{padding:"0 1rem 0.75rem",color:"#4b5563",fontSize:"0.75rem"}}>{v.activa?"Visible en la app":"No aparece en asignacion ni filtros"}</div>
+            </div>
+          ))}
+        </div>
+        {/* Agregar nueva logistica */}
+        <div style={{...S.card,padding:"1rem"}}>
+          <div style={{fontWeight:700,fontSize:"0.85rem",marginBottom:"0.75rem",color:"#e5e7eb"}}>+ Nueva logistica</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 100px 80px auto",gap:"0.5rem",alignItems:"center"}}>
+            <input id="nl-nombre" placeholder="Nombre (ej. NUEVO)" style={{...S.input,textTransform:"uppercase"}}/>
+            <input id="nl-color" type="color" defaultValue="#6366f1" style={{height:"36px",width:"100%",border:"1px solid #252d40",borderRadius:"7px",background:"#0f1420",cursor:"pointer"}}/>
+            <span style={{color:"#6b7280",fontSize:"0.72rem",textAlign:"center"}}>Color</span>
+            <button onClick={()=>{
+              const nombre=document.getElementById("nl-nombre")?.value?.trim().toUpperCase();
+              const color=document.getElementById("nl-color")?.value||"#6366f1";
+              if(!nombre)return;
+              const key=nombre.replace(/\s+/g,"_");
+              if(lc[key])return;
+              const r=parseInt(color.slice(1,3),16),g=parseInt(color.slice(3,5),16),b=parseInt(color.slice(5,7),16);
+              const bg="rgba("+r+","+g+","+b+",0.15)";
+              setLc(p=>({...p,[key]:{nombre,color,bg,activa:true,preciosBultos:[{b:1,p:0},{b:2,p:0},{b:3,p:0}]}}));
+              document.getElementById("nl-nombre").value="";
+            }} style={{...S.btn(true),whiteSpace:"nowrap"}}>Agregar</button>
           </div>
-        ))}
+        </div>
       </div>}
       {moverModal&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}><div style={{...S.card,padding:"1.1rem",width:"100%",maxWidth:"320px"}}><h3 style={{margin:"0 0 0.2rem",fontWeight:800,fontSize:"0.95rem"}}>Mover: {moverModal.p}</h3><p style={{margin:"0 0 0.9rem",color:"#9ca3af",fontSize:"0.82rem"}}>A que zona?</p><div style={{display:"grid",gap:"0.35rem"}}>{cfg.zonas.filter(z=>z.id!==moverModal.from).map(z=><button key={z.id} onClick={()=>{moverP(moverModal.p,z.id);setMoverModal(null);}} style={{padding:"0.5rem 0.9rem",background:"#0f1420",border:"1px solid "+z.color,borderRadius:"8px",color:z.color,fontWeight:700,cursor:"pointer",textAlign:"left",fontSize:"0.82rem",display:"flex",justifyContent:"space-between"}}><span>{z.nombre}</span><span style={{color:"#6b7280",fontWeight:400}}>{fmt(z.precio)}</span></button>)}</div><button onClick={()=>setMoverModal(null)} style={{...S.btn(false),marginTop:"0.65rem",width:"100%"}}>Cancelar</button></div></div>}
       {addModal&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}><div style={{...S.card,padding:"1.25rem",width:"100%",maxWidth:"320px"}}><h3 style={{margin:"0 0 0.9rem",fontWeight:800}}>Nueva zona - {logSel}</h3><div style={{display:"grid",gap:"0.65rem"}}><div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nombre</label><input value={newZona.nombre} onChange={e=>setNewZona(p=>({...p,nombre:e.target.value}))} style={{...S.input,width:"100%"}} placeholder="ej. ZONA 4"/></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.65rem"}}><div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Color</label><input type="color" value={newZona.color} onChange={e=>setNewZona(p=>({...p,color:e.target.value}))} style={{width:"100%",height:"34px",borderRadius:"7px",border:"1px solid #252d40",cursor:"pointer"}}/></div><div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Precio</label><input type="number" value={newZona.precio} onChange={e=>setNewZona(p=>({...p,precio:parseInt(e.target.value)||0}))} style={{...S.input,width:"100%"}}/></div></div></div><div style={{display:"flex",gap:"0.5rem",marginTop:"1rem",justifyContent:"flex-end"}}><button onClick={()=>setAddModal(false)} style={S.btn(false)}>Cancelar</button><button onClick={addZ} style={{...S.btn(true),background:lc[logSel]?.color||"#6366f1"}}>Crear</button></div></div></div>}
@@ -685,7 +717,11 @@ function TabTarifas({zc,setZc,lc,setLc}){
 }
 
 function TabInforme({envios,zc,lc}){
+  const hoy=fechaHoy();
+  const [modoPeriodo,setModoPeriodo]=useState("semana"); // semana | rango
   const [semanaSel,setSemanaSel]=useState("");
+  const [rangoD,setRangoD]=useState(hoy);
+  const [rangoH,setRangoH]=useState(hoy);
   const [logSel,setLogSel]=useState("TODAS");
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const tmap=buildTarifaMap(zc);
@@ -695,14 +731,23 @@ function TabInforme({envios,zc,lc}){
   const semanas=Object.keys(semMap).sort().reverse();
   useEffect(()=>{if(semanas.length&&!semanaSel)setSemanaSel(semanas[0]);},[envios]);
   const semFechas=semanaSel&&semMap[semanaSel]?[...semMap[semanaSel].fechas].sort():[];
-  const envSem=envios.filter(e=>{const ds=e.fecha||e.fechaVenta||"";return semFechas.includes(ds)&&e.estado!=="cancelado"&&(logSel==="TODAS"||e.trans===logSel);});
+  const envSem=envios.filter(e=>{
+    const ds=e.fecha||e.fechaVenta||"";
+    if(e.estado==="cancelado")return false;
+    if(logSel!=="TODAS"&&e.trans!==logSel)return false;
+    if(modoPeriodo==="rango")return ds>=rangoD&&ds<=rangoH;
+    return semFechas.includes(ds);
+  });
   const logsMost=logSel==="TODAS"?logActivas:[logSel];
   if(!envios.length)return<div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📊</div><p>Carga un Excel primero</p></div>;
   return(
     <div>
       <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"0.4rem",flexWrap:"wrap",alignItems:"center"}}>
-        <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700}}>SEMANA</span>
-        {semanas.map(s=><button key={s} onClick={()=>setSemanaSel(s)} style={S.btn(semanaSel===s)}>{semMap[s].label}</button>)}
+        <button onClick={()=>setModoPeriodo("semana")} style={S.btn(modoPeriodo==="semana")}>Por semana</button>
+        <button onClick={()=>setModoPeriodo("rango")} style={S.btn(modoPeriodo==="rango")}>Rango de fechas</button>
+        <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
+        {modoPeriodo==="semana"&&semanas.map(s=><button key={s} onClick={()=>setSemanaSel(s)} style={S.btn(semanaSel===s)}>{semMap[s].label}</button>)}
+        {modoPeriodo==="rango"&&<><span style={{color:"#6b7280",fontSize:"0.8rem"}}>Desde</span><input type="date" value={rangoD} onChange={ev=>setRangoD(ev.target.value)} style={{...S.input,padding:"4px 8px",width:"132px"}}/><span style={{color:"#6b7280",fontSize:"0.8rem"}}>hasta</span><input type="date" value={rangoH} onChange={ev=>setRangoH(ev.target.value)} style={{...S.input,padding:"4px 8px",width:"132px"}}/></>}
       </div>
       <div style={{...S.card,padding:"0.55rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"0.35rem",flexWrap:"wrap"}}>
         <button onClick={()=>setLogSel("TODAS")} style={S.btn(logSel==="TODAS")}>TODAS</button>
@@ -742,7 +787,7 @@ function TabInforme({envios,zc,lc}){
           </div>
         );
       })}
-      {logSel==="TODAS"&&<div style={{...S.card,padding:"0.8rem 1rem",background:"#12172a",display:"flex",gap:"1.5rem",flexWrap:"wrap"}}><span style={{color:"#6366f1",fontWeight:800,fontSize:"0.9rem"}}>TOTAL SEMANA</span><span style={{color:"#e5e7eb",fontWeight:700}}>{envSem.length} envios</span><span style={{color:"#10b981",fontWeight:800,fontSize:"1rem"}}>{fmt(envSem.reduce((s,e)=>s+getImp(e),0))}</span></div>}
+      {logSel==="TODAS"&&<div style={{...S.card,padding:"0.8rem 1rem",background:"#12172a",display:"flex",gap:"1.5rem",flexWrap:"wrap"}}><span style={{color:"#6366f1",fontWeight:800,fontSize:"0.9rem"}}>TOTAL PERIODO</span><span style={{color:"#e5e7eb",fontWeight:700}}>{envSem.length} envios</span><span style={{color:"#10b981",fontWeight:800,fontSize:"1rem"}}>{fmt(envSem.reduce((s,e)=>s+getImp(e),0))}</span></div>}
     </div>
   );
 }
@@ -1304,6 +1349,98 @@ function TabLocalidades() {
   );
 }
 
+
+// ════════════════════════════════════════════════════════════════════
+// PANTALLA ASIGNACION TN — agrupa por fecha+turno, pre-rellena fecha/turno
+// ════════════════════════════════════════════════════════════════════
+function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc}){
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
+  // Pre-inicializar asig con fecha y turno del datepicker
+  const initAsig=()=>{const a={};borrador.forEach(e=>{a[e.id]={trans:"",fecha:e.fecha||fechaHoy(),turno:e.turno||""};});return a;};
+  const [asig,setAsig]=useState(initAsig);
+  const getA=id=>asig[id]||{trans:"",fecha:fechaHoy(),turno:""};
+  const setA=(id,k,v)=>setAsig(p=>({...p,[id]:{...getA(id),[k]:v}}));
+  const setGrupo=(ids,k,v)=>setAsig(p=>{const n={...p};ids.forEach(id=>{n[id]={...getA(id),[k]:v}});return n;});
+  const getGrupo=(ids,k)=>{const vals=[...new Set(ids.map(id=>getA(id)[k]||""))];return vals.length===1?vals[0]:"";};
+
+  // Agrupar por fecha + turno
+  const grupos={};
+  borrador.forEach(e=>{
+    const a=getA(e.id);
+    const key=(e.fecha||"Sin fecha")+"|"+(e.turno||"Sin turno");
+    if(!grupos[key])grupos[key]={fecha:e.fecha||"",turno:e.turno||"",envios:[]};
+    grupos[key].envios.push(e);
+  });
+  const grupoKeys=Object.keys(grupos).sort();
+  const totalAsig=borrador.filter(e=>getA(e.id).trans).length;
+  const confirmar=()=>onConfirmar(borrador.map(e=>({...e,...getA(e.id),estado:getA(e.id).trans?"asignado":"sin_asignar"})));
+
+  return(
+    <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif"}}>
+      <style>{`*{box-sizing:border-box;}`}</style>
+      <div style={{position:"sticky",top:0,zIndex:100,background:"#0f1420",borderBottom:"1px solid #1a1f2e",padding:"0.75rem 1rem",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
+        <div style={{width:"28px",height:"28px",background:"#0d1c2e",border:"1px solid #38bdf8",borderRadius:"7px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.85rem"}}>TN</div>
+        <div><div style={{fontWeight:800,fontSize:"0.95rem"}}>Asignar pedidos Tienda Nube</div><div style={{color:"#4b5563",fontSize:"0.62rem"}}>{borrador.length} pedidos sin asignar · agrupados por fecha y turno</div></div>
+        <div style={{marginLeft:"auto",display:"flex",gap:"0.5rem",alignItems:"center"}}>
+          <span style={{color:totalAsig===borrador.length?"#10b981":"#f59e0b",fontSize:"0.82rem",fontWeight:700}}>{totalAsig}/{borrador.length}</span>
+          <button onClick={onCancelar} style={S.btn(false)}>Cancelar</button>
+          <button onClick={confirmar} style={{...S.btn(true),background:"#0d1c2e",border:"1px solid #38bdf8",color:"#38bdf8"}}>Confirmar ({totalAsig}/{borrador.length})</button>
+        </div>
+      </div>
+      <div style={{padding:"1rem",maxWidth:"980px",margin:"0 auto"}}>
+        {grupoKeys.map(key=>{
+          const grupo=grupos[key];
+          const ids=grupo.envios.map(e=>e.id);
+          const gT=getGrupo(ids,"trans");
+          const turnoC=TURNO_C[grupo.turno]||{c:"#6b7280",bg:"#1a1f2e"};
+          const asigCount=ids.filter(id=>getA(id).trans).length;
+          return(
+            <div key={key} style={{...S.card,marginBottom:"0.75rem",overflow:"hidden"}}>
+              <div style={{padding:"0.6rem 1rem",background:"#12172a",borderBottom:"1px solid #1e2535"}}>
+                <div style={{display:"flex",alignItems:"center",gap:"0.5rem",marginBottom:"0.5rem",flexWrap:"wrap"}}>
+                  {grupo.fecha&&<span style={{background:"#0c1a2e",color:"#60a5fa",padding:"2px 10px",borderRadius:"5px",fontWeight:700,fontSize:"0.8rem"}}>{fmtCorta(grupo.fecha)}</span>}
+                  {grupo.turno&&<span style={{background:turnoC.bg,color:turnoC.c,padding:"2px 10px",borderRadius:"5px",fontWeight:700,fontSize:"0.8rem",border:"1px solid "+turnoC.c}}>{grupo.turno}</span>}
+                  <span style={{color:"#4b5563",fontSize:"0.72rem"}}>{grupo.envios.length} pedidos</span>
+                  <span style={{color:asigCount===grupo.envios.length?"#10b981":"#4b5563",fontSize:"0.7rem",marginLeft:"auto"}}>{asigCount}/{grupo.envios.length}</span>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:"0.5rem",flexWrap:"wrap"}}>
+                  <span style={{color:"#6b7280",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Logistica:</span>
+                  {logActivas.map(l=><button key={l} onClick={()=>setGrupo(ids,"trans",gT===l?"":l)} style={S.btnSm(gT===l,lc[l].color)}>{l}</button>)}
+                  {gT&&<button onClick={()=>setGrupo(ids,"trans","")} style={{...S.btnSm(false),color:"#6b7280"}}>x</button>}
+                </div>
+              </div>
+              {grupo.envios.map((e,i)=>{
+                const a=getA(e.id);
+                const zml=getZonaML(e.partido);
+                return(
+                  <div key={e.id} style={{padding:"0.45rem 1rem",borderBottom:i<grupo.envios.length-1?"1px solid #1a1f2e":"none",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap",opacity:!puedeAsignar(e)?0.5:1}}>
+                    <div style={{flex:1,minWidth:"180px"}}>
+                      <div style={{display:"flex",gap:"6px",alignItems:"baseline"}}>
+                        <span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.75rem"}}>#{e.nroOrdenTN}</span>
+                        {e.clienteNombre&&<span style={{color:"#e5e7eb",fontSize:"0.78rem",fontWeight:600}}>{e.clienteNombre}</span>}
+                        {!puedeAsignar(e)&&<span style={{color:"#fb923c",fontSize:"0.65rem",fontWeight:700}}>⚠ Pago pendiente</span>}
+                      </div>
+                      <div style={{color:"#9ca3af",fontSize:"0.72rem"}}>{e.direccion}</div>
+                      <div style={{color:"#4b5563",fontSize:"0.68rem"}}>{e.localidad?e.localidad+" · ":""}{e.partido}{zml?" · "+zml:""}</div>
+                    </div>
+                    <div style={{display:"flex",gap:"3px",flexWrap:"wrap",alignItems:"center"}}>
+                      {logActivas.map(l=><button key={l} onClick={()=>setA(e.id,"trans",a.trans===l?"":l)} style={S.btnSm(a.trans===l,lc[l].color)} disabled={!puedeAsignar(e)}>{l}</button>)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+        <div style={{display:"flex",justifyContent:"flex-end",gap:"0.75rem",marginTop:"1rem",paddingBottom:"2rem"}}>
+          <button onClick={onCancelar} style={S.btn(false)}>Cancelar</button>
+          <button onClick={confirmar} style={{...S.btn(true),background:"#0d1c2e",border:"1px solid #38bdf8",color:"#38bdf8",padding:"0.55rem 1.4rem"}}>Confirmar ({totalAsig}/{borrador.length})</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App(){
   const [pantalla,setPantalla]=useState("dashboard");
   const [borrador,setBorrador]=useState([]);
@@ -1354,8 +1491,9 @@ export default function App(){
   const reasignarSel=items=>{setBorrador(items);setPantalla("asignacion");};
 
   if(pantalla==="asignacion"){return<PantallaAsignacion borrador={borrador} fileName={fileName} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc}/>;}
+  if(pantalla==="asignacion-tn"){return<PantallaAsignacionTN borrador={borrador} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc}/>;}
 
-  const TABS=[{id:"envios",l:"Envios"},{id:"imprimir",l:"Imprimir"},{id:"manual",l:"+ Manual"},{id:"tarifas",l:"Tarifas"},{id:"informe",l:"Informe"},{id:"liquidacion",l:"Liquidacion"},{id:"localidades",l:"Localidades"}];
+  const TABS=[{id:"envios",l:"Envios"},{id:"imprimir",l:"Imprimir"},{id:"manual",l:"+ Manual"},{id:"tarifas",l:"Tarifas / Log."},{id:"informe",l:"Informe"},{id:"liquidacion",l:"Liquidacion"},{id:"localidades",l:"Localidades"}];
 
   return(
     <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif"}}>
@@ -1369,6 +1507,7 @@ export default function App(){
         </div>
         <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{TABS.map(t=><button key={t.id} onClick={()=>setTab(t.id)} style={{...S.btn(tab===t.id),padding:"0.32rem 0.65rem",fontSize:"0.73rem"}}>{t.l}</button>)}</div>
         <div style={{marginLeft:"auto",display:"flex",gap:"0.35rem",flexWrap:"wrap"}}>
+          <button onClick={()=>{const tnSinAsignar=envios.filter(e=>e.origen==="Tienda Nube"&&getEstado(e)==="sin_asignar");if(!tnSinAsignar.length){mostrarToast("No hay pedidos TN sin asignar");return;}setBorrador(tnSinAsignar);setFileName("Pedidos TN sin asignar");setPantalla("asignacion-tn");}} style={{padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#0d1c2e",border:"1px solid #38bdf8",color:"#38bdf8",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>Asignar TN</button>
           <label style={{cursor:"pointer"}}>
             <input type="file" accept=".xlsx,.xls" style={{display:"none"}} onChange={e=>{if(e.target.files[0]){cargarArchivo(e.target.files[0]);e.target.value="";}}}/>
             <span style={{display:"inline-block",padding:"0.33rem 0.75rem",borderRadius:"7px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",color:"#fff",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>{loading?"...":"Cargar Excel"}</span>

@@ -90,6 +90,7 @@ export function ordenAEnvio(order) {
     fecha,
     turno,
     trans:         "",
+    pagoEstado:    order.payment_status === "paid" ? "pagado" : "pendiente",
     estado:        "sin_asignar",
     importe:       0,
     bultos:        1,

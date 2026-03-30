@@ -50,7 +50,12 @@ export default async function handler(req, res) {
           partido:       envioFresh.partido || data.partido,
           metodEnvio:    envioFresh.metodEnvio,
           alertaDireccion: envioFresh.alertaDireccion,
+          localidad:     envioFresh.localidad || "",
         };
+        // Actualizar pagoEstado solo si no fue manualmente puesto como cuenta_corriente
+        if (data.pagoEstado !== "cuenta_corriente") {
+          update.pagoEstado = envioFresh.pagoEstado;
+        }
         // Actualizar cobranza solo si no fue asignado y cobranza no fue tocada
         if (!data.trans && data.cobranza === null && envioFresh.cobranza !== null) {
           update.cobranza = envioFresh.cobranza;

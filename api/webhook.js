@@ -49,6 +49,11 @@ export default async function handler(req, res) {
     // Siempre actualizar notas de la orden y del cliente
     const update = { notasOrden, notasCliente };
 
+    // Actualizar estado de pago si cambio (solo si no fue forzado a cuenta_corriente)
+    if (order.payment_status && data.pagoEstado !== "cuenta_corriente") {
+      update.pagoEstado = order.payment_status === "paid" ? "pagado" : "pendiente";
+    }
+
     // Solo completar fecha/turno si el datepicker trae info y no estaban asignados
     if (datepickerRaw) {
       update.datepickerRaw = datepickerRaw;
