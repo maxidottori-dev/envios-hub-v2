@@ -4,32 +4,34 @@ import { ordenAEnvio, parsearDatepicker, getPagoEstadoInicial } from "./_tn.js";
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  // Log todos los headers para diagnostico
-  const allHeaders = Object.fromEntries(Object.entries(req.headers));
-  const topic = req.headers["x-linkedstore-topic"] 
-    || req.headers["x-tiendanube-topic"]
-    || req.headers["x-topic"]
-    || req.headers["topic"]
-    || "";
-
   const order = req.body;
   const orderId = order?.id || "unknown";
   const metodo = (order?.shipping_option || order?.shipping?.name || "").toUpperCase();
 
-  // Log de diagnostico — aparece en Vercel Logs
-  console.log("WEBHOOK", {
+  // Buscar topic en todos los headers posibles
+  const topic = req.headers["x-linkedstore-topic"] 
+    || req.headers["x-tiendanube-topic"]
+    || req.headers["x-topic"]
+    || req.headers["topic"]
+    || order?.event
+    || "";
+
+  // Log completo para diagnostico
+  console.log("WEBHOOK_RECEIVED", JSON.stringify({
     topic,
     orderId,
-    metodo: metodo.slice(0, 60),
-    headerKeys: Object.keys(allHeaders).filter(k => k.includes("topic") || k.includes("store") || k.includes("linked")),
-  });
+    metodo: metodo.slice(0, 80),
+    allHeaders: Object.keys(req.headers),
+  }));
 
-  // Si no hay topic en headers conocidos, intentar inferirlo del body
-  const topicFinal = topic || (order?.event) || "";
+  // Si no hay topic pero hay orden con ID, asumir order/created
+  // TN a veces no manda el topic correctamente
+  const topicFinal = topic.startsWith("order/") ? topic 
+    : (order?.id ? "order/created" : "");
 
-  if (!topicFinal.startsWith("order/")) {
-    console.log("WEBHOOK SKIP - no topic match", { topicFinal, topic });
-    return res.status(200).json({ ok: true, skipped: "not an order event", topic: topicFinal });
+  if (!topicFinal) {
+    console.log("WEBHOOK SKIP - no topic and no order id");
+    return res.status(200).json({ ok: true, skipped: "no topic and no order", headers: Object.keys(req.headers) });
   }
 
   if (!order || !order.id) return res.status(200).json({ ok: true, skipped: "no order data" });
