@@ -1,43 +1,46 @@
 import { initDb } from "./_firebase.js";
 import { ordenAEnvio, parsearDatepicker, getPagoEstadoInicial } from "./_tn.js";
 
+const TN_TOKEN   = process.env.TN_ACCESS_TOKEN;
+const TN_STOREID = process.env.TN_STORE_ID;
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const order = req.body;
-  const orderId = order?.id || "unknown";
-  const metodo = (order?.shipping_option || order?.shipping?.name || "").toUpperCase();
+  let order = req.body;
+  if (!order || !order.id) return res.status(200).json({ ok: true, skipped: "no order data" });
 
-  // Buscar topic en todos los headers posibles
-  const topic = req.headers["x-linkedstore-topic"] 
+  const topic = req.headers["x-linkedstore-topic"]
     || req.headers["x-tiendanube-topic"]
     || req.headers["x-topic"]
     || req.headers["topic"]
     || order?.event
     || "";
 
-  // Log completo para diagnostico
-  console.log("WEBHOOK_RECEIVED", JSON.stringify({
-    topic,
-    orderId,
-    metodo: metodo.slice(0, 80),
-    allHeaders: Object.keys(req.headers),
-  }));
+  const topicFinal = topic.startsWith("order/") ? topic : "order/created";
 
-  // Si no hay topic pero hay orden con ID, asumir order/created
-  // TN a veces no manda el topic correctamente
-  const topicFinal = topic.startsWith("order/") ? topic 
-    : (order?.id ? "order/created" : "");
+  console.log("WEBHOOK_IN", JSON.stringify({ topic: topicFinal, orderId: order.id, shipping: order.shipping_option || "" }));
 
-  if (!topicFinal) {
-    console.log("WEBHOOK SKIP - no topic and no order id");
-    return res.status(200).json({ ok: true, skipped: "no topic and no order", headers: Object.keys(req.headers) });
+  // TN manda el webhook con body reducido — buscar orden completa si shipping_option esta vacio
+  if (!order.shipping_option) {
+    try {
+      const resp = await fetch(`https://api.tiendanube.com/v1/${TN_STOREID}/orders/${order.id}`, {
+        headers: { "Authentication": `bearer ${TN_TOKEN}`, "User-Agent": "EnviosHub (maxidottori@gmail.com)" }
+      });
+      if (resp.ok) {
+        order = await resp.json();
+        console.log("WEBHOOK_FETCHED", JSON.stringify({ orderId: order.id, shipping: order.shipping_option || "" }));
+      } else {
+        console.log("WEBHOOK_FETCH_FAIL", resp.status);
+      }
+    } catch(e) {
+      console.log("WEBHOOK_FETCH_ERROR", e.message);
+    }
   }
 
-  if (!order || !order.id) return res.status(200).json({ ok: true, skipped: "no order data" });
-
+  const metodo = (order.shipping_option || order.shipping?.name || "").toUpperCase();
   if (!metodo.includes("LOGISTICA UMP")) {
-    console.log("WEBHOOK SKIP - not LOGISTICA UMP", { metodo: metodo.slice(0, 80) });
+    console.log("WEBHOOK SKIP - not LOGISTICA UMP", metodo.slice(0, 80));
     return res.status(200).json({ ok: true, skipped: "not LOGISTICA UMP", metodo });
   }
 
@@ -47,7 +50,6 @@ export default async function handler(req, res) {
   const docRef = db.collection("envios").doc(String(order.id));
   const existing = await docRef.get();
 
-  // ORDER CREATED — guardar solo si no existe
   if (topicFinal === "order/created") {
     if (existing.exists) return res.status(200).json({ ok: true, skipped: "already exists" });
     const envio = ordenAEnvio(order);
@@ -56,7 +58,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, action: "created", id: envio.id });
   }
 
-  // ORDER UPDATED
   if (topicFinal === "order/updated") {
     const notasOrden   = order.owner_note || "";
     const notasCliente = order.note || "";
@@ -73,23 +74,17 @@ export default async function handler(req, res) {
     if (data.estado === "cancelado") return res.status(200).json({ ok: true, skipped: "cancelled" });
 
     const update = { notasOrden, notasCliente };
-
     if (datepickerRaw) {
       update.datepickerRaw = datepickerRaw;
       if (!data.fecha) update.fecha = fecha;
       if (!data.turno) update.turno = turno;
     }
-
-    if (!data.trans) {
-      // Solo actualizar notasCliente si no fue asignado
-    }
-
     if (data.pagoEstado !== "cuenta_corriente") {
       update.pagoEstado = getPagoEstadoInicial(order);
     }
 
     await docRef.update(update);
-    console.log("WEBHOOK UPDATED", order.id, update);
+    console.log("WEBHOOK UPDATED", order.id);
     return res.status(200).json({ ok: true, action: "updated", id: String(order.id) });
   }
 
