@@ -3,7 +3,7 @@ import * as XLSXLib from "xlsx";
 import { db } from "./firebase.js";
 import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where, getDocs, limit } from "firebase/firestore";
 
-const VERSION = "3.0";
+const VERSION = "2.1";
 
 // Estado derivado: si tiene trans asignado = asignado, si fue cancelado = cancelado, sino = sin_asignar
 function getEstado(e) {
@@ -618,9 +618,9 @@ function TabImprimir({envios,zc,lc}){
       const nroRef=esFlex?(e.nroSeguimiento||e.id.slice(-10)):"#"+(e.nroOrdenTN||e.id.slice(-8));
       const dir=[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · ");
       const cobrar=e.cobranza?"$"+Number(e.cobranza).toLocaleString("es-AR"):"—";
-      return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}"><td style="text-align:center;width:20px;border-bottom:0.5px solid #ddd;padding:3px 4px;color:#888;">${i+1}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-weight:500;">${dir}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-family:monospace;font-size:8px;color:#444;width:100px;">${nroRef}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:45px;">${zml}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:32px;text-align:center;">${e.turno||"—"}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:42px;text-align:center;">${e.fecha?fmtCorta(e.fecha):"—"}</td>${hayCobro?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:72px;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:18px;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td></tr>`;
+      return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}"><td style="text-align:center;width:20px;border-bottom:0.5px solid #ddd;padding:3px 4px;color:#888;">${i+1}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-weight:500;">${dir}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-family:monospace;font-size:10px;color:#444;width:110px;">${nroRef}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:45px;">${zml}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:32px;text-align:center;">${e.turno||"—"}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:42px;text-align:center;">${e.fecha?fmtCorta(e.fecha):"—"}</td>${hayCobro?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:72px;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:18px;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td></tr>`;
     }).join("");
-    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Envios ${fecha}</title><style>@page{size:A4 landscape;margin:8mm 10mm;}body{font-family:Arial,sans-serif;font-size:9px;margin:0;color:#111;}table{width:100%;border-collapse:collapse;}th{background:#e8e8e8;padding:3px 4px;text-align:left;font-size:8px;font-weight:700;text-transform:uppercase;color:#555;border-bottom:1.5px solid #333;}@media print{button{display:none!important;}}</style></head><body><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;"><span style="font-weight:700;font-size:11px;">Hoja de salida — ${trans==="TODOS"?"Todas las logisticas":trans} · ${fecha} · ${turno==="TODOS"?"Todos los turnos":turno} · ${origenLabel}</span><span style="font-size:8px;color:#888;">Impreso: ${ts} · ${lista.length} envios</span></div><table><thead><tr><th style="width:20px;">#</th><th>Direccion · Localidad · Partido · CP</th><th style="width:100px;">Nro envio / orden</th><th style="width:45px;">Zona</th><th style="width:32px;">Turno</th><th style="width:42px;">Fecha</th>${hayCobro?"<th style='width:72px;text-align:right;'>Cobrar</th>":""}<th style="width:18px;text-align:center;">Chk</th></tr></thead><tbody>${rows}</tbody></table><div style="border-top:1.5px solid #333;margin-top:4px;padding-top:3px;font-size:8px;color:#555;display:flex;gap:16px;"><span>Total: <strong>${lista.length} envios</strong></span>${cobTotal?`<span>Cobranzas: <strong style="color:#b45309;">$${cobTotal.toLocaleString("es-AR")}</strong></span>`:""}</div><script>window.onload=function(){window.print();}<\/script></body></html>`;
+    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Envios ${fecha}</title><style>@page{size:A4 landscape;margin:8mm 10mm;}body{font-family:Arial,sans-serif;font-size:11px;margin:0;color:#111;}table{width:100%;border-collapse:collapse;}th{background:#e8e8e8;padding:3px 4px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;color:#555;border-bottom:1.5px solid #333;}@media print{button{display:none!important;}}</style></head><body><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;"><span style="font-weight:700;font-size:13px;">Hoja de salida — ${trans==="TODOS"?"Todas las logisticas":trans} · ${fecha} · ${turno==="TODOS"?"Todos los turnos":turno} · ${origenLabel}</span><span style="font-size:10px;color:#888;">Impreso: ${ts} · ${lista.length} envios</span></div><table><thead><tr><th style="width:20px;">#</th><th>Direccion · Localidad · Partido · CP</th><th style="width:100px;">Nro envio / orden</th><th style="width:45px;">Zona</th><th style="width:32px;">Turno</th><th style="width:42px;">Fecha</th>${hayCobro?"<th style='width:72px;text-align:right;'>Cobrar</th>":""}<th style="width:18px;text-align:center;">Chk</th></tr></thead><tbody>${rows}</tbody></table><div style="border-top:1.5px solid #333;margin-top:4px;padding-top:3px;font-size:9px;color:#555;display:flex;gap:16px;"><span>Total: <strong>${lista.length} envios</strong></span>${cobTotal?`<span>Cobranzas: <strong style="color:#b45309;">$${cobTotal.toLocaleString("es-AR")}</strong></span>`:""}</div><script>window.onload=function(){window.print();}<\/script></body></html>`;
     const w=window.open("","_blank");if(!w){alert("Permite ventanas emergentes.");return;}w.document.write(html);w.document.close();
   };
 
@@ -1698,25 +1698,39 @@ function TabUsuarios({lc}){
 // VISTA LOGISTICA — solo lectura, filtrada por su empresa
 // ════════════════════════════════════════════════════════════════════
 function VistaLogistica({envios,sesion,lc}){
-  const [modFecha,setModFecha]=useState("todos");
+  const hoy=fechaHoy();
+  const [modFecha,setModFecha]=useState("proximos");
+  const [rangoD,setRangoD]=useState(hoy);
+  const [rangoH,setRangoH]=useState(hoy);
   const [filTurno,setFilTurno]=useState("TODOS");
   const [busqueda,setBusqueda]=useState("");
-  const hoy=fechaHoy();
+  const [expandId,setExpandId]=useState(null);
   const logNombre=sesion.logistica;
   const mostrarImporte=lc[logNombre]?.mostrarImporteLg===true;
+
+  // proximos = hoy + 7 dias futuros
+  const d7=new Date(hoy+"T00:00:00");d7.setDate(d7.getDate()+7);
+  const hasta7=d7.toISOString().split("T")[0];
 
   const filtrados=[...envios].filter(e=>{
     if(e.trans!==logNombre)return false;
     if(getEstado(e)==="cancelado")return false;
     const fEnv=e.fecha||e.fechaVenta||"";
     if(modFecha==="hoy"&&fEnv!==hoy)return false;
-    if(modFecha==="semana"){const d=new Date(hoy+"T00:00:00");d.setDate(d.getDate()-7);const desde=d.toISOString().split("T")[0];if(fEnv<desde)return false;}
+    if(modFecha==="proximos"&&(fEnv<hoy||fEnv>hasta7))return false;
+    if(modFecha==="rango"&&(fEnv<rangoD||fEnv>rangoH))return false;
     if(filTurno!=="TODOS"&&e.turno!==filTurno)return false;
-    if(busqueda){const srch=busqueda.toLowerCase();return e.direccion.toLowerCase().includes(srch)||e.partido.toLowerCase().includes(srch)||(e.clienteNombre||"").toLowerCase().includes(srch);}
+    if(busqueda){const srch=busqueda.toLowerCase();return e.direccion.toLowerCase().includes(srch)||e.partido.toLowerCase().includes(srch)||(e.clienteNombre||"").toLowerCase().includes(srch)||(e.nroOrdenTN||"").includes(srch);}
     return true;
-  }).sort((a,b)=>{const fa=a.fecha||a.fechaVenta||"";const fb=b.fecha||b.fechaVenta||"";return fa.localeCompare(fb);});
+  }).sort((a,b)=>{
+    const fa=a.fecha||a.fechaVenta||"";const fb=b.fecha||b.fechaVenta||"";
+    if(fa!==fb)return fa.localeCompare(fb);
+    const ta=TURNOS.indexOf(a.turno);const tb=TURNOS.indexOf(b.turno);
+    return ta-tb;
+  });
 
   const lcD=lc[logNombre]||{color:"#6366f1",bg:"#0c1a2e"};
+  const cobPendiente=filtrados.filter(e=>e.cobranza!==null&&!e.cobranzaRecibida).reduce((s,e)=>s+(e.cobranza||0),0);
 
   return(
     <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif"}}>
@@ -1728,7 +1742,8 @@ function VistaLogistica({envios,sesion,lc}){
           <div style={{color:lcD.color,fontSize:"0.65rem",fontWeight:700}}>{logNombre}</div>
         </div>
         <div style={{display:"flex",gap:"3px",flexWrap:"wrap",marginLeft:"8px"}}>
-          {[{k:"todos",l:"Todos"},{k:"hoy",l:"Hoy"},{k:"semana",l:"Ultima semana"}].map(x=><button key={x.k} onClick={()=>setModFecha(x.k)} style={{...S.btn(modFecha===x.k),padding:"0.28rem 0.6rem",fontSize:"0.72rem"}}>{x.l}</button>)}
+          {[{k:"hoy",l:"Hoy"},{k:"proximos",l:"Proximos 7 dias"},{k:"todos",l:"Todos"},{k:"rango",l:"Rango"}].map(x=><button key={x.k} onClick={()=>setModFecha(x.k)} style={{...S.btn(modFecha===x.k),padding:"0.28rem 0.6rem",fontSize:"0.72rem"}}>{x.l}</button>)}
+          {modFecha==="rango"&&<><input type="date" value={rangoD} onChange={e=>setRangoD(e.target.value)} style={{...S.input,padding:"3px 8px",width:"130px",fontSize:"0.72rem"}}/><input type="date" value={rangoH} onChange={e=>setRangoH(e.target.value)} style={{...S.input,padding:"3px 8px",width:"130px",fontSize:"0.72rem"}}/></>}
           <span style={{color:"#374151",fontSize:"0.6rem",alignSelf:"center"}}>|</span>
           {["TODOS",...TURNOS].map(t=><button key={t} onClick={()=>setFilTurno(t)} style={{...S.btnSm(filTurno===t,"#8b5cf6"),padding:"0.28rem 0.6rem",fontSize:"0.72rem"}}>{t}</button>)}
         </div>
@@ -1739,17 +1754,21 @@ function VistaLogistica({envios,sesion,lc}){
         </div>
       </div>
       <div style={{padding:"0.85rem 1rem",maxWidth:"900px",margin:"0 auto"}}>
-        <div style={{display:"flex",gap:"8px",marginBottom:"0.75rem"}}>
+        <div style={{display:"flex",gap:"8px",marginBottom:"0.75rem",flexWrap:"wrap"}}>
           <div style={{...S.card,padding:"0.75rem 1rem",flex:1}}>
             <div style={{color:lcD.color,fontWeight:800,fontSize:"1.6rem",lineHeight:1}}>{filtrados.length}</div>
             <div style={{color:"#6b7280",fontSize:"0.62rem",marginTop:"2px"}}>Envios</div>
           </div>
           <div style={{...S.card,padding:"0.75rem 1rem",flex:1}}>
-            <div style={{color:"#10b981",fontWeight:800,fontSize:"1.1rem"}}>{filtrados.filter(e=>getEstado(e)==="asignado").length}</div>
-            <div style={{color:"#6b7280",fontSize:"0.62rem",marginTop:"2px"}}>Asignados</div>
+            <div style={{color:"#f59e0b",fontWeight:800,fontSize:"1.1rem"}}>{filtrados.filter(e=>getEstado(e)==="sin_asignar").length}</div>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",marginTop:"2px"}}>Sin asignar</div>
           </div>
+          {cobPendiente>0&&<div style={{...S.card,padding:"0.75rem 1rem",flex:1,borderLeft:"3px solid #fbbf24"}}>
+            <div style={{color:"#fbbf24",fontWeight:800,fontSize:"0.95rem"}}>{fmt(cobPendiente)}</div>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",marginTop:"2px"}}>A cobrar</div>
+          </div>}
           {mostrarImporte&&<div style={{...S.card,padding:"0.75rem 1rem",flex:1}}>
-            <div style={{color:"#10b981",fontWeight:800,fontSize:"0.95rem"}}>${filtrados.reduce((s,e)=>s+(e.importe||0),0).toLocaleString("es-AR")}</div>
+            <div style={{color:"#10b981",fontWeight:800,fontSize:"0.95rem"}}>{fmt(filtrados.reduce((s,e)=>s+(e.importe||0),0))}</div>
             <div style={{color:"#6b7280",fontSize:"0.62rem",marginTop:"2px"}}>Total</div>
           </div>}
         </div>
@@ -1760,26 +1779,57 @@ function VistaLogistica({envios,sesion,lc}){
             const estKey=getEstado(e);
             const estC=ESTADO_C[estKey]||ESTADO_C.sin_asignar;
             const esTN=e.origen==="Tienda Nube";
+            const isExp=expandId===e.id;
             return(
-              <div key={e.id} style={{...S.card,padding:"0.55rem 0.75rem",opacity:estKey==="cancelado"?0.4:1}}>
+              <div key={e.id} style={{...S.card,padding:"0.6rem 0.75rem",opacity:estKey==="cancelado"?0.4:1,cursor:"pointer"}} onClick={()=>setExpandId(isExp?null:e.id)}>
                 <div style={{display:"flex",gap:"3px",flexWrap:"wrap",alignItems:"center",marginBottom:"3px"}}>
                   <Bdg label={estC.label} bg={estC.bg} t={estC.t}/>
                   {zml&&<Bdg label={zml} bg={ZONA_ML_BG[zml]||"#1a1f2e"} t={ZONA_ML_COLOR[zml]||"#6b7280"}/>}
                   {e.turno&&<Bdg label={e.turno} bg={TURNO_C[e.turno]?.bg||"#130d2a"} t={TURNO_C[e.turno]?.c||"#a78bfa"}/>}
-                  {e.fecha&&<Bdg label={fmtCorta(e.fecha)} bg="#12172a" t="#6b7280"/>}
+                  {e.fecha&&<Bdg label={fmtCorta(e.fecha)} bg="#12172a" t="#9ca3af"/>}
                   {(e.bultos||1)>1&&<Bdg label={e.bultos+" bultos"} bg="#0c1a2e" t="#60a5fa"/>}
-                  {e.cobranza!==null&&<Bdg label={"$"+Number(e.cobranza).toLocaleString("es-AR")} bg="#1c1500" t="#fbbf24"/>}
+                  {e.cobranza!==null&&<Bdg label={"Cobrar $"+Number(e.cobranza).toLocaleString("es-AR")} bg="#1c1500" t="#fbbf24"/>}
                   {e.cambio!==null&&<Bdg label="Cambio" bg="#1c0514" t="#ec4899"/>}
                   {e.retiro!==null&&<Bdg label="Retiro" bg="#1c1000" t="#f97316"/>}
                 </div>
                 {esTN&&<div style={{display:"flex",gap:"8px",alignItems:"baseline",marginBottom:"1px"}}>
-                  <span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.8rem"}}>#{e.nroOrdenTN}</span>
-                  {e.clienteNombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.8rem"}}>{e.clienteNombre}</span>}
+                  <span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.82rem"}}>#{e.nroOrdenTN}</span>
+                  {e.clienteNombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem"}}>{e.clienteNombre}</span>}
                 </div>}
-                <div style={{color:esTN&&e.clienteNombre?"#9ca3af":"#e5e7eb",fontSize:"0.8rem",fontWeight:500}}>{e.direccion}</div>
-                <div style={{color:"#9ca3af",fontSize:"0.72rem",marginTop:"2px"}}>{e.localidad?e.localidad+" · ":""}{e.partido}</div>
-                {(e.notasOrden||e.observaciones)&&<div style={{marginTop:"4px",padding:"4px 8px",background:"#0f1420",borderRadius:"6px",fontSize:"0.72rem",color:"#9ca3af",fontStyle:"italic"}}>{e.notasOrden||e.observaciones}</div>}
-                {mostrarImporte&&e.importe>0&&<div style={{marginTop:"4px",color:"#10b981",fontWeight:700,fontSize:"0.78rem"}}>{fmt(e.importe)}</div>}
+                <div style={{color:esTN&&e.clienteNombre?"#9ca3af":"#e5e7eb",fontSize:"0.82rem",fontWeight:500}}>{e.direccion}</div>
+                <div style={{color:"#6b7280",fontSize:"0.72rem",marginTop:"1px"}}>{e.localidad?e.localidad+" · ":""}{e.partido}{e.cp?" · CP "+e.cp:""}</div>
+                {e.telefono&&<div style={{color:"#6b7280",fontSize:"0.72rem"}}>📞 {e.telefono}</div>}
+                {/* Info expandida */}
+                {isExp&&<div style={{marginTop:"8px",borderTop:"1px solid #252d40",paddingTop:"8px",display:"grid",gap:"6px"}}>
+                  {e.notasCliente&&<div style={{background:"#0d1119",borderRadius:"7px",padding:"6px 10px"}}>
+                    <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"2px"}}>Notas del cliente</div>
+                    <div style={{color:"#e5e7eb",fontSize:"0.78rem",fontStyle:"italic"}}>"{e.notasCliente}"</div>
+                  </div>}
+                  {e.notasOrden&&<div style={{background:"#0d1119",borderRadius:"7px",padding:"6px 10px"}}>
+                    <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"2px"}}>Notas de la orden</div>
+                    <div style={{color:"#9ca3af",fontSize:"0.75rem"}}>{e.notasOrden}</div>
+                  </div>}
+                  {e.observaciones&&<div style={{background:"#0d1119",borderRadius:"7px",padding:"6px 10px"}}>
+                    <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"2px"}}>Observaciones</div>
+                    <div style={{color:"#9ca3af",fontSize:"0.75rem"}}>{e.observaciones}</div>
+                  </div>}
+                  {e.cambio&&<div style={{background:"#1c0514",borderRadius:"7px",padding:"6px 10px"}}>
+                    <div style={{color:"#ec4899",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"2px"}}>Cambio</div>
+                    <div style={{color:"#f9a8d4",fontSize:"0.78rem"}}>{e.cambio}</div>
+                  </div>}
+                  {e.retiro&&<div style={{background:"#1c1000",borderRadius:"7px",padding:"6px 10px"}}>
+                    <div style={{color:"#f97316",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"2px"}}>Retiro</div>
+                    <div style={{color:"#fdba74",fontSize:"0.78rem"}}>{e.retiro}</div>
+                  </div>}
+                  {e.cobranza!==null&&<div style={{background:"#1c1500",borderRadius:"7px",padding:"6px 10px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div>
+                      <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"2px"}}>Cobranza</div>
+                      <div style={{color:"#fbbf24",fontWeight:800,fontSize:"1rem"}}>{fmt(e.cobranza)}</div>
+                    </div>
+                    <div style={{color:e.formaPago==="Efectivo"?"#fbbf24":"#9ca3af",fontSize:"0.75rem"}}>{e.formaPago||"Efectivo"}</div>
+                  </div>}
+                  {mostrarImporte&&e.importe>0&&<div style={{color:"#10b981",fontWeight:700,fontSize:"0.82rem",paddingTop:"2px"}}>Tarifa: {fmt(e.importe)}</div>}
+                </div>}
               </div>
             );
           })}
@@ -1871,7 +1921,7 @@ export default function App(){
   const esAdmin=sesion?.rol==="admin";
   const esColaborador=sesion?.rol==="colaborador";
   const TABS=[
-    {id:"envios",l:"Envios"},
+    {id:"envios",l:"NO FLEX"},
     {id:"flex",l:"FLEX"},
     {id:"imprimir",l:"Imprimir"},
     {id:"manual",l:"+ Manual"},
