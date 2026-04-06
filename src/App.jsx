@@ -110,7 +110,7 @@ const LOGISTICAS_INIT = {
 
 const TURNOS=["AM","MD","PM","Turbo"];
 const TURNO_C={AM:{c:"#60a5fa",bg:"#0c1a2e"},MD:{c:"#a78bfa",bg:"#130d2a"},PM:{c:"#93c5fd",bg:"#0c1a2e"},Turbo:{c:"#f472b6",bg:"#1c0514"}};
-const ESTADO_C={sin_asignar:{t:"#f59e0b",bg:"#1c1400",label:"Sin asignar"},asignado:{t:"#34d399",bg:"#041f14",label:"Asignado"},cancelado:{t:"#f87171",bg:"#1c0a0a",label:"Cancelado"}};
+const ESTADO_C={sin_asignar:{t:"#f59e0b",bg:"#1c1400",label:"Sin asignar"},asignado:{t:"#34d399",bg:"#041f14",label:"Asignado"},cancelado:{t:"#f87171",bg:"#1c0a0a",label:"Cancelado"},no_cancelado:{t:"#e5e7eb",bg:"#1a1f2e",label:"Todos (sin cancelados)"}};
 const PAGO_C={pagado:{t:"#34d399",bg:"#041f14",label:"Pagado"},pendiente:{t:"#fb923c",bg:"#1c0a00",label:"Pago pendiente"},cuenta_corriente:{t:"#a78bfa",bg:"#130d2a",label:"Cta. Corriente"}};
 function getPagoEstado(e){return e.pagoEstado||"pagado";}
 function puedeAsignar(e){const p=getPagoEstado(e);return p==="pagado"||p==="cuenta_corriente";}
@@ -384,6 +384,11 @@ function PanelEdit({envio,onSave,onClose,lc}){
         <textarea value={esTN?(e.notasOrden||""):(e.observaciones||"")} onChange={ev=>set(esTN?"notasOrden":"observaciones",ev.target.value)} placeholder={esTN?"Notas de la orden...":"Notas adicionales..."} style={{...S.input,display:"block",width:"100%",height:"52px",resize:"vertical",fontSize:"0.8rem"}}/>
       </div>
 
+      {/* Nota del envio */}
+      <div style={{marginBottom:"0.65rem"}}>
+        <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Nota interna</div>
+        <textarea value={e.nota||""} onChange={ev=>set("nota",ev.target.value)} placeholder="Nota interna sobre este envio..." style={{...S.input,display:"block",width:"100%",height:"44px",resize:"vertical",fontSize:"0.8rem"}}/>
+      </div>
       <div style={{marginBottom:"0.4rem"}}>
         <button onClick={()=>set("cambio",e.cambio!==null?null:"")} style={S.btnSm(e.cambio!==null,"#ec4899")}>Cambio</button>
         {e.cambio!==null&&<textarea value={e.cambio||""} onChange={ev=>set("cambio",ev.target.value)} placeholder="Que tiene que retirar para el cambio..." style={{...S.input,display:"block",width:"100%",marginTop:"4px",height:"42px",resize:"vertical",fontSize:"0.8rem"}}/>}
@@ -406,7 +411,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
   const [rangoD,setRangoD]=useState(hoy);
   const [rangoH,setRangoH]=useState(hoy);
   const [filTrans,setFilTrans]=useState("TODOS");
-  const [filEstado,setFilEstado]=useState("TODOS");
+  const [filEstado,setFilEstado]=useState("no_cancelado");
   const [filZona,setFilZona]=useState("TODAS");
   const [filTurno,setFilTurno]=useState("TODOS");
   const [filOrigen,setFilOrigen]=useState("TODOS");
@@ -421,6 +426,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
     if(modFecha==="todos") return{d:"",h:""};
     if(modFecha==="hoy")    return{d:hoy,h:hoy};
     if(modFecha==="ayer")   return{d:fechaAyer(),h:fechaAyer()};
+    if(modFecha==="manana") return{d:fechaManana(),h:fechaManana()};
     if(modFecha==="semana") return{d:fechaInicioSemana(),h:hoy};
     return{d:rangoD,h:rangoH};
   };
@@ -432,7 +438,8 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
     if(filTrans==="SIN ASIGNAR"&&e.trans)return false;
     if(filTrans!=="TODOS"&&filTrans!=="SIN ASIGNAR"&&e.trans!==filTrans)return false;
     const est=getEstado(e);
-    if(filEstado!=="TODOS"&&est!==filEstado)return false;
+    if(filEstado==="no_cancelado"&&est==="cancelado")return false;
+    else if(filEstado!=="TODOS"&&filEstado!=="no_cancelado"&&est!==filEstado)return false;
     if(filZona!=="TODAS"&&getZonaML(e.partido)!==filZona)return false;
     if(filTurno!=="TODOS"&&e.turno!==filTurno)return false;
     if(filOrigen!=="TODOS"){
@@ -473,17 +480,52 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
 
   return(
     <div>
-      <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.7rem"}}>
-        <div style={{display:"flex",gap:"4px",flexWrap:"wrap",alignItems:"center",marginBottom:modFecha==="rango"?"0.5rem":"0"}}>
-          <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",marginRight:"4px"}}>Fecha</span>
-          {[{k:"todos",l:"Todos"},{k:"hoy",l:"Hoy"},{k:"ayer",l:"Ayer"},{k:"semana",l:"Esta semana"},{k:"rango",l:"Rango"}].map(x=><button key={x.k} onClick={()=>setModFecha(x.k)} style={S.btn(modFecha===x.k)}>{x.l}</button>)}
+      <div style={{...S.card,padding:"0.6rem 1rem",marginBottom:"0.7rem",display:"flex",flexDirection:"column",gap:"6px"}}>
+        {/* Fila 1: Fecha + Estado + Origen */}
+        <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}}>
+          <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"38px"}}>Fecha</span>
+          <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
+            {[{k:"todos",l:"Todos"},{k:"hoy",l:"Hoy"},{k:"manana",l:"Manana"},{k:"ayer",l:"Ayer"},{k:"semana",l:"Semana"},{k:"rango",l:"Rango"}].map(x=><button key={x.k} onClick={()=>setModFecha(x.k)} style={S.btnSm(modFecha===x.k)}>{x.l}</button>)}
+            {modFecha==="rango"&&<><input type="date" value={rangoD} onChange={e=>setRangoD(e.target.value)} style={{...S.input,padding:"3px 7px",width:"128px",fontSize:"0.75rem"}}/><input type="date" value={rangoH} onChange={e=>setRangoH(e.target.value)} style={{...S.input,padding:"3px 7px",width:"128px",fontSize:"0.75rem"}}/></>}
+          </div>
+          <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
+          <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"38px"}}>Estado</span>
+          <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
+            {[{k:"no_cancelado",l:"Todos"},{k:"sin_asignar",l:"Sin asignar"},{k:"asignado",l:"Asignado"},{k:"cancelado",l:"Cancelado"}].map(x=><button key={x.k} onClick={()=>setFilEstado(x.k)} style={S.btnSm(filEstado===x.k,ESTADO_C[x.k]?.t||"#6366f1")}>{x.l}</button>)}
+          </div>
+          <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
+          <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"38px"}}>Origen</span>
+          <div style={{display:"flex",gap:"3px"}}>
+            {[{k:"TODOS",l:"Todos"},{k:"TN",l:"TN"},{k:"Manual",l:"Manual"}].map(x=><button key={x.k} onClick={()=>setFilOrigen(x.k)} style={S.btnSm(filOrigen===x.k,x.k==="TN"?"#38bdf8":"#6366f1")}>{x.l}</button>)}
+          </div>
         </div>
-        {modFecha==="rango"&&<div style={{display:"flex",gap:"0.5rem",alignItems:"center",flexWrap:"wrap"}}>
-          <span style={{color:"#6b7280",fontSize:"0.8rem"}}>Desde</span>
-          <input type="date" value={rangoD} onChange={e=>setRangoD(e.target.value)} style={{...S.input,padding:"4px 8px",width:"132px"}}/>
-          <span style={{color:"#6b7280",fontSize:"0.8rem"}}>hasta</span>
-          <input type="date" value={rangoH} onChange={e=>setRangoH(e.target.value)} style={{...S.input,padding:"4px 8px",width:"132px"}}/>
-        </div>}
+        {/* Fila 2: Logistica */}
+        <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap",borderTop:"1px solid #252d40",paddingTop:"5px"}}>
+          <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"38px"}}>Logist.</span>
+          <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
+            {["TODOS",...logActivas,"SIN ASIGNAR"].map(t=><button key={t} onClick={()=>setFilTrans(t)} style={S.btnSm(filTrans===t,t==="SIN ASIGNAR"?"#f59e0b":lc[t]?.color||"#6366f1")}>{t}</button>)}
+          </div>
+        </div>
+        {/* Fila 3: Zona + Turno + Buscar */}
+        <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap",borderTop:"1px solid #252d40",paddingTop:"5px"}}>
+          <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"38px"}}>Zona</span>
+          <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
+            {["TODAS",...ZONAS_ML_LIST].map(z=><button key={z} onClick={()=>setFilZona(z)} style={S.btnSm(filZona===z,ZONA_ML_COLOR[z]||"#6366f1")}>{z}</button>)}
+          </div>
+          <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
+          <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"38px"}}>Turno</span>
+          <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
+            {["TODOS",...TURNOS].map(t=><button key={t} onClick={()=>setFilTurno(t)} style={S.btnSm(filTurno===t,"#8b5cf6")}>{t}</button>)}
+          </div>
+          <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="🔍 Buscar..." style={{...S.input,width:"190px",marginLeft:"auto"}}/>
+        </div>
+        {/* Fila 4: Acciones */}
+        <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap",borderTop:"1px solid #252d40",paddingTop:"5px"}}>
+          <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"38px"}}>Accion</span>
+          <button onClick={()=>{setModoSel(!modoSel);if(modoSel)setSeleccionados(new Set());}} style={S.btnSm(modoSel,"#6366f1")}>{modoSel?"Cancelar seleccion":"Seleccionar"}</button>
+          {modoSel&&<button onClick={()=>setSeleccionados(new Set(filtradosOrdenados.map(e=>e.id)))} style={S.btnSm(false)}>Todos ({filtrados.length})</button>}
+          {modoSel&&seleccionados.size>0&&<button onClick={()=>setSeleccionados(new Set())} style={S.btnSm(false)}>Ninguno</button>}
+        </div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))",gap:"0.55rem",marginBottom:"0.7rem"}}>
         <div onClick={()=>{setFilTrans("TODOS");setFilEstado("TODOS");}} style={{...S.card,padding:"0.75rem 1rem",cursor:"pointer",borderLeft:(filTrans==="TODOS"&&filEstado==="TODOS")?"3px solid #6366f1":"3px solid transparent"}}><div style={{color:"#6366f1",fontWeight:800,fontSize:"1.8rem",lineHeight:1}}>{filtrados.length}</div><div style={{color:"#6b7280",fontSize:"0.62rem",marginTop:"2px"}}>Todos</div></div>
@@ -491,24 +533,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
         {sinAsig>0&&<div onClick={()=>setFilEstado(filEstado==="sin_asignar"?"TODOS":"sin_asignar")} style={{...S.card,padding:"0.75rem 1rem",borderLeft:"3px solid #f59e0b",cursor:"pointer",opacity:filEstado==="sin_asignar"?1:0.75}}><div style={{color:"#f59e0b",fontWeight:800,fontSize:"1.8rem",lineHeight:1}}>{sinAsig}</div><div style={{color:"#6b7280",fontSize:"0.62rem",marginTop:"2px"}}>Sin asignar</div></div>}
         {porTrans.map(({l,n,v})=><div key={l} onClick={()=>filtrarPorLogistica(l)} style={{...S.card,padding:"0.75rem 1rem",borderLeft:"3px solid "+lc[l].color,cursor:"pointer",opacity:filTrans===l?1:0.75,outline:filTrans===l?"2px solid "+lc[l].color:"none"}}><div style={{color:lc[l].color,fontWeight:800,fontSize:"1.8rem",lineHeight:1}}>{n}</div><div style={{color:"#6b7280",fontSize:"0.62rem",marginTop:"2px"}}>{l}</div><div style={{color:"#10b981",fontSize:"0.72rem",fontWeight:600,marginTop:"2px"}}>{fmt(v)}</div></div>)}
       </div>
-      <div style={{...S.card,padding:"0.6rem 1rem",marginBottom:"0.7rem",display:"flex",gap:"0.4rem",flexWrap:"wrap",alignItems:"center"}}>
-        <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar..." style={{...S.input,width:"180px"}}/>
-        <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
-        {["TODOS",...logActivas,"SIN ASIGNAR"].map(t=><button key={t} onClick={()=>setFilTrans(t)} style={S.btnSm(filTrans===t,t==="SIN ASIGNAR"?"#f59e0b":lc[t]?.color||"#6366f1")}>{t}</button>)}
-        <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
-        {["TODAS",...ZONAS_ML_LIST].map(z=><button key={z} onClick={()=>setFilZona(z)} style={S.btnSm(filZona===z,ZONA_ML_COLOR[z]||"#6366f1")}>{z}</button>)}
-        <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
-        {["TODOS",...TURNOS].map(t=><button key={t} onClick={()=>setFilTurno(t)} style={S.btnSm(filTurno===t,"#8b5cf6")}>{t}</button>)}
-        <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
-        {["TODOS","sin_asignar","asignado","cancelado"].map(k=><button key={k} onClick={()=>setFilEstado(k)} style={S.btnSm(filEstado===k,ESTADO_C[k]?.t||"#6366f1")}>{ESTADO_C[k]?.label||"Todos"}</button>)}
-        <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
-        <button onClick={()=>{setModoSel(!modoSel);if(modoSel)setSeleccionados(new Set());}} style={S.btnSm(modoSel,"#6366f1")}>{modoSel?"Cancelar seleccion":"Seleccionar"}</button>
-        {modoSel&&<button onClick={()=>setSeleccionados(new Set(filtradosOrdenados.map(e=>e.id)))} style={S.btnSm(false)}>Todos ({filtrados.length})</button>}
-        {modoSel&&seleccionados.size>0&&<button onClick={()=>setSeleccionados(new Set())} style={S.btnSm(false)}>Ninguno</button>}
-        <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
-        <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Origen</span>
-        {[{k:"TODOS",l:"Todos"},{k:"TN",l:"TN"},{k:"FLEX",l:"FLEX"},{k:"Manual",l:"Manual"}].map(x=><button key={x.k} onClick={()=>setFilOrigen(x.k)} style={S.btnSm(filOrigen===x.k,x.k==="TN"?"#38bdf8":x.k==="FLEX"?"#84cc16":x.k==="Manual"?"#f59e0b":"#6366f1")}>{x.l}</button>)}
-      </div>
+
       <div style={{display:"grid",gap:"4px",paddingBottom:"80px"}}>
         {filtradosOrdenados.length===0&&<div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📭</div><p>Sin envios</p></div>}
         {filtradosOrdenados.map((e,i)=>{
@@ -572,12 +597,14 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
         })}
       </div>
       {modoSel&&seleccionados.size>0&&(
-        <div style={{position:"fixed",bottom:"20px",left:"50%",transform:"translateX(-50%)",background:"#1a1f2e",border:"1px solid #6366f1",borderRadius:"12px",padding:"0.7rem 1.25rem",display:"flex",gap:"0.75rem",alignItems:"center",zIndex:50,boxShadow:"0 4px 20px rgba(0,0,0,0.5)",flexWrap:"wrap"}}>
-          <span style={{color:"#e5e7eb",fontWeight:700,fontSize:"0.9rem"}}>{seleccionados.size} seleccionados</span>
-          <button onClick={reasignarSel} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.45rem 1.1rem"}}>Reasignar</button>
-          <button onClick={cancelarSel} style={{...S.btn(true),background:"#7f1d1d",padding:"0.45rem 1.1rem"}}>Cancelar envios</button>
-          <button onClick={eliminarSel} style={{...S.btn(true),background:"#450a0a",padding:"0.45rem 1.1rem",color:"#fca5a5"}}>Eliminar</button>
-          <button onClick={()=>{setModoSel(false);setSeleccionados(new Set());}} style={S.btn(false)}>Salir</button>
+        <div style={{position:"fixed",bottom:"20px",left:"50%",transform:"translateX(-50%)",background:"#1a1f2e",border:"1px solid #6366f1",borderRadius:"12px",padding:"0.7rem 1.25rem",display:"flex",gap:"0.6rem",alignItems:"center",zIndex:50,boxShadow:"0 4px 20px rgba(0,0,0,0.5)",flexWrap:"wrap",maxWidth:"95vw"}}>
+          <span style={{color:"#e5e7eb",fontWeight:700,fontSize:"0.9rem"}}>{seleccionados.size} selec.</span>
+          <button onClick={reasignarSel} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.4rem 0.9rem",fontSize:"0.75rem"}}>Reasignar</button>
+          <button onClick={()=>{const f=window.prompt("Nueva fecha (YYYY-MM-DD):");if(!f)return;setEnvios(p=>p.map(e=>seleccionados.has(e.id)?{...e,fecha:f}:e));setSeleccionados(new Set());setModoSel(false);}} style={{...S.btn(false),padding:"0.4rem 0.9rem",fontSize:"0.75rem"}}>Cambiar fecha</button>
+          <button onClick={()=>{const t=window.prompt("Turno (AM/MD/PM/Turbo):");if(!t)return;setEnvios(p=>p.map(e=>seleccionados.has(e.id)?{...e,turno:t}:e));setSeleccionados(new Set());setModoSel(false);}} style={{...S.btn(false),padding:"0.4rem 0.9rem",fontSize:"0.75rem"}}>Cambiar turno</button>
+          <button onClick={cancelarSel} style={{...S.btn(true),background:"#7f1d1d",padding:"0.4rem 0.9rem",fontSize:"0.75rem"}}>Cancelar</button>
+          <button onClick={eliminarSel} style={{...S.btn(true),background:"#450a0a",padding:"0.4rem 0.9rem",fontSize:"0.75rem",color:"#fca5a5"}}>Eliminar</button>
+          <button onClick={()=>{setModoSel(false);setSeleccionados(new Set());}} style={{...S.btn(false),padding:"0.4rem 0.9rem",fontSize:"0.75rem"}}>Salir</button>
         </div>
       )}
     </div>
@@ -846,36 +873,59 @@ function TabTarifas({zc,setZc,lc,setLc}){
 
 function TabInforme({envios,zc,lc}){
   const hoy=fechaHoy();
-  const [modoPeriodo,setModoPeriodo]=useState("semana"); // semana | rango
-  const [semanaSel,setSemanaSel]=useState("");
-  const [rangoD,setRangoD]=useState(hoy);
-  const [rangoH,setRangoH]=useState(hoy);
   const [logSel,setLogSel]=useState("TODAS");
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const tmap=buildTarifaMap(zc);
   const getImp=e=>calcImp(e,tmap,lc);
+
+  // Construir mapa anio -> mes -> semanas
   const semMap={};
-  envios.forEach(e=>{const ds=e.fecha||e.fechaVenta||"";if(!ds)return;const{w,y}=getWeekNum(ds);const key=y+"-"+String(w).padStart(2,"0");if(!semMap[key])semMap[key]={key,label:weekLabel(ds),fechas:new Set()};semMap[key].fechas.add(ds);});
-  const semanas=Object.keys(semMap).sort().reverse();
-  useEffect(()=>{if(semanas.length&&!semanaSel)setSemanaSel(semanas[0]);},[envios]);
+  envios.forEach(e=>{const ds=e.fecha||e.fechaVenta||"";if(!ds)return;const{w,y}=getWeekNum(ds);const key=y+"-"+String(w).padStart(2,"0");if(!semMap[key])semMap[key]={key,label:weekLabel(ds),fechas:new Set(),mes:parseInt(ds.split("-")[1]),anio:y};semMap[key].fechas.add(ds);});
+
+  const anios=[...new Set(Object.values(semMap).map(s=>s.anio))].sort().reverse();
+  const [anioSel,setAnioSel]=useState(()=>anios[0]||new Date().getFullYear());
+  const MESES=["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+  const mesesDelAnio=[...new Set(Object.values(semMap).filter(s=>s.anio===anioSel).map(s=>s.mes))].sort((a,b)=>b-a);
+  const [mesSel,setMesSel]=useState(()=>mesesDelAnio[0]||new Date().getMonth()+1);
+  const semanasDelMes=Object.values(semMap).filter(s=>s.anio===anioSel&&s.mes===mesSel).sort((a,b)=>b.key.localeCompare(a.key));
+  const [semanaSel,setSemanaSel]=useState(()=>semanasDelMes[0]?.key||"");
+
+  // Sync defaults when envios load
+  useEffect(()=>{
+    if(anios.length){
+      const a=anios[0];setAnioSel(a);
+      const ms=[...new Set(Object.values(semMap).filter(s=>s.anio===a).map(s=>s.mes))].sort((a,b)=>b-a);
+      if(ms.length){setMesSel(ms[0]);const sems=Object.values(semMap).filter(s=>s.anio===a&&s.mes===ms[0]).sort((a,b)=>b.key.localeCompare(a.key));if(sems.length)setSemanaSel(sems[0].key);}
+    }
+  },[envios]);
+
   const semFechas=semanaSel&&semMap[semanaSel]?[...semMap[semanaSel].fechas].sort():[];
   const envSem=envios.filter(e=>{
     const ds=e.fecha||e.fechaVenta||"";
     if(e.estado==="cancelado")return false;
     if(logSel!=="TODAS"&&e.trans!==logSel)return false;
-    if(modoPeriodo==="rango")return ds>=rangoD&&ds<=rangoH;
     return semFechas.includes(ds);
   });
   const logsMost=logSel==="TODAS"?logActivas:[logSel];
   if(!envios.length)return<div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📊</div><p>Carga un Excel primero</p></div>;
   return(
     <div>
-      <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"0.4rem",flexWrap:"wrap",alignItems:"center"}}>
-        <button onClick={()=>setModoPeriodo("semana")} style={S.btn(modoPeriodo==="semana")}>Por semana</button>
-        <button onClick={()=>setModoPeriodo("rango")} style={S.btn(modoPeriodo==="rango")}>Rango de fechas</button>
-        <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
-        {modoPeriodo==="semana"&&semanas.map(s=><button key={s} onClick={()=>setSemanaSel(s)} style={S.btn(semanaSel===s)}>{semMap[s].label}</button>)}
-        {modoPeriodo==="rango"&&<><span style={{color:"#6b7280",fontSize:"0.8rem"}}>Desde</span><input type="date" value={rangoD} onChange={ev=>setRangoD(ev.target.value)} style={{...S.input,padding:"4px 8px",width:"132px"}}/><span style={{color:"#6b7280",fontSize:"0.8rem"}}>hasta</span><input type="date" value={rangoH} onChange={ev=>setRangoH(ev.target.value)} style={{...S.input,padding:"4px 8px",width:"132px"}}/></>}
+      <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.8rem",display:"flex",flexDirection:"column",gap:"8px"}}>
+        {/* Selector anio — solo si hay mas de uno */}
+        {anios.length>1&&<div style={{display:"flex",gap:"4px",alignItems:"center",flexWrap:"wrap"}}>
+          <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"34px"}}>Anio</span>
+          {anios.map(a=><button key={a} onClick={()=>{setAnioSel(a);const ms=[...new Set(Object.values(semMap).filter(s=>s.anio===a).map(s=>s.mes))].sort((a,b)=>b-a);if(ms.length){setMesSel(ms[0]);const sems=Object.values(semMap).filter(s=>s.anio===a&&s.mes===ms[0]).sort((a,b)=>b.key.localeCompare(a.key));if(sems.length)setSemanaSel(sems[0].key);}}} style={S.btnSm(anioSel===a)}>{a}</button>)}
+        </div>}
+        {/* Selector mes */}
+        <div style={{display:"flex",gap:"4px",alignItems:"center",flexWrap:"wrap"}}>
+          <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"34px"}}>Mes</span>
+          {mesesDelAnio.map(m=><button key={m} onClick={()=>{setMesSel(m);const sems=Object.values(semMap).filter(s=>s.anio===anioSel&&s.mes===m).sort((a,b)=>b.key.localeCompare(a.key));if(sems.length)setSemanaSel(sems[0].key);}} style={S.btnSm(mesSel===m)}>{MESES[m-1]}</button>)}
+        </div>
+        {/* Selector semana */}
+        <div style={{display:"flex",gap:"4px",alignItems:"center",flexWrap:"wrap"}}>
+          <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"34px"}}>Sem.</span>
+          {semanasDelMes.map(s=><button key={s.key} onClick={()=>setSemanaSel(s.key)} style={S.btnSm(semanaSel===s.key)}>{s.label}</button>)}
+        </div>
       </div>
       <div style={{...S.card,padding:"0.55rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"0.35rem",flexWrap:"wrap"}}>
         <button onClick={()=>setLogSel("TODAS")} style={S.btn(logSel==="TODAS")}>TODAS</button>
@@ -1137,9 +1187,13 @@ function TabMapa({ envios, lc }) {
 // TAB LIQUIDACION — cobranzas y cambios/retiros pendientes
 // ════════════════════════════════════════════════════════════════════
 function TabLiquidacion({ envios, setEnvios, lc }) {
+  const hoy=fechaHoy();
   const [seccion, setSeccion] = useState("cobranzas"); // cobranzas | retiros
   const [filTrans, setFilTrans] = useState("TODOS");
   const [filEstado, setFilEstado] = useState("pendiente"); // pendiente | recibido | todos
+  const [filFecha, setFilFecha] = useState("todos"); // todos | hoy | ayer | rango
+  const [rangoD, setRangoD] = useState(hoy);
+  const [rangoH, setRangoH] = useState(hoy);
   const [notaModal, setNotaModal] = useState(null); // {id, tipo, nota}
   const [busqueda, setBusqueda] = useState("");
   const logActivas = Object.entries(lc).filter(([,v]) => v.activa).map(([k]) => k);
@@ -1159,6 +1213,10 @@ function TabLiquidacion({ envios, setEnvios, lc }) {
     const recibido = !!e[campo];
     if (filEstado === "pendiente" && recibido) return false;
     if (filEstado === "recibido" && !recibido) return false;
+    const fEnv = e.fecha || e.fechaVenta || "";
+    if (filFecha === "hoy" && fEnv !== hoy) return false;
+    if (filFecha === "ayer" && fEnv !== fechaAyer()) return false;
+    if (filFecha === "rango" && (fEnv < rangoD || fEnv > rangoH)) return false;
     if (busqueda) {
       const srch = busqueda.toLowerCase();
       return (e.direccion||"").toLowerCase().includes(srch) ||
@@ -1230,8 +1288,25 @@ function TabLiquidacion({ envios, setEnvios, lc }) {
           <button key={t} onClick={() => setFilTrans(t)} style={S.btnSm(filTrans === t, lc[t]?.color || "#6366f1")}>{t}</button>
         ))}
         <span style={{ color: "#374151", fontSize: "0.6rem" }}>|</span>
-        <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar nro orden o dirección..." style={{...S.input,width:"220px",padding:"3px 8px",fontSize:"0.75rem"}}/>
+        <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Fecha</span>
+        {[{k:"todos",l:"Todos"},{k:"hoy",l:"Hoy"},{k:"ayer",l:"Ayer"},{k:"rango",l:"Rango"}].map(x=><button key={x.k} onClick={()=>setFilFecha(x.k)} style={S.btnSm(filFecha===x.k)}>{x.l}</button>)}
+        {filFecha==="rango"&&<><input type="date" value={rangoD} onChange={e=>setRangoD(e.target.value)} style={{...S.input,padding:"3px 7px",width:"128px",fontSize:"0.75rem"}}/><input type="date" value={rangoH} onChange={e=>setRangoH(e.target.value)} style={{...S.input,padding:"3px 7px",width:"128px",fontSize:"0.75rem"}}/></>}
+        <span style={{ color: "#374151", fontSize: "0.6rem" }}>|</span>
+        <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar nro orden o dirección..." style={{...S.input,width:"200px",padding:"3px 8px",fontSize:"0.75rem"}}/>
         {busqueda&&<button onClick={()=>setBusqueda("")} style={{...S.btnSm(false),color:"#6b7280"}}>x</button>}
+        <button onClick={()=>{
+          const ahora=new Date();
+          const ts=ahora.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+" "+ahora.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+          const rows=lista.map((e,i)=>{
+            const campo=seccion==="cobranzas"?"cobranzaRecibida":"retiroRecibido";
+            const recibido=!!e[campo];
+            const monto=seccion==="cobranzas"?("$"+Number(e.cobranza||0).toLocaleString("es-AR")):"-";
+            const detalle=seccion==="retiros"?(e.cambio||e.retiro||"-"):"-";
+            return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}"><td style="padding:3px 6px;border-bottom:0.5px solid #ddd;">${i+1}</td><td style="padding:3px 6px;border-bottom:0.5px solid #ddd;font-weight:500;">${e.direccion}</td><td style="padding:3px 6px;border-bottom:0.5px solid #ddd;font-family:monospace;font-size:9px;">${e.nroOrdenTN?"#"+e.nroOrdenTN:e.id.slice(-8)}</td><td style="padding:3px 6px;border-bottom:0.5px solid #ddd;">${e.trans||"-"}</td><td style="padding:3px 6px;border-bottom:0.5px solid #ddd;">${e.fecha?fmtCorta(e.fecha):"-"}</td><td style="padding:3px 6px;border-bottom:0.5px solid #ddd;font-weight:600;color:${seccion==="cobranzas"?"#b45309":"#555"};">${monto}</td><td style="padding:3px 6px;border-bottom:0.5px solid #ddd;color:${recibido?"#15803d":"#b45309"};font-weight:600;">${recibido?"Recibido":"Pendiente"}</td></tr>`;
+          }).join("");
+          const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Liquidacion</title><style>@page{size:A4;margin:10mm;}body{font-family:Arial,sans-serif;font-size:10px;color:#111;}table{width:100%;border-collapse:collapse;}th{background:#e8e8e8;padding:3px 6px;text-align:left;font-size:8px;text-transform:uppercase;font-weight:700;border-bottom:1.5px solid #333;}@media print{button{display:none!important;}}</style></head><body><div style="display:flex;justify-content:space-between;margin-bottom:4px;"><strong style="font-size:12px;">Liquidacion — ${seccion==="cobranzas"?"Cobranzas":"Cambios y Retiros"}</strong><span style="font-size:8px;color:#888;">Impreso: ${ts}</span></div><table><thead><tr><th style="width:20px;">#</th><th>Direccion</th><th style="width:80px;">Nro orden</th><th style="width:60px;">Logistica</th><th style="width:48px;">Fecha</th><th style="width:70px;">${seccion==="cobranzas"?"Monto":"-"}</th><th style="width:65px;">Estado</th></tr></thead><tbody>${rows}</tbody></table><div style="border-top:1.5px solid #333;margin-top:4px;padding-top:3px;font-size:8px;color:#555;">${lista.length} registros</div><script>window.onload=function(){window.print();}<\/script></body></html>`;
+          const w=window.open("","_blank");if(!w){alert("Permite ventanas emergentes.");return;}w.document.write(html);w.document.close();
+        }} style={{...S.btn(true),background:"#0f1420",border:"1px solid #252d40",marginLeft:"auto",padding:"0.3rem 0.8rem",fontSize:"0.72rem"}}>🖨️ Imprimir</button>
       </div>
 
       {/* Resumen cards */}
