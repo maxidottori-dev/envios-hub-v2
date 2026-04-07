@@ -1035,69 +1035,45 @@ function TabTarifas({zc,setZc,lc,setLc}){
 
 function TabInforme({envios,zc,lc}){
   const hoy=fechaHoy();
-  const [logSel,setLogSel]=useState("TODAS");
+  // Calcular semana actual: lunes a domingo
+  const semanaActual=()=>{
+    const d=new Date();const day=d.getDay()||7;
+    const lun=new Date(d);lun.setDate(d.getDate()-(day-1));
+    const dom=new Date(lun);dom.setDate(lun.getDate()+6);
+    const fmt2=x=>x.toISOString().split("T")[0];
+    return{d:fmt2(lun),h:fmt2(dom)};
+  };
+  const sem=semanaActual();
   const [modoPeriodo,setModoPeriodo]=useState("semana");
-  const [rangoD,setRangoD]=useState(hoy);
-  const [rangoH,setRangoH]=useState(hoy);
+  const [rangoD,setRangoD]=useState(sem.d);
+  const [rangoH,setRangoH]=useState(sem.h);
+  const [logSel,setLogSel]=useState("TODAS");
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const tmap=buildTarifaMap(zc);
   const getImp=e=>calcImp(e,tmap,lc,zc);
 
-  // Construir mapa anio -> mes -> semanas
-  const semMap={};
-  envios.forEach(e=>{const ds=e.fecha||e.fechaVenta||"";if(!ds)return;const{w,y}=getWeekNum(ds);const key=y+"-"+String(w).padStart(2,"0");if(!semMap[key])semMap[key]={key,label:weekLabel(ds),fechas:new Set(),mes:parseInt(ds.split("-")[1]),anio:y};semMap[key].fechas.add(ds);});
+  const desde=modoPeriodo==="semana"?sem.d:rangoD;
+  const hasta=modoPeriodo==="semana"?sem.h:rangoH;
 
-  const anios=[...new Set(Object.values(semMap).map(s=>s.anio))].sort().reverse();
-  const [anioSel,setAnioSel]=useState(()=>anios[0]||new Date().getFullYear());
-  const MESES=["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
-  const mesesDelAnio=[...new Set(Object.values(semMap).filter(s=>s.anio===anioSel).map(s=>s.mes))].sort((a,b)=>b-a);
-  const [mesSel,setMesSel]=useState(()=>mesesDelAnio[0]||new Date().getMonth()+1);
-  const semanasDelMes=Object.values(semMap).filter(s=>s.anio===anioSel&&s.mes===mesSel).sort((a,b)=>b.key.localeCompare(a.key));
-  const [semanaSel,setSemanaSel]=useState(()=>semanasDelMes[0]?.key||"");
-
-  // Sync defaults when envios load
-  useEffect(()=>{
-    if(anios.length){
-      const a=anios[0];setAnioSel(a);
-      const ms=[...new Set(Object.values(semMap).filter(s=>s.anio===a).map(s=>s.mes))].sort((a,b)=>b-a);
-      if(ms.length){setMesSel(ms[0]);const sems=Object.values(semMap).filter(s=>s.anio===a&&s.mes===ms[0]).sort((a,b)=>b.key.localeCompare(a.key));if(sems.length)setSemanaSel(sems[0].key);}
-    }
-  },[envios]);
-
-  const semFechas=semanaSel&&semMap[semanaSel]?[...semMap[semanaSel].fechas].sort():[];
   const envSem=envios.filter(e=>{
     const ds=e.fecha||e.fechaVenta||"";
     if(e.estado==="cancelado")return false;
     if(logSel!=="TODAS"&&e.trans!==logSel)return false;
-    if(modoPeriodo==="rango") return ds>=rangoD&&ds<=rangoH;
-    return semFechas.includes(ds);
+    return ds>=desde&&ds<=hasta;
   });
   const logsMost=logSel==="TODAS"?logActivas:[logSel];
-  if(!envios.length)return<div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📊</div><p>Carga un Excel primero</p></div>;
+  if(!envios.length)return<div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📊</div><p>Sin envios para mostrar</p></div>;
   return(
     <div>
-      <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.8rem",display:"flex",flexDirection:"column",gap:"8px"}}>
-        {/* Selector anio — solo si hay mas de uno */}
-        {anios.length>1&&<div style={{display:"flex",gap:"4px",alignItems:"center",flexWrap:"wrap"}}>
-          <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"34px"}}>Anio</span>
-          {anios.map(a=><button key={a} onClick={()=>{setAnioSel(a);const ms=[...new Set(Object.values(semMap).filter(s=>s.anio===a).map(s=>s.mes))].sort((a,b)=>b-a);if(ms.length){setMesSel(ms[0]);const sems=Object.values(semMap).filter(s=>s.anio===a&&s.mes===ms[0]).sort((a,b)=>b.key.localeCompare(a.key));if(sems.length)setSemanaSel(sems[0].key);}}} style={S.btnSm(anioSel===a)}>{a}</button>)}
-        </div>}
-        {/* Selector mes */}
-        <div style={{display:"flex",gap:"4px",alignItems:"center",flexWrap:"wrap"}}>
-          <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"34px"}}>Mes</span>
-          {mesesDelAnio.map(m=><button key={m} onClick={()=>{setMesSel(m);const sems=Object.values(semMap).filter(s=>s.anio===anioSel&&s.mes===m).sort((a,b)=>b.key.localeCompare(a.key));if(sems.length)setSemanaSel(sems[0].key);}} style={S.btnSm(mesSel===m)}>{MESES[m-1]}</button>)}
-        </div>
-        {/* Selector semana / rango */}
-        <div style={{display:"flex",gap:"4px",alignItems:"center",flexWrap:"wrap"}}>
-          <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"34px"}}>Sem.</span>
-          {modoPeriodo==="semana"&&semanasDelMes.map(s=><button key={s.key} onClick={()=>setSemanaSel(s.key)} style={S.btnSm(semanaSel===s.key)}>{s.label}</button>)}
-          <button onClick={()=>setModoPeriodo(modoPeriodo==="rango"?"semana":"rango")} style={{...S.btnSm(modoPeriodo==="rango","#8b5cf6"),marginLeft:"auto"}}>{modoPeriodo==="rango"?"Volver a semanas":"Rango de fechas"}</button>
-          {modoPeriodo==="rango"&&<>
-            <input type="date" value={rangoD} onChange={ev=>setRangoD(ev.target.value)} style={{...S.input,padding:"3px 7px",width:"130px",fontSize:"0.75rem"}}/>
-            <span style={{color:"#6b7280",fontSize:"0.75rem"}}>hasta</span>
-            <input type="date" value={rangoH} onChange={ev=>setRangoH(ev.target.value)} style={{...S.input,padding:"3px 7px",width:"130px",fontSize:"0.75rem"}}/>
-          </>}
-        </div>
+      <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}}>
+        <button onClick={()=>setModoPeriodo("semana")} style={S.btn(modoPeriodo==="semana")}>Semana actual</button>
+        <button onClick={()=>setModoPeriodo("rango")} style={S.btn(modoPeriodo==="rango")}>Rango de fechas</button>
+        {modoPeriodo==="semana"&&<span style={{color:"#6b7280",fontSize:"0.78rem"}}>{sem.d} al {sem.h}</span>}
+        {modoPeriodo==="rango"&&<>
+          <input type="date" value={rangoD} onChange={ev=>setRangoD(ev.target.value)} style={{...S.input,padding:"3px 7px",width:"132px",fontSize:"0.78rem"}}/>
+          <span style={{color:"#6b7280",fontSize:"0.75rem"}}>hasta</span>
+          <input type="date" value={rangoH} onChange={ev=>setRangoH(ev.target.value)} style={{...S.input,padding:"3px 7px",width:"132px",fontSize:"0.78rem"}}/>
+        </>}
       </div>
       <div style={{...S.card,padding:"0.55rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"0.35rem",flexWrap:"wrap",alignItems:"center"}}>
         <button onClick={()=>setLogSel("TODAS")} style={S.btn(logSel==="TODAS")}>TODAS</button>
@@ -2237,7 +2213,7 @@ export default function App(){
 
   return(
     <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif"}}>
-      <style>{`*{box-sizing:border-box;}::-webkit-scrollbar{width:7px;height:7px;}::-webkit-scrollbar-track{background:#0f1420;}::-webkit-scrollbar-thumb{background:#4b5563;border-radius:4px;}::-webkit-scrollbar-thumb:hover{background:#6b7280;}select option{background:#1a1f2e;color:#e5e7eb;}button:hover{opacity:0.85;}`}</style>
+      <style>{`*{box-sizing:border-box;}::-webkit-scrollbar{width:4px;height:7px;}::-webkit-scrollbar-track{background:#0f1420;}::-webkit-scrollbar-thumb{background:#4b5563;border-radius:4px;}::-webkit-scrollbar-thumb:hover{background:#6b7280;}select option{background:#1a1f2e;color:#e5e7eb;}button:hover{opacity:0.85;}`}</style>
       {toast&&<div style={{position:"fixed",top:"16px",right:"16px",zIndex:999,background:"#041f14",border:"1px solid #10b981",borderRadius:"10px",padding:"0.6rem 1.1rem",color:"#34d399",fontWeight:700,fontSize:"0.82rem"}}>{toast}</div>}
       <div style={{position:"sticky",top:0,zIndex:100,background:"#0f1420",borderBottom:"1px solid #1a1f2e",padding:"0.7rem 1rem",display:"flex",alignItems:"center",gap:"0.55rem",flexWrap:"wrap"}}>
         <div style={{width:"26px",height:"26px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:"7px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>🛵</div>
