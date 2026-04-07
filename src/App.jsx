@@ -127,11 +127,25 @@ const ALL_PARTIDOS=["CABA","Avellaneda","Lanus","Quilmes","Lomas de Zamora","Alm
 
 function buildTarifaMap(zc){const m={};Object.entries(zc).forEach(([l,c])=>c.zonas.forEach(z=>z.partidos.forEach(p=>{if(!m[p])m[p]={};m[p][l]=z.precio;})));return m;}
 function getZonaLogistica(zc,trans,partido){return zc[trans]?zc[trans].zonas.find(z=>z.partidos.includes(partido))||null:null;}
-function calcImp(e,tmap,lc){
+function calcImp(e,tmap,lc,zc){
   if(!e.trans)return 0;
-  const b=e.bultos||1;
+  const bultos=e.bultos||1;
   const cfg=lc[e.trans];
-  if(cfg&&b>1){const pb=cfg.preciosBultos?.find(x=>x.b===b);if(pb&&pb.p>0)return pb.p;}
+  // Nueva matriz zona x bultos
+  if(cfg?.tarifaMatrix&&zc){
+    const zona=getZonaLogistica(zc,e.trans,e.partido);
+    if(zona){
+      const mx=cfg.tarifaMatrix[zona.id]||{};
+      let bk=bultos;
+      if(bultos>=4&&bultos<=10)bk=10;
+      else if(bultos>=11)bk=11;
+      const p=mx[String(bk)];
+      if(p!==undefined&&p>0)return p;
+    }
+  }
+  // Fallback: preciosBultos legacy
+  if(cfg&&bultos>1){const pb=cfg.preciosBultos?.find(x=>x.b===bultos);if(pb&&pb.p>0)return pb.p;}
+  // Fallback: precio de zona
   return tmap[e.partido]?.[e.trans]||0;
 }
 
@@ -420,7 +434,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
   const [seleccionados,setSeleccionados]=useState(new Set());
   const [modoSel,setModoSel]=useState(false);
   const tmap=buildTarifaMap(zc);
-  const getImp=e=>calcImp(e,tmap,lc);
+  const getImp=e=>calcImp(e,tmap,lc,zc);
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const getRango=()=>{
     if(modFecha==="todos") return{d:"",h:""};
@@ -620,7 +634,7 @@ function TabImprimir({envios,zc,lc}){
   const [filOrigen,setFilOrigen]=useState("TODOS"); // TODOS | FLEX | NO_FLEX
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const tmap=buildTarifaMap(zc);
-  const getImp=e=>calcImp(e,tmap,lc);
+  const getImp=e=>calcImp(e,tmap,lc,zc);
   const lista=envios.filter(e=>{
     const f=e.fecha||e.fechaVenta||"";
     if(fecha&&f!==fecha)return false;
@@ -791,7 +805,7 @@ function TabTarifas({zc,setZc,lc,setLc}){
     <div>
       <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"1rem",display:"flex",gap:"4px",flexWrap:"wrap",alignItems:"center"}}>
         <button onClick={()=>setSubTab("zonas")} style={S.btn(subTab==="zonas")}>Zonas y precios</button>
-        <button onClick={()=>setSubTab("bultos")} style={S.btn(subTab==="bultos")}>Precios por bultos</button>
+        <button onClick={()=>setSubTab("bultos")} style={S.btn(subTab==="bultos")}>Matriz de precios</button>
         <button onClick={()=>setSubTab("logisticas")} style={S.btn(subTab==="logisticas")}>Logisticas</button>
         {subTab!=="logisticas"&&<><span style={{color:"#374151",fontSize:"0.65rem",margin:"0 4px"}}>|</span>{Object.entries(lc).filter(([,v])=>v.activa).map(([k,v])=><button key={k} onClick={()=>setLogSel(k)} style={S.btn(logSel===k,v.color)}>{k}</button>)}</>}
         {subTab==="zonas"&&<span style={{marginLeft:"auto",color:"#4b5563",fontSize:"0.72rem"}}>Doble clic en el precio</span>}
@@ -820,13 +834,58 @@ function TabTarifas({zc,setZc,lc,setLc}){
         </div>
         {sinAsig.length>0&&<div style={{...S.card,padding:"0.65rem 1rem"}}><div style={{color:"#f59e0b",fontWeight:700,fontSize:"0.68rem",marginBottom:"0.4rem"}}>Sin asignar ({sinAsig.length})</div><div style={{display:"flex",flexWrap:"wrap",gap:"0.3rem"}}>{sinAsig.map(p=><button key={p} onClick={()=>setMoverModal({p,from:null})} style={{padding:"2px 8px",background:"#1c1500",border:"1px solid #78350f",borderRadius:"5px",color:"#fbbf24",fontSize:"0.7rem",cursor:"pointer"}}>{p}</button>)}</div></div>}
       </>}
-      {subTab==="bultos"&&<div style={{...S.card,overflow:"auto"}}>
-        <table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.85rem"}}>
-          <thead><tr style={{background:"#12172a",borderBottom:"1px solid #252d40"}}><th style={thSt}>Bultos</th><th style={{...thSt,color:"#6b7280"}}>Precio (0 = usa precio de zona)</th><th style={{...thSt,width:"40px"}}></th></tr></thead>
-          <tbody>{(lc[logSel]?.preciosBultos||[]).map(({b,p})=><tr key={b} style={{borderBottom:"1px solid #1a1f2e"}}><td style={{...tdSt,color:"#e5e7eb",fontWeight:700}}>{b} {b===1?"bulto":"bultos"}</td><td style={tdSt}><input type="number" value={p||""} onChange={e=>updBulto(logSel,b,e.target.value)} placeholder="0 = precio de zona" style={{...S.input,width:"200px",padding:"4px 10px"}}/>{p>0&&<span style={{color:"#10b981",marginLeft:"8px",fontSize:"0.8rem"}}>{fmt(p)}</span>}</td><td style={tdSt}>{b>1&&<button onClick={()=>delBulto(logSel,b)} style={{background:"none",border:"none",color:"#f87171",cursor:"pointer",fontSize:"0.8rem"}}>x</button>}</td></tr>)}</tbody>
-        </table>
-        <div style={{padding:"0.75rem 1rem"}}><button onClick={()=>addBulto(logSel)} style={{...S.btn(false),border:"1px dashed #252d40"}}>+ Agregar fila de bultos</button></div>
-      </div>}
+      {subTab==="bultos"&&(()=>{
+        const BULTOS_FIJOS=[1,2,3,10,11];
+        const zonas=cfg.zonas||[];
+        const matrix=lc[logSel]?.tarifaMatrix||{};
+        const getM=(zid,b)=>(matrix[zid]?.[String(b)])||"";
+        const setM=(zid,b,val)=>setLc(p=>({...p,[logSel]:{...p[logSel],tarifaMatrix:{...(p[logSel]?.tarifaMatrix||{}),[zid]:{...(p[logSel]?.tarifaMatrix?.[zid]||{}),[String(b)]:parseInt(val)||0}}}}));
+        if(!zonas.length)return<div style={{...S.card,padding:"1.5rem",textAlign:"center",color:"#4b5563"}}>Primero creá zonas en el tab "Zonas y precios"</div>;
+        return(
+          <div>
+            <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.75rem",color:"#6b7280",fontSize:"0.78rem"}}>
+              Ingresá el precio para cada combinación de zona y cantidad de bultos. Dejá en 0 para usar el precio base de la zona.<br/>
+              <span style={{color:"#f59e0b",fontSize:"0.72rem"}}>⚠ Regla: 4 a 10 bultos usa el precio de "10 bultos". 11 o más usa el precio de "11 bultos".</span>
+            </div>
+            <div style={{...S.card,overflow:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.82rem",minWidth:"500px"}}>
+                <thead>
+                  <tr style={{background:"#12172a",borderBottom:"1px solid #252d40"}}>
+                    <th style={{...thSt,width:"80px"}}>Bultos</th>
+                    {zonas.map(z=><th key={z.id} style={{...thSt,textAlign:"center"}}>
+                      <span style={{color:z.color,fontWeight:700}}>{z.nombre}</span>
+                    </th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {BULTOS_FIJOS.map((b,i)=>(
+                    <tr key={b} style={{borderBottom:"1px solid #1a1f2e",background:i%2===0?"transparent":"#0d1119"}}>
+                      <td style={{...tdSt,fontWeight:700,color:"#e5e7eb",whiteSpace:"nowrap"}}>
+                        {b===10?"4-10 bultos":b===11?"11+ bultos":b===1?"1 bulto":b+" bultos"}
+                      </td>
+                      {zonas.map(z=>{
+                        const val=getM(z.id,b);
+                        return(
+                          <td key={z.id} style={{...tdSt,textAlign:"center",padding:"4px 8px"}}>
+                            <input
+                              type="number"
+                              value={val||""}
+                              onChange={ev=>setM(z.id,b,ev.target.value)}
+                              placeholder="0"
+                              style={{...S.input,width:"100px",padding:"4px 8px",textAlign:"right",fontSize:"0.8rem",border:val>0?"1px solid "+z.color+"66":"1px solid #252d40"}}
+                            />
+                            {val>0&&<div style={{color:"#10b981",fontSize:"0.68rem",marginTop:"1px"}}>{fmt(val)}</div>}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
       {subTab==="logisticas"&&<div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:"0.85rem",marginBottom:"1rem"}}>
           {Object.entries(lc).map(([k,v])=>(
@@ -876,7 +935,7 @@ function TabInforme({envios,zc,lc}){
   const [logSel,setLogSel]=useState("TODAS");
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const tmap=buildTarifaMap(zc);
-  const getImp=e=>calcImp(e,tmap,lc);
+  const getImp=e=>calcImp(e,tmap,lc,zc);
 
   // Construir mapa anio -> mes -> semanas
   const semMap={};
