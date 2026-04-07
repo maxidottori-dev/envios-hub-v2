@@ -127,25 +127,42 @@ const ALL_PARTIDOS=["CABA","Avellaneda","Lanus","Quilmes","Lomas de Zamora","Alm
 
 function buildTarifaMap(zc){const m={};Object.entries(zc).forEach(([l,c])=>c.zonas.forEach(z=>z.partidos.forEach(p=>{if(!m[p])m[p]={};m[p][l]=z.precio;})));return m;}
 function getZonaLogistica(zc,trans,partido){return zc[trans]?zc[trans].zonas.find(z=>z.partidos.includes(partido))||null:null;}
+function getMatrizVigente(cfg,fechaEnvio){
+  // Devuelve la tarifaMatrix vigente para una fecha dada
+  if(!cfg)return null;
+  const fecha=fechaEnvio||fechaHoy();
+  // Construir lista de versiones: [{desde, matrix}]
+  const versiones=[
+    {desde:cfg.tarifaVigenciaDesde||"2000-01-01",matrix:cfg.tarifaMatrix},
+    ...((cfg.tarifaHistorial||[]).map(h=>({desde:h.vigenciaDesde,matrix:h.tarifaMatrix})))
+  ].filter(v=>v.matrix).sort((a,b)=>b.desde.localeCompare(a.desde));
+  // La mas reciente que sea <= fechaEnvio
+  const v=versiones.find(v=>v.desde<=fecha);
+  return v?.matrix||cfg.tarifaMatrix||null;
+}
+
 function calcImp(e,tmap,lc,zc){
   if(!e.trans)return 0;
-  const bultos=e.bultos||1; // null/undefined → 1 para calculo
+  const bultos=e.bultos||1;
   const cfg=lc[e.trans];
-  // Nueva matriz zona x bultos
-  if(cfg?.tarifaMatrix&&zc){
-    const zona=getZonaLogistica(zc,e.trans,e.partido);
-    if(zona){
-      const mx=cfg.tarifaMatrix[zona.id]||{};
-      let bk=bultos;
-      if(bultos>=4&&bultos<=10)bk=10;
-      else if(bultos>=11)bk=11;
-      const p=mx[String(bk)];
-      if(p!==undefined&&p>0)return p;
+  const fechaEnvio=e.fecha||e.fechaVenta||fechaHoy();
+  // Matriz zona x bultos con vigencia
+  if(zc){
+    const mx=getMatrizVigente(cfg,fechaEnvio);
+    if(mx){
+      const zona=getZonaLogistica(zc,e.trans,e.partido);
+      if(zona){
+        const mxZ=mx[zona.id]||{};
+        let bk=bultos;
+        if(bultos>=4&&bultos<=10)bk=10;
+        else if(bultos>=11)bk=11;
+        const p=mxZ[String(bk)];
+        if(p!==undefined&&p>0)return p;
+      }
     }
   }
-  // Fallback: preciosBultos legacy
+  // Fallback legacy
   if(cfg&&bultos>1){const pb=cfg.preciosBultos?.find(x=>x.b===bultos);if(pb&&pb.p>0)return pb.p;}
-  // Fallback: precio de zona
   return tmap[e.partido]?.[e.trans]||0;
 }
 
@@ -154,6 +171,13 @@ function weekLabel(ds){const d=new Date(ds+"T00:00:00"),day=d.getDay()||7;const 
 
 const fmt=n=>n?"$"+Number(n).toLocaleString("es-AR"):"-";
 const fmtN=n=>Number(n).toLocaleString("es-AR");
+
+function exportarXLSX(filas,nombreArchivo){
+  const ws=XLSXLib.utils.json_to_sheet(filas);
+  const wb=XLSXLib.utils.book_new();
+  XLSXLib.utils.book_append_sheet(wb,ws,"Datos");
+  XLSXLib.writeFile(wb,nombreArchivo+".xlsx");
+}
 
 const S={
   card:{background:"#1a1f2e",border:"1px solid #252d40",borderRadius:"14px"},
@@ -624,6 +648,23 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
           );
         })}
       </div>
+      {/* Boton exportar */}
+      {filtradosOrdenados.length>0&&!modoSel&&<div style={{display:"flex",justifyContent:"flex-end",marginTop:"8px"}}>
+        <button onClick={()=>{
+          const tmap2=buildTarifaMap(zc);
+          const filas=filtradosOrdenados.map((e,i)=>({
+            "#":i+1,Origen:e.origen,Estado:getEstado(e),
+            NroOrdenTN:e.nroOrdenTN||"",Cliente:e.clienteNombre||"",
+            Direccion:e.direccion,Localidad:e.localidad||"",Partido:e.partido,CP:e.cp||"",
+            Logistica:e.trans||"",Zona:getZonaML(e.partido)||"",Turno:e.turno||"",
+            Fecha:e.fecha||"",FechaVenta:e.fechaVenta||"",Bultos:e.bultos||1,
+            Importe:calcImp(e,tmap2,lc,zc),Cobranza:e.cobranza||"",
+            Cambio:e.cambio||"",Retiro:e.retiro||"",Nota:e.nota||"",
+            EstadoLiq:e.estadoLiq||"normal",NotaLiq:e.notaLiq||"",
+          }));
+          exportarXLSX(filas,"envios_"+fechaHoy());
+        }} style={{...S.btnSm(false),color:"#10b981",border:"1px solid #10b981",padding:"4px 14px",fontSize:"0.75rem"}}>⬇ Exportar Excel</button>
+      </div>}
       {modoSel&&seleccionados.size>0&&(
         <div style={{position:"fixed",bottom:"20px",left:"50%",transform:"translateX(-50%)",background:"#1a1f2e",border:"1px solid #6366f1",borderRadius:"12px",padding:"0.7rem 1.25rem",display:"flex",gap:"0.6rem",alignItems:"center",zIndex:50,boxShadow:"0 4px 20px rgba(0,0,0,0.5)",flexWrap:"wrap",maxWidth:"95vw"}}>
           <span style={{color:"#e5e7eb",fontWeight:700,fontSize:"0.9rem"}}>{seleccionados.size} selec.</span>
@@ -696,7 +737,19 @@ function TabImprimir({envios,zc,lc}){
         <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["TODAS",...ZONAS_ML_LIST].map(z=><button key={z} onClick={()=>setFilZona(z)} style={S.btnSm(filZona===z,ZONA_ML_COLOR[z]||"#6366f1")}>{z}</button>)}</div>
         <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
         <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["TODOS",...TURNOS].map(t=><button key={t} onClick={()=>setTurno(t)} style={S.btnSm(turno===t,"#8b5cf6")}>{t}</button>)}</div>
-        <button onClick={generarPDF} style={{marginLeft:"auto",...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.5rem 1.1rem"}}>Generar PDF</button>
+        <div style={{marginLeft:"auto",display:"flex",gap:"6px"}}>
+          <button onClick={()=>{
+            const filas=lista.map((e,i)=>{
+              const esFlex=e.origen==="ML";
+              return{"#":i+1,Direccion:e.direccion,Localidad:e.localidad||"",Partido:e.partido,CP:e.cp||"",
+                NroEnvio:esFlex?(e.nroSeguimiento||""):"",NroOrden:esFlex?"":"#"+(e.nroOrdenTN||""),
+                Zona:getZonaML(e.partido)||"",Turno:e.turno||"",Fecha:e.fecha||"",
+                Cobrar:e.cobranza||""};
+            });
+            exportarXLSX(filas,"imprimir_"+fechaHoy());
+          }} style={{...S.btn(false),border:"1px solid #10b981",color:"#10b981",padding:"0.4rem 0.9rem",fontSize:"0.78rem"}}>⬇ Excel</button>
+          <button onClick={generarPDF} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.5rem 1.1rem"}}>Generar PDF</button>
+        </div>
       </div>
       <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.9rem",display:"flex",gap:"1.5rem",flexWrap:"wrap"}}>
         <div><span style={{color:"#6b7280",fontSize:"0.72rem"}}>Envios: </span><span style={{color:"#e5e7eb",fontWeight:700}}>{lista.length}</span></div>
@@ -854,12 +907,48 @@ function TabTarifas({zc,setZc,lc,setLc}){
         const matrix=lc[logSel]?.tarifaMatrix||{};
         const getM=(zid,b)=>(matrix[zid]?.[String(b)])||"";
         const setM=(zid,b,val)=>setLc(p=>({...p,[logSel]:{...p[logSel],tarifaMatrix:{...(p[logSel]?.tarifaMatrix||{}),[zid]:{...(p[logSel]?.tarifaMatrix?.[zid]||{}),[String(b)]:parseInt(val)||0}}}}));
+        const vigDesde=lc[logSel]?.tarifaVigenciaDesde||"";
+        const historial=lc[logSel]?.tarifaHistorial||[];
+        const crearNuevaVigencia=()=>{
+          const nuevaFecha=window.prompt("Vigencia desde (YYYY-MM-DD):",fechaHoy());
+          if(!nuevaFecha)return;
+          // Guardar version actual en historial
+          const matrizActual=lc[logSel]?.tarifaMatrix||{};
+          const vigActual=lc[logSel]?.tarifaVigenciaDesde||"2000-01-01";
+          const histActual=lc[logSel]?.tarifaHistorial||[];
+          if(Object.keys(matrizActual).length>0){
+            setLc(p=>({...p,[logSel]:{...p[logSel],
+              tarifaMatrix:{},
+              tarifaVigenciaDesde:nuevaFecha,
+              tarifaHistorial:[...histActual,{vigenciaDesde:vigActual,tarifaMatrix:matrizActual}]
+            }}));
+          } else {
+            setLc(p=>({...p,[logSel]:{...p[logSel],tarifaVigenciaDesde:nuevaFecha}}));
+          }
+        };
         if(!zonas.length)return<div style={{...S.card,padding:"1.5rem",textAlign:"center",color:"#4b5563"}}>Primero creá zonas en el tab "Zonas y precios"</div>;
         return(
           <div>
-            <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.75rem",color:"#6b7280",fontSize:"0.78rem"}}>
-              Ingresá el precio para cada combinación de zona y cantidad de bultos. Dejá en 0 para usar el precio base de la zona.<br/>
-              <span style={{color:"#f59e0b",fontSize:"0.72rem"}}>⚠ Regla: 4 a 10 bultos usa el precio de "10 bultos". 11 o más usa el precio de "11 bultos".</span>
+            <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.75rem",display:"flex",gap:"0.75rem",alignItems:"flex-start",flexWrap:"wrap"}}>
+              <div style={{flex:1}}>
+                <div style={{color:"#6b7280",fontSize:"0.78rem",marginBottom:"4px"}}>
+                  Ingresá el precio para cada zona y cantidad de bultos. Dejá en 0 para usar el precio base de la zona.
+                </div>
+                <div style={{display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}}>
+                  <span style={{color:"#4b5563",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase"}}>Vigente desde:</span>
+                  <span style={{color:vigDesde?"#10b981":"#f59e0b",fontWeight:700,fontSize:"0.82rem"}}>{vigDesde||"Sin fecha definida"}</span>
+                  <button onClick={crearNuevaVigencia} style={{...S.btnSm(false),color:"#6366f1",border:"1px solid #6366f1",padding:"2px 10px",fontSize:"0.7rem"}}>+ Nueva vigencia</button>
+                </div>
+                <div style={{color:"#f59e0b",fontSize:"0.7rem",marginTop:"4px"}}>⚠ 4-10 bultos usa precio de "10 bultos" · 11+ usa "11 bultos"</div>
+              </div>
+              {historial.length>0&&<div style={{minWidth:"180px"}}>
+                <div style={{color:"#4b5563",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Historial</div>
+                {[...historial].sort((a,b)=>b.vigenciaDesde.localeCompare(a.vigenciaDesde)).map((h,i)=>(
+                  <div key={i} style={{fontSize:"0.72rem",color:"#6b7280",padding:"2px 0",borderBottom:"1px solid #1a1f2e"}}>
+                    Desde {h.vigenciaDesde} · {Object.keys(h.tarifaMatrix||{}).length} zonas
+                  </div>
+                ))}
+              </div>}
             </div>
             <div style={{...S.card,overflow:"auto"}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.82rem",minWidth:"500px"}}>
@@ -1010,9 +1099,18 @@ function TabInforme({envios,zc,lc}){
           </>}
         </div>
       </div>
-      <div style={{...S.card,padding:"0.55rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"0.35rem",flexWrap:"wrap"}}>
+      <div style={{...S.card,padding:"0.55rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"0.35rem",flexWrap:"wrap",alignItems:"center"}}>
         <button onClick={()=>setLogSel("TODAS")} style={S.btn(logSel==="TODAS")}>TODAS</button>
         {logActivas.map(l=><button key={l} onClick={()=>setLogSel(l)} style={S.btn(logSel===l,lc[l].color)}>{l}</button>)}
+        <button onClick={()=>{
+          const filas=envSem.map((e,i)=>({
+            "#":i+1,Logistica:e.trans||"",Partido:e.partido,Direccion:e.direccion,
+            Fecha:e.fecha||"",Turno:e.turno||"",Bultos:e.bultos||1,
+            Zona:(()=>{const zi=getZonaLogistica(zc,e.trans,e.partido);return zi?zi.nombre:"";})(),
+            Importe:getImp(e),EstadoLiq:e.estadoLiq||"normal",NotaLiq:e.notaLiq||"",
+          }));
+          exportarXLSX(filas,"informe_"+fechaHoy());
+        }} style={{...S.btnSm(false),color:"#10b981",border:"1px solid #10b981",marginLeft:"auto",padding:"3px 12px",fontSize:"0.72rem"}}>⬇ Excel</button>
       </div>
       {logsMost.map(l=>{
         const lcD=lc[l];const envL=envSem.filter(e=>e.trans===l);if(!envL.length)return null;
@@ -1393,6 +1491,20 @@ function TabLiquidacion({ envios, setEnvios, lc }) {
         <span style={{ color: "#374151", fontSize: "0.6rem" }}>|</span>
         <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar nro orden o dirección..." style={{...S.input,width:"200px",padding:"3px 8px",fontSize:"0.75rem"}}/>
         {busqueda&&<button onClick={()=>setBusqueda("")} style={{...S.btnSm(false),color:"#6b7280"}}>x</button>}
+        <button onClick={()=>{
+          const filas=lista.map((e,i)=>{
+            const recibido=seccion==="cobranzas"?!!e.cobranzaRecibida:!!e.retiroRecibido;
+            const fechaR=seccion==="cobranzas"?e.cobranzaFecha:e.retiroFecha;
+            return{"#":i+1,Logistica:e.trans||"",Direccion:e.direccion,Partido:e.partido,
+              NroOrden:e.nroOrdenTN?"#"+e.nroOrdenTN:e.id.slice(-8),
+              Fecha:e.fecha||"",Turno:e.turno||"",
+              Monto:seccion==="cobranzas"?(e.cobranza||""):"",
+              Detalle:seccion==="retiros"?((e.cambio||"")+(e.retiro||"")):"",
+              Estado:recibido?"Recibido":"Pendiente",FechaRecibido:fechaR||"",
+            };
+          });
+          exportarXLSX(filas,"liquidacion_"+seccion+"_"+fechaHoy());
+        }} style={{...S.btnSm(false),color:"#10b981",border:"1px solid #10b981",padding:"3px 10px",fontSize:"0.72rem"}}>⬇ Excel</button>
         <button onClick={()=>{
           const ahora=new Date();
           const ts=ahora.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+" "+ahora.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
@@ -2013,6 +2125,23 @@ function VistaLogistica({envios,sesion,lc}){
   );
 }
 
+function ScrollTop(){
+  const [vis,setVis]=useState(false);
+  useEffect(()=>{
+    const h=()=>setVis(window.scrollY>350);
+    window.addEventListener("scroll",h,{passive:true});
+    return()=>window.removeEventListener("scroll",h);
+  },[]);
+  if(!vis)return null;
+  return(
+    <button
+      onClick={()=>window.scrollTo({top:0,behavior:"smooth"})}
+      title="Volver arriba"
+      style={{position:"fixed",bottom:"28px",right:"20px",zIndex:200,width:"40px",height:"40px",borderRadius:"50%",background:"#6366f1",border:"none",color:"white",fontSize:"18px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 16px rgba(99,102,241,0.5)",opacity:0.9}}
+    >↑</button>
+  );
+}
+
 export default function App(){
   const [sesion,setSesion]=useState(()=>getSession());
   const [pantalla,setPantalla]=useState("dashboard");
@@ -2108,7 +2237,7 @@ export default function App(){
 
   return(
     <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif"}}>
-      <style>{`*{box-sizing:border-box;}::-webkit-scrollbar{width:4px;height:4px;}::-webkit-scrollbar-track{background:#0a0e1a;}::-webkit-scrollbar-thumb{background:#252d40;border-radius:3px;}select option{background:#1a1f2e;color:#e5e7eb;}button:hover{opacity:0.85;}`}</style>
+      <style>{`*{box-sizing:border-box;}::-webkit-scrollbar{width:7px;height:7px;}::-webkit-scrollbar-track{background:#0f1420;}::-webkit-scrollbar-thumb{background:#4b5563;border-radius:4px;}::-webkit-scrollbar-thumb:hover{background:#6b7280;}select option{background:#1a1f2e;color:#e5e7eb;}button:hover{opacity:0.85;}`}</style>
       {toast&&<div style={{position:"fixed",top:"16px",right:"16px",zIndex:999,background:"#041f14",border:"1px solid #10b981",borderRadius:"10px",padding:"0.6rem 1.1rem",color:"#34d399",fontWeight:700,fontSize:"0.82rem"}}>{toast}</div>}
       <div style={{position:"sticky",top:0,zIndex:100,background:"#0f1420",borderBottom:"1px solid #1a1f2e",padding:"0.7rem 1rem",display:"flex",alignItems:"center",gap:"0.55rem",flexWrap:"wrap"}}>
         <div style={{width:"26px",height:"26px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:"7px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>🛵</div>
@@ -2137,6 +2266,7 @@ export default function App(){
           <button onClick={()=>{clearSession();setSesion(null);}} style={{...S.btnSm(false),color:"#f87171",fontSize:"0.7rem"}}>Salir</button>
         </div>
       </div>
+      <ScrollTop/>
       <div style={{padding:"0.85rem 1rem",maxWidth:"1400px",margin:"0 auto"}}>
         {error&&<div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.8rem",background:"#1c0a0a",border:"1px solid #7f1d1d",color:"#fca5a5",fontSize:"0.8rem"}}>{error}</div>}
         {tab==="envios"  &&<TabEnvios   envios={envios.filter(e=>e.origen!=="ML")} setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel}/>}
