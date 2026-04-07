@@ -129,7 +129,7 @@ function buildTarifaMap(zc){const m={};Object.entries(zc).forEach(([l,c])=>c.zon
 function getZonaLogistica(zc,trans,partido){return zc[trans]?zc[trans].zonas.find(z=>z.partidos.includes(partido))||null:null;}
 function calcImp(e,tmap,lc,zc){
   if(!e.trans)return 0;
-  const bultos=e.bultos||1;
+  const bultos=e.bultos||1; // null/undefined → 1 para calculo
   const cfg=lc[e.trans];
   // Nueva matriz zona x bultos
   if(cfg?.tarifaMatrix&&zc){
@@ -381,7 +381,7 @@ function PanelEdit({envio,onSave,onClose,lc}){
         </div>
         <div>
           <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Bultos</div>
-          <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{[1,2,3,4,5].map(n=><button key={n} onClick={()=>set("bultos",n)} style={S.btnSm(e.bultos===n,"#6366f1")}>{n}</button>)}</div>
+          <input type="number" min="1" value={e.bultos||""} onChange={ev=>{const v=parseInt(ev.target.value);set("bultos",v>0?v:"");}} placeholder={e.origen==="ML"?"1":"Ingresá cantidad..."} style={{...S.input,width:"140px",padding:"4px 10px"}}/>
         </div>
         <div>
           <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Cobranza</div>
@@ -727,7 +727,7 @@ function TabImprimir({envios,zc,lc}){
 
 function TabManual({setEnvios,onSuccess,lc,enviosExistentes}){
   const hoy=fechaHoy();
-  const vacio={id:"",nroSeguimiento:"",linkML:"",direccion:"",ciudad:"",cp:"",origen:"ML",trans:"",fecha:hoy,turno:"",estado:"sin_asignar",cobranza:null,cambio:null,retiro:null,observaciones:"",bultos:1,partido:"",importe:0,fechaVenta:hoy};
+  const vacio={id:"",nroSeguimiento:"",linkML:"",direccion:"",ciudad:"",cp:"",origen:"Manual",trans:"",fecha:hoy,turno:"",estado:"sin_asignar",cobranza:null,cambio:null,retiro:null,observaciones:"",bultos:null,partido:"",importe:0,fechaVenta:hoy};
   const [f,setF]=useState(vacio);
   const [err,setErr]=useState("");
   const [dupWarn,setDupWarn]=useState("");
@@ -754,7 +754,7 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes}){
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. venta / referencia</label><input value={f.id} onChange={e=>set("id",e.target.value)} style={{...S.input,width:"100%"}} placeholder="ej. 2000012345"/></div>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. seguimiento</label><input value={f.nroSeguimiento} onChange={e=>set("nroSeguimiento",e.target.value)} style={{...S.input,width:"100%",borderColor:dupWarn?"#f59e0b":"#252d40"}} placeholder="ej. 46669555629"/></div>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Origen</label><div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["ML","Tienda Nube","Particular","Otro"].map(o=><button key={o} onClick={()=>set("origen",o)} style={S.btnSm(f.origen===o,"#6366f1")}>{o}</button>)}</div></div>
-          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Bultos</label><div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{[1,2,3,4,5].map(n=><button key={n} onClick={()=>set("bultos",n)} style={S.btnSm(f.bultos===n,"#6366f1")}>{n}</button>)}</div></div>
+          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Bultos</label><input type="number" min="1" value={f.bultos||""} onChange={ev=>{const v=parseInt(ev.target.value);set("bultos",v>0?v:"");}} placeholder="1" style={{...S.input,width:"120px",padding:"4px 10px"}}/></div>
         </div>
         <div style={{marginBottom:"0.7rem"}}><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Direccion completa</label><textarea value={f.direccion} onChange={e=>set("direccion",e.target.value)} style={{...S.input,width:"100%",height:"56px",resize:"vertical"}} placeholder="Calle, numero..."/></div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"0.7rem",marginBottom:"0.7rem"}}>
