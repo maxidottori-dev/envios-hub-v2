@@ -398,6 +398,18 @@ function PanelEdit({envio,onSave,onClose,lc}){
         <textarea value={esTN?(e.notasOrden||""):(e.observaciones||"")} onChange={ev=>set(esTN?"notasOrden":"observaciones",ev.target.value)} placeholder={esTN?"Notas de la orden...":"Notas adicionales..."} style={{...S.input,display:"block",width:"100%",height:"52px",resize:"vertical",fontSize:"0.8rem"}}/>
       </div>
 
+      {/* Estado de liquidacion */}
+      {e.trans&&<div style={{marginBottom:"0.65rem"}}>
+        <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"6px"}}>Estado de liquidacion</div>
+        <div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>
+          {[{k:"normal",l:"Normal",c:"#10b981"},{k:"cancelado_liq",l:"Cancelado",c:"#f87171"},{k:"no_abonado",l:"No abonado por demora",c:"#f59e0b"}].map(x=>(
+            <button key={x.k} onClick={()=>set("estadoLiq",x.k)} style={{...S.btnSm((e.estadoLiq||"normal")===x.k,x.c),padding:"3px 10px",fontSize:"0.72rem"}}>{x.l}</button>
+          ))}
+        </div>
+        {(e.estadoLiq==="cancelado_liq"||e.estadoLiq==="no_abonado")&&(
+          <textarea value={e.notaLiq||""} onChange={ev=>set("notaLiq",ev.target.value)} placeholder="Motivo..." style={{...S.input,display:"block",width:"100%",marginTop:"6px",height:"38px",resize:"vertical",fontSize:"0.78rem"}}/>
+        )}
+      </div>}
       {/* Nota del envio */}
       <div style={{marginBottom:"0.65rem"}}>
         <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Nota interna</div>
@@ -577,6 +589,8 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
                     {e.cambio!==null&&<Bdg label="Cambio" bg="#1c0514" t="#ec4899"/>}
                     {e.retiro!==null&&<Bdg label="Retiro" bg="#1c1000" t="#f97316"/>}
                     {e.alertaDireccion&&<Bdg label="Sin CP/Dir" bg="#1c0a00" t="#fb923c"/>}
+                    {e.estadoLiq==="cancelado_liq"&&<Bdg label="Canc. liquidacion" bg="#1c0a0a" t="#f87171" style={{border:"1px solid #f87171"}}/>}
+                    {e.estadoLiq==="no_abonado"&&<Bdg label="No abonado" bg="#1c1400" t="#f59e0b" style={{border:"1px solid #f59e0b"}}/>}
                     {getPagoEstado(e)==="pendiente"&&<Bdg label="Pago pendiente" bg="#1c0a00" t="#fb923c" style={{border:"1px solid #fb923c"}}/>}
                     {getPagoEstado(e)==="cuenta_corriente"&&<Bdg label="Cta. Corriente" bg="#130d2a" t="#a78bfa"/>}
                   </div>
@@ -959,10 +973,14 @@ function TabInforme({envios,zc,lc}){
   },[envios]);
 
   const semFechas=semanaSel&&semMap[semanaSel]?[...semMap[semanaSel].fechas].sort():[];
+  const [modoPeriodo,setModoPeriodo]=useState("semana"); // semana | rango
+  const [rangoD,setRangoD]=useState(hoy);
+  const [rangoH,setRangoH]=useState(hoy);
   const envSem=envios.filter(e=>{
     const ds=e.fecha||e.fechaVenta||"";
     if(e.estado==="cancelado")return false;
     if(logSel!=="TODAS"&&e.trans!==logSel)return false;
+    if(modoPeriodo==="rango") return ds>=rangoD&&ds<=rangoH;
     return semFechas.includes(ds);
   });
   const logsMost=logSel==="TODAS"?logActivas:[logSel];
@@ -980,10 +998,16 @@ function TabInforme({envios,zc,lc}){
           <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"34px"}}>Mes</span>
           {mesesDelAnio.map(m=><button key={m} onClick={()=>{setMesSel(m);const sems=Object.values(semMap).filter(s=>s.anio===anioSel&&s.mes===m).sort((a,b)=>b.key.localeCompare(a.key));if(sems.length)setSemanaSel(sems[0].key);}} style={S.btnSm(mesSel===m)}>{MESES[m-1]}</button>)}
         </div>
-        {/* Selector semana */}
+        {/* Selector semana / rango */}
         <div style={{display:"flex",gap:"4px",alignItems:"center",flexWrap:"wrap"}}>
           <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"34px"}}>Sem.</span>
-          {semanasDelMes.map(s=><button key={s.key} onClick={()=>setSemanaSel(s.key)} style={S.btnSm(semanaSel===s.key)}>{s.label}</button>)}
+          {modoPeriodo==="semana"&&semanasDelMes.map(s=><button key={s.key} onClick={()=>setSemanaSel(s.key)} style={S.btnSm(semanaSel===s.key)}>{s.label}</button>)}
+          <button onClick={()=>setModoPeriodo(modoPeriodo==="rango"?"semana":"rango")} style={{...S.btnSm(modoPeriodo==="rango","#8b5cf6"),marginLeft:"auto"}}>{modoPeriodo==="rango"?"Volver a semanas":"Rango de fechas"}</button>
+          {modoPeriodo==="rango"&&<>
+            <input type="date" value={rangoD} onChange={ev=>setRangoD(ev.target.value)} style={{...S.input,padding:"3px 7px",width:"130px",fontSize:"0.75rem"}}/>
+            <span style={{color:"#6b7280",fontSize:"0.75rem"}}>hasta</span>
+            <input type="date" value={rangoH} onChange={ev=>setRangoH(ev.target.value)} style={{...S.input,padding:"3px 7px",width:"130px",fontSize:"0.75rem"}}/>
+          </>}
         </div>
       </div>
       <div style={{...S.card,padding:"0.55rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"0.35rem",flexWrap:"wrap"}}>
@@ -993,14 +1017,21 @@ function TabInforme({envios,zc,lc}){
       {logsMost.map(l=>{
         const lcD=lc[l];const envL=envSem.filter(e=>e.trans===l);if(!envL.length)return null;
         const porZona={};
-        envL.forEach(e=>{const zi=getZonaLogistica(zc,l,e.partido);const k=zi?zi.nombre:"Sin zona";if(!porZona[k])porZona[k]={nombre:k,color:zi?.color||"#374151",envios:[]};porZona[k].envios.push(e);});
-        const totalL=envL.reduce((s,e)=>s+getImp(e),0);
+        envLNormal.forEach(e=>{const zi=getZonaLogistica(zc,l,e.partido);const k=zi?zi.nombre:"Sin zona";if(!porZona[k])porZona[k]={nombre:k,color:zi?.color||"#374151",envios:[]};porZona[k].envios.push(e);});
+        // Agregar no abonados en seccion separada si existen
+        if(envLNoAbonado.length){if(!porZona["_no_abonado"])porZona["_no_abonado"]={nombre:"No abonados / Cancelados",color:"#f87171",envios:[]};envLNoAbonado.forEach(e=>porZona["_no_abonado"].envios.push(e));}
+        const envLNormal=envL.filter(e=>!e.estadoLiq||e.estadoLiq==="normal");
+        const envLNoAbonado=envL.filter(e=>e.estadoLiq==="cancelado_liq"||e.estadoLiq==="no_abonado");
+        const totalL=envLNormal.reduce((s,e)=>s+getImp(e),0);
+        const totalNoAbonado=envLNoAbonado.reduce((s,e)=>s+getImp(e),0);
         return(
           <div key={l} style={{...S.card,marginBottom:"1rem",overflow:"hidden"}}>
-            <div style={{padding:"0.7rem 1rem",background:"#12172a",borderBottom:"1px solid #252d40",display:"flex",alignItems:"center",gap:"0.75rem"}}>
+            <div style={{padding:"0.7rem 1rem",background:"#12172a",borderBottom:"1px solid #252d40",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
               <span style={{color:lcD.color,fontWeight:800,fontSize:"1rem"}}>{l}</span>
               <span style={{color:"#e5e7eb",fontWeight:700}}>{envL.length} envios</span>
+              {envLNoAbonado.length>0&&<span style={{color:"#f87171",fontSize:"0.72rem"}}>({envLNoAbonado.length} no abonado{envLNoAbonado.length>1?"s":""})</span>}
               <span style={{color:"#10b981",fontWeight:700,marginLeft:"auto"}}>{fmt(totalL)}</span>
+              {totalNoAbonado>0&&<span style={{color:"#f87171",fontSize:"0.72rem",textDecoration:"line-through"}}>{fmt(totalNoAbonado)}</span>}
             </div>
             <div style={{overflow:"auto"}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.82rem"}}>
@@ -1024,7 +1055,16 @@ function TabInforme({envios,zc,lc}){
           </div>
         );
       })}
-      {logSel==="TODAS"&&<div style={{...S.card,padding:"0.8rem 1rem",background:"#12172a",display:"flex",gap:"1.5rem",flexWrap:"wrap"}}><span style={{color:"#6366f1",fontWeight:800,fontSize:"0.9rem"}}>TOTAL PERIODO</span><span style={{color:"#e5e7eb",fontWeight:700}}>{envSem.length} envios</span><span style={{color:"#10b981",fontWeight:800,fontSize:"1rem"}}>{fmt(envSem.reduce((s,e)=>s+getImp(e),0))}</span></div>}
+      {logSel==="TODAS"&&(()=>{
+        const totNorm=envSem.filter(e=>!e.estadoLiq||e.estadoLiq==="normal").reduce((s,e)=>s+getImp(e),0);
+        const totNoAb=envSem.filter(e=>e.estadoLiq==="cancelado_liq"||e.estadoLiq==="no_abonado").reduce((s,e)=>s+getImp(e),0);
+        return<div style={{...S.card,padding:"0.8rem 1rem",background:"#12172a",display:"flex",gap:"1.5rem",flexWrap:"wrap",alignItems:"center"}}>
+          <span style={{color:"#6366f1",fontWeight:800,fontSize:"0.9rem"}}>TOTAL PERIODO</span>
+          <span style={{color:"#e5e7eb",fontWeight:700}}>{envSem.length} envios</span>
+          <span style={{color:"#10b981",fontWeight:800,fontSize:"1rem"}}>{fmt(totNorm)}</span>
+          {totNoAb>0&&<span style={{color:"#4b5563",fontSize:"0.78rem"}}>No abonado: <span style={{color:"#f87171",textDecoration:"line-through"}}>{fmt(totNoAb)}</span></span>}
+        </div>;
+      })()}
     </div>
   );
 }
