@@ -947,6 +947,9 @@ function TabTarifas({zc,setZc,lc,setLc}){
 function TabInforme({envios,zc,lc}){
   const hoy=fechaHoy();
   const [logSel,setLogSel]=useState("TODAS");
+  const [modoPeriodo,setModoPeriodo]=useState("semana");
+  const [rangoD,setRangoD]=useState(hoy);
+  const [rangoH,setRangoH]=useState(hoy);
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const tmap=buildTarifaMap(zc);
   const getImp=e=>calcImp(e,tmap,lc,zc);
@@ -973,9 +976,6 @@ function TabInforme({envios,zc,lc}){
   },[envios]);
 
   const semFechas=semanaSel&&semMap[semanaSel]?[...semMap[semanaSel].fechas].sort():[];
-  const [modoPeriodo,setModoPeriodo]=useState("semana"); // semana | rango
-  const [rangoD,setRangoD]=useState(hoy);
-  const [rangoH,setRangoH]=useState(hoy);
   const envSem=envios.filter(e=>{
     const ds=e.fecha||e.fechaVenta||"";
     if(e.estado==="cancelado")return false;
