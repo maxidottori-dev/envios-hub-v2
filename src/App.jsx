@@ -853,6 +853,7 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes}){
 function TabTarifas({zc,setZc,lc,setLc}){
   const [subTab,setSubTab]=useState("zonas");
   const [logSel,setLogSel]=useState("HNOS");
+  const [tipoMx,setTipoMx]=useState("noflex");
   const [editando,setEditando]=useState(null);
   const [moverModal,setMoverModal]=useState(null);
   const [addModal,setAddModal]=useState(false);
@@ -910,7 +911,6 @@ function TabTarifas({zc,setZc,lc,setLc}){
       {subTab==="bultos"&&(()=>{
         const BULTOS_FIJOS=[1,2,3,10,11];
         const zonas=cfg.zonas||[];
-        const [tipoMx,setTipoMx]=useState("noflex"); // noflex | flex
         const mxKey=tipoMx==="flex"?"tarifaMatrixFlex":"tarifaMatrix";
         const matrix=lc[logSel]?.[mxKey]||{};
         const getM=(zid,b)=>(matrix[zid]?.[String(b)])||"";
