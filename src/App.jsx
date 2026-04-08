@@ -146,22 +146,28 @@ function calcImp(e,tmap,lc,zc){
   const bultos=e.bultos||1;
   const cfg=lc[e.trans];
   const fechaEnvio=e.fecha||e.fechaVenta||fechaHoy();
-  // Matriz zona x bultos con vigencia
+  const esFlex=e.origen==="ML";
   if(zc){
-    const mx=getMatrizVigente(cfg,fechaEnvio);
-    if(mx){
-      const zona=getZonaLogistica(zc,e.trans,e.partido);
-      if(zona){
+    const zona=getZonaLogistica(zc,e.trans,e.partido);
+    if(zona){
+      let bk=bultos;
+      if(bultos>=4&&bultos<=10)bk=10;
+      else if(bultos>=11)bk=11;
+      // 1. Intentar matriz FLEX si corresponde
+      if(esFlex&&cfg?.tarifaMatrixFlex){
+        const mxF=cfg.tarifaMatrixFlex[zona.id]||{};
+        const pF=mxF[String(bk)];
+        if(pF!==undefined&&pF>0)return pF;
+      }
+      // 2. Matriz NO FLEX (con vigencia)
+      const mx=getMatrizVigente(cfg,fechaEnvio);
+      if(mx){
         const mxZ=mx[zona.id]||{};
-        let bk=bultos;
-        if(bultos>=4&&bultos<=10)bk=10;
-        else if(bultos>=11)bk=11;
         const p=mxZ[String(bk)];
         if(p!==undefined&&p>0)return p;
       }
     }
   }
-  // Fallback legacy
   if(cfg&&bultos>1){const pb=cfg.preciosBultos?.find(x=>x.b===bultos);if(pb&&pb.p>0)return pb.p;}
   return tmap[e.partido]?.[e.trans]||0;
 }
@@ -904,9 +910,11 @@ function TabTarifas({zc,setZc,lc,setLc}){
       {subTab==="bultos"&&(()=>{
         const BULTOS_FIJOS=[1,2,3,10,11];
         const zonas=cfg.zonas||[];
-        const matrix=lc[logSel]?.tarifaMatrix||{};
+        const [tipoMx,setTipoMx]=useState("noflex"); // noflex | flex
+        const mxKey=tipoMx==="flex"?"tarifaMatrixFlex":"tarifaMatrix";
+        const matrix=lc[logSel]?.[mxKey]||{};
         const getM=(zid,b)=>(matrix[zid]?.[String(b)])||"";
-        const setM=(zid,b,val)=>setLc(p=>({...p,[logSel]:{...p[logSel],tarifaMatrix:{...(p[logSel]?.tarifaMatrix||{}),[zid]:{...(p[logSel]?.tarifaMatrix?.[zid]||{}),[String(b)]:parseInt(val)||0}}}}));
+        const setM=(zid,b,val)=>setLc(p=>({...p,[logSel]:{...p[logSel],[mxKey]:{...(p[logSel]?.[mxKey]||{}),[zid]:{...(p[logSel]?.[mxKey]?.[zid]||{}),[String(b)]:parseInt(val)||0}}}}));
         const vigDesde=lc[logSel]?.tarifaVigenciaDesde||"";
         const historial=lc[logSel]?.tarifaHistorial||[];
         const crearNuevaVigencia=()=>{
@@ -931,6 +939,11 @@ function TabTarifas({zc,setZc,lc,setLc}){
           <div>
             <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.75rem",display:"flex",gap:"0.75rem",alignItems:"flex-start",flexWrap:"wrap"}}>
               <div style={{flex:1}}>
+                <div style={{display:"flex",gap:"4px",marginBottom:"8px"}}>
+                  <button onClick={()=>setTipoMx("noflex")} style={{...S.btn(tipoMx==="noflex"),padding:"3px 14px",fontSize:"0.75rem"}}>NO FLEX</button>
+                  <button onClick={()=>setTipoMx("flex")} style={tipoMx==="flex"?{...S.btn(true,"#84cc16"),background:"#0d1c04",color:"#84cc16",border:"1px solid #84cc16",padding:"3px 14px",fontSize:"0.75rem"}:{...S.btn(false),color:"#4b7a10",border:"1px solid #1a3008",padding:"3px 14px",fontSize:"0.75rem"}}>FLEX</button>
+                  {tipoMx==="flex"&&<span style={{color:"#6b7280",fontSize:"0.7rem",alignSelf:"center"}}>Si una celda está en 0, usa el precio de la matriz NO FLEX</span>}
+                </div>
                 <div style={{color:"#6b7280",fontSize:"0.78rem",marginBottom:"4px"}}>
                   Ingresá el precio para cada zona y cantidad de bultos. Dejá en 0 para usar el precio base de la zona.
                 </div>
@@ -1034,27 +1047,21 @@ function TabTarifas({zc,setZc,lc,setLc}){
 }
 
 function TabInforme({envios,zc,lc}){
-  const hoy=fechaHoy();
-  // Calcular semana actual: lunes a domingo
-  const semanaActual=()=>{
+  // Calcular lunes y domingo de la semana actual
+  const initSem=()=>{
     const d=new Date();const day=d.getDay()||7;
     const lun=new Date(d);lun.setDate(d.getDate()-(day-1));
     const dom=new Date(lun);dom.setDate(lun.getDate()+6);
-    const fmt2=x=>x.toISOString().split("T")[0];
-    return{d:fmt2(lun),h:fmt2(dom)};
+    const s=x=>x.toISOString().split("T")[0];
+    return{d:s(lun),h:s(dom)};
   };
-  const sem=semanaActual();
-  const [modoPeriodo,setModoPeriodo]=useState("semana");
-  const [rangoD,setRangoD]=useState(sem.d);
-  const [rangoH,setRangoH]=useState(sem.h);
+  const sem=initSem();
+  const [desde,setDesde]=useState(sem.d);
+  const [hasta,setHasta]=useState(sem.h);
   const [logSel,setLogSel]=useState("TODAS");
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const tmap=buildTarifaMap(zc);
   const getImp=e=>calcImp(e,tmap,lc,zc);
-
-  const desde=modoPeriodo==="semana"?sem.d:rangoD;
-  const hasta=modoPeriodo==="semana"?sem.h:rangoH;
-
   const envSem=envios.filter(e=>{
     const ds=e.fecha||e.fechaVenta||"";
     if(e.estado==="cancelado")return false;
@@ -1066,14 +1073,11 @@ function TabInforme({envios,zc,lc}){
   return(
     <div>
       <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}}>
-        <button onClick={()=>setModoPeriodo("semana")} style={S.btn(modoPeriodo==="semana")}>Semana actual</button>
-        <button onClick={()=>setModoPeriodo("rango")} style={S.btn(modoPeriodo==="rango")}>Rango de fechas</button>
-        {modoPeriodo==="semana"&&<span style={{color:"#6b7280",fontSize:"0.78rem"}}>{sem.d} al {sem.h}</span>}
-        {modoPeriodo==="rango"&&<>
-          <input type="date" value={rangoD} onChange={ev=>setRangoD(ev.target.value)} style={{...S.input,padding:"3px 7px",width:"132px",fontSize:"0.78rem"}}/>
-          <span style={{color:"#6b7280",fontSize:"0.75rem"}}>hasta</span>
-          <input type="date" value={rangoH} onChange={ev=>setRangoH(ev.target.value)} style={{...S.input,padding:"3px 7px",width:"132px",fontSize:"0.78rem"}}/>
-        </>}
+        <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Desde</span>
+        <input type="date" value={desde} onChange={ev=>setDesde(ev.target.value)} style={{...S.input,padding:"4px 8px",width:"140px"}}/>
+        <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Hasta</span>
+        <input type="date" value={hasta} onChange={ev=>setHasta(ev.target.value)} style={{...S.input,padding:"4px 8px",width:"140px"}}/>
+        <button onClick={()=>{const s=initSem();setDesde(s.d);setHasta(s.h);}} style={S.btnSm(false)}>Esta semana</button>
       </div>
       <div style={{...S.card,padding:"0.55rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"0.35rem",flexWrap:"wrap",alignItems:"center"}}>
         <button onClick={()=>setLogSel("TODAS")} style={S.btn(logSel==="TODAS")}>TODAS</button>
@@ -1085,7 +1089,7 @@ function TabInforme({envios,zc,lc}){
             Zona:(()=>{const zi=getZonaLogistica(zc,e.trans,e.partido);return zi?zi.nombre:"";})(),
             Importe:getImp(e),EstadoLiq:e.estadoLiq||"normal",NotaLiq:e.notaLiq||"",
           }));
-          exportarXLSX(filas,"informe_"+fechaHoy());
+          exportarXLSX(filas,"informe_"+desde+"_"+hasta);
         }} style={{...S.btnSm(false),color:"#10b981",border:"1px solid #10b981",marginLeft:"auto",padding:"3px 12px",fontSize:"0.72rem"}}>⬇ Excel</button>
       </div>
       {logsMost.map(l=>{
@@ -2213,7 +2217,7 @@ export default function App(){
 
   return(
     <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif"}}>
-      <style>{`*{box-sizing:border-box;}::-webkit-scrollbar{width:4px;height:7px;}::-webkit-scrollbar-track{background:#0f1420;}::-webkit-scrollbar-thumb{background:#4b5563;border-radius:4px;}::-webkit-scrollbar-thumb:hover{background:#6b7280;}select option{background:#1a1f2e;color:#e5e7eb;}button:hover{opacity:0.85;}`}</style>
+      <style>{`*{box-sizing:border-box;}::-webkit-scrollbar{width:6px;height:10px;}::-webkit-scrollbar-track{background:#0f1420;border-radius:4px;}::-webkit-scrollbar-thumb{background:#4b5563;border-radius:4px;border:1px solid #0f1420;}::-webkit-scrollbar-thumb:hover{background:#9ca3af;}::-webkit-scrollbar-corner{background:#0f1420;}html{scrollbar-width:thin;scrollbar-color:#4b5563 #0f1420;}select option{background:#1a1f2e;color:#e5e7eb;}button:hover{opacity:0.85;}`}</style>
       {toast&&<div style={{position:"fixed",top:"16px",right:"16px",zIndex:999,background:"#041f14",border:"1px solid #10b981",borderRadius:"10px",padding:"0.6rem 1.1rem",color:"#34d399",fontWeight:700,fontSize:"0.82rem"}}>{toast}</div>}
       <div style={{position:"sticky",top:0,zIndex:100,background:"#0f1420",borderBottom:"1px solid #1a1f2e",padding:"0.7rem 1rem",display:"flex",alignItems:"center",gap:"0.55rem",flexWrap:"wrap"}}>
         <div style={{width:"26px",height:"26px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:"7px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>🛵</div>
