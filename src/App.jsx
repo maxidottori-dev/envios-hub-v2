@@ -465,10 +465,11 @@ function PanelEdit({envio,onSave,onClose,lc}){
           <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
             <input type="number" min="1" value={e.bultos||""} onChange={ev=>{
               const v=parseInt(ev.target.value);
-              set("bultos",v>0?v:"");
-              if(v>0&&e.origen!=="ML") set("preparado",true);
-            }} placeholder={e.origen==="ML"?"1":"Ingresá cantidad..."} style={{...S.input,width:"140px",padding:"4px 10px"}}/>
-            {e.origen!=="ML"&&e.bultos>0&&<span style={{color:"#10b981",fontSize:"0.72rem",fontWeight:700}}>✓ Preparado</span>}
+              set("bultos",v>0?v:null);
+              // Auto-preparado solo si NO FLEX y el usuario está ingresando el valor por primera vez
+              if(v>0&&e.origen!=="ML"&&!e.preparado) set("preparado",true);
+            }} placeholder="Ingresá cantidad..." style={{...S.input,width:"140px",padding:"4px 10px"}}/>
+            {e.origen!=="ML"&&e.preparado&&<span style={{color:"#10b981",fontSize:"0.72rem",fontWeight:700}}>✓ Preparado</span>}
           </div>
         </div>
         <div>
