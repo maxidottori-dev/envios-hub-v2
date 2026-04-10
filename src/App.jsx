@@ -854,6 +854,7 @@ function TabTarifas({zc,setZc,lc,setLc}){
   const [subTab,setSubTab]=useState("zonas");
   const [logSel,setLogSel]=useState("HNOS");
   const [tipoMx,setTipoMx]=useState("noflex");
+  const [guardado,setGuardado]=useState(false);
   const [editando,setEditando]=useState(null);
   const [moverModal,setMoverModal]=useState(null);
   const [addModal,setAddModal]=useState(false);
@@ -882,7 +883,8 @@ function TabTarifas({zc,setZc,lc,setLc}){
         <button onClick={()=>setSubTab("bultos")} style={S.btn(subTab==="bultos")}>Matriz de precios</button>
         <button onClick={()=>setSubTab("logisticas")} style={S.btn(subTab==="logisticas")}>Logisticas</button>
         {subTab!=="logisticas"&&<><span style={{color:"#374151",fontSize:"0.65rem",margin:"0 4px"}}>|</span>{Object.entries(lc).filter(([,v])=>v.activa).map(([k,v])=><button key={k} onClick={()=>setLogSel(k)} style={S.btn(logSel===k,v.color)}>{k}</button>)}</>}
-        {subTab==="zonas"&&<span style={{marginLeft:"auto",color:"#4b5563",fontSize:"0.72rem"}}>Doble clic en el precio</span>}
+        {guardado&&<span style={{color:"#10b981",fontSize:"0.72rem",marginLeft:"8px"}}>✓ Guardado</span>}
+        <button onClick={()=>{setZc(p=>p);setLc(p=>p);setGuardado(true);setTimeout(()=>setGuardado(false),2000);}} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.35rem 1rem",marginLeft:"auto",fontSize:"0.78rem"}}>Guardar</button>
       </div>
       {subTab==="zonas"&&<>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(245px,1fr))",gap:"0.85rem",marginBottom:"0.9rem"}}>
@@ -2130,24 +2132,29 @@ export default function App(){
   const [zc,setZc]=useState(ZONAS_INIT);
   const [lc,setLc]=useState(LOGISTICAS_INIT);
 
-  // Cargar lc desde Firebase al iniciar
+  // Cargar lc y zc desde Firebase al iniciar
   useEffect(()=>{
-    const ref=doc(db,"config","logisticas");
-    const unsub=onSnapshot(ref,snap=>{
-      if(snap.exists()){
-        const data=snap.data();
-        // Merge con LOGISTICAS_INIT para no perder nuevas logisticas del codigo
-        setLc(p=>({...LOGISTICAS_INIT,...p,...data}));
-      }
+    const unsubLc=onSnapshot(doc(db,"config","logisticas"),snap=>{
+      if(snap.exists()){const data=snap.data();setLc(p=>({...LOGISTICAS_INIT,...p,...data}));}
     });
-    return()=>unsub();
+    const unsubZc=onSnapshot(doc(db,"config","zonas"),snap=>{
+      if(snap.exists()){const data=snap.data();setZc(p=>({...ZONAS_INIT,...p,...data}));}
+    });
+    return()=>{unsubLc();unsubZc();};
   },[]);
 
-  // Guardar lc en Firebase cada vez que cambia
   const setLcPersist=useCallback((updater)=>{
     setLc(prev=>{
       const next=typeof updater==="function"?updater(prev):updater;
       setDoc(doc(db,"config","logisticas"),next).catch(console.error);
+      return next;
+    });
+  },[]);
+
+  const setZcPersist=useCallback((updater)=>{
+    setZc(prev=>{
+      const next=typeof updater==="function"?updater(prev):updater;
+      setDoc(doc(db,"config","zonas"),next).catch(console.error);
       return next;
     });
   },[]);
@@ -2253,7 +2260,7 @@ export default function App(){
         {tab==="flex"    &&<TabEnvios   envios={envios.filter(e=>e.origen==="ML")}  setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel}/>}
         {tab==="imprimir"&&<TabImprimir envios={envios} zc={zc} lc={lc}/>}
         {tab==="manual"  &&<TabManual   setEnvios={setEnvios} onSuccess={()=>{setTab("envios");mostrarToast("Envio agregado");}} lc={lc} enviosExistentes={envios}/>}
-        {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZc} lc={lc} setLc={setLcPersist}/>}
+        {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZcPersist} lc={lc} setLc={setLcPersist}/>}
         {tab==="informe"     &&<TabInforme     envios={envios} zc={zc} lc={lc}/>}
         {tab==="liquidacion" &&<TabLiquidacion envios={envios} setEnvios={setEnvios} lc={lc}/>}
         {tab==="localidades" &&<TabLocalidades/>}
