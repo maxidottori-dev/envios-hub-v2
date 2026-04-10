@@ -102,7 +102,7 @@ export function ordenAEnvio(order) {
     pagoEstado:    getPagoEstadoInicial(order),
     estado:        "sin_asignar",
     importe:       0,
-    bultos:        1,
+    bultos:        null,  // NO FLEX — se ingresa manualmente
     cambio:        null,
     retiro:        null,
     observaciones: alertaSinDireccion ? "ALERTA: sin direccion o CP" : "",
