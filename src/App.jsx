@@ -61,6 +61,21 @@ function fmtCorta(ds) { if(!ds)return"";const[,m,d]=ds.split("-");return d+"/"+m
 const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
 function parseFechaES(str){const m=String(str||"").toLowerCase().match(/(\d+)\s+de\s+(\w+)\s+de\s+(\d{4})/);if(!m)return"";const mes=MESES[m[2]];if(!mes)return"";return m[3]+"-"+String(mes).padStart(2,"0")+"-"+String(m[1]).padStart(2,"0");}
 
+// Columnas esperadas en el template propio
+const TEMPLATE_COLS=["nro_seguimiento","direccion","ciudad","cp","fecha"];
+
+function descargarTemplate(){
+  const ws=XLSXLib.utils.aoa_to_sheet([
+    ["nro_seguimiento","direccion","ciudad","cp","fecha"],
+    ["42186559870","Corrientes 1820","CABA","1037","06/04/2026"],
+    ["42186891240","Boyaca 340","Floresta","1407","06/04/2026"],
+  ]);
+  ws["!cols"]=[{wch:18},{wch:35},{wch:20},{wch:8},{wch:12}];
+  const wb=XLSXLib.utils.book_new();
+  XLSXLib.utils.book_append_sheet(wb,ws,"Envios");
+  XLSXLib.writeFile(wb,"template_envios_flex.xlsx");
+}
+
 function parsearExcel(file) {
   return new Promise((resolve,reject) => {
     const reader = new FileReader();
@@ -71,32 +86,64 @@ function parsearExcel(file) {
         const wb = XLSX.read(new Uint8Array(ev.target.result),{type:"array",raw:false});
         const sheet = wb.Sheets[wb.SheetNames[0]];
         const filas = XLSX.utils.sheet_to_json(sheet,{header:1,raw:false,defval:""});
-        let hFila = -1;
-        for(let i=0;i<Math.min(filas.length,15);i++){if(filas[i].some(c=>typeof c==="string"&&c.includes("# de venta"))){hFila=i;break;}}
-        if(hFila<0) throw new Error("No se encontro el encabezado. Es un reporte de Mercado Libre?");
-        const h = filas[hFila];
-        const col = t => h.findIndex(c=>typeof c==="string"&&c.toLowerCase().includes(t.toLowerCase()));
-        const iOrden=col("# de venta"),iFecha=col("fecha"),iDir=col("domicilio");
-        const iCiudad=col("ciudad");
-        const iCP=col("postal");
-        const iSeg=col("seguimiento");
-        if(iDir<0) throw new Error("No se encontro la columna Domicilio.");
-        const envios = [];
-        for(let i=hFila+1;i<filas.length;i++){
-          const r=filas[i];
-          const orden=String(r[iOrden]||"").trim();
-          if(!orden||orden.length<5||!/^\d/.test(orden)) continue;
-          const dir=String(r[iDir]||"").trim(); if(!dir) continue;
-          const cp=String(r[iCP]||"").replace(/\D/g,"");
-          const fechaVenta=parseFechaES(r[iFecha]); if(!fechaVenta) continue;
-          const partido=cpAPartido(cp)||String(r[iCiudad]||"").trim();
-          const nroSeguimiento=String(r[iSeg]||"").trim();
-          envios.push({id:orden,direccion:dir,ciudad:String(r[iCiudad]||"").trim(),cp,fechaVenta,
-            fecha:"",turno:"",trans:"",partido,importe:0,estado:"sin_asignar",
-            nroSeguimiento,linkML:"https://www.mercadolibre.com.ar/ventas/"+orden+"/detalle",
-            cobranza:null,cambio:null,retiro:null,observaciones:"",bultos:1,origen:"ML"});
+
+        // Detectar si es template propio o formato ML
+        let esTemplate=false;
+        let hFila=-1;
+        for(let i=0;i<Math.min(filas.length,5);i++){
+          if(filas[i].some(c=>typeof c==="string"&&c.toLowerCase().includes("nro_seguimiento"))){hFila=i;esTemplate=true;break;}
         }
-        if(envios.length===0) throw new Error("No se encontraron envios con domicilio.");
+        if(!esTemplate){
+          for(let i=0;i<Math.min(filas.length,15);i++){
+            if(filas[i].some(c=>typeof c==="string"&&c.includes("# de venta"))){hFila=i;break;}
+          }
+        }
+        if(hFila<0) throw new Error("Formato no reconocido. Usa el reporte de ML o la plantilla de EnviosHub.");
+
+        const h=filas[hFila];
+        const col=t=>h.findIndex(c=>typeof c==="string"&&c.toLowerCase().includes(t.toLowerCase()));
+        const envios=[];
+
+        if(esTemplate){
+          // Formato template propio
+          const iSeg=col("nro_seguimiento"),iDir=col("direccion"),iCiudad=col("ciudad"),iCP=col("cp"),iFecha=col("fecha");
+          if(iDir<0||iSeg<0) throw new Error("El template no tiene las columnas correctas.");
+          for(let i=hFila+1;i<filas.length;i++){
+            const r=filas[i];
+            const nroSeguimiento=String(r[iSeg]||"").trim();
+            if(!nroSeguimiento) continue;
+            const dir=String(r[iDir]||"").trim(); if(!dir) continue;
+            const cp=String(r[iCP]||"").replace(/\D/g,"");
+            const ciudad=String(r[iCiudad]||"").trim();
+            const partido=cpAPartido(cp)||ciudad;
+            const fechaVenta=parseFechaES(r[iFecha])||fechaHoy();
+            const orden=nroSeguimiento;
+            envios.push({id:orden,direccion:dir,ciudad,cp,fechaVenta,
+              fecha:"",turno:"",trans:"",partido,importe:0,estado:"sin_asignar",
+              nroSeguimiento,linkML:"https://www.mercadolibre.com.ar/ventas/"+orden+"/detalle",
+              cobranza:null,cambio:null,retiro:null,observaciones:"",bultos:1,origen:"ML"});
+          }
+        } else {
+          // Formato ML original
+          const iOrden=col("# de venta"),iFecha=col("fecha"),iDir=col("domicilio");
+          const iCiudad=col("ciudad"),iCP=col("postal"),iSeg=col("seguimiento");
+          if(iDir<0) throw new Error("No se encontro la columna Domicilio.");
+          for(let i=hFila+1;i<filas.length;i++){
+            const r=filas[i];
+            const orden=String(r[iOrden]||"").trim();
+            if(!orden||orden.length<5||!/^\d/.test(orden)) continue;
+            const dir=String(r[iDir]||"").trim(); if(!dir) continue;
+            const cp=String(r[iCP]||"").replace(/\D/g,"");
+            const fechaVenta=parseFechaES(r[iFecha]); if(!fechaVenta) continue;
+            const partido=cpAPartido(cp)||String(r[iCiudad]||"").trim();
+            const nroSeguimiento=String(r[iSeg]||"").trim();
+            envios.push({id:orden,direccion:dir,ciudad:String(r[iCiudad]||"").trim(),cp,fechaVenta,
+              fecha:"",turno:"",trans:"",partido,importe:0,estado:"sin_asignar",
+              nroSeguimiento,linkML:"https://www.mercadolibre.com.ar/ventas/"+orden+"/detalle",
+              cobranza:null,cambio:null,retiro:null,observaciones:"",bultos:1,origen:"ML"});
+          }
+        }
+        if(envios.length===0) throw new Error("No se encontraron envios validos.");
         resolve(envios);
       } catch(err) { reject(err); }
     };
@@ -415,7 +462,14 @@ function PanelEdit({envio,onSave,onClose,lc}){
         </div>
         <div>
           <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Bultos</div>
-          <input type="number" min="1" value={e.bultos||""} onChange={ev=>{const v=parseInt(ev.target.value);set("bultos",v>0?v:"");}} placeholder={e.origen==="ML"?"1":"Ingresá cantidad..."} style={{...S.input,width:"140px",padding:"4px 10px"}}/>
+          <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
+            <input type="number" min="1" value={e.bultos||""} onChange={ev=>{
+              const v=parseInt(ev.target.value);
+              set("bultos",v>0?v:"");
+              if(v>0&&e.origen!=="ML") set("preparado",true);
+            }} placeholder={e.origen==="ML"?"1":"Ingresá cantidad..."} style={{...S.input,width:"140px",padding:"4px 10px"}}/>
+            {e.origen!=="ML"&&e.bultos>0&&<span style={{color:"#10b981",fontSize:"0.72rem",fontWeight:700}}>✓ Preparado</span>}
+          </div>
         </div>
         <div>
           <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Cobranza</div>
@@ -444,6 +498,11 @@ function PanelEdit({envio,onSave,onClose,lc}){
           <textarea value={e.notaLiq||""} onChange={ev=>set("notaLiq",ev.target.value)} placeholder="Motivo..." style={{...S.input,display:"block",width:"100%",marginTop:"6px",height:"38px",resize:"vertical",fontSize:"0.78rem"}}/>
         )}
       </div>}
+      {/* Etiquetas por bulto */}
+      {e.bultos>0&&e.trans&&<div style={{marginBottom:"0.65rem",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{color:"#6b7280",fontSize:"0.72rem"}}>{e.bultos} bulto{e.bultos>1?"s":""} — {e.trans}</div>
+        <button onClick={()=>imprimirEtiquetas(e,lc)} style={{...S.btnSm(false),color:"#6366f1",border:"1px solid #6366f1",padding:"3px 12px",fontSize:"0.72rem"}}>🖨 Imprimir etiquetas</button>
+      </div>}
       {/* Nota del envio */}
       <div style={{marginBottom:"0.65rem"}}>
         <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Nota interna</div>
@@ -465,7 +524,7 @@ function PanelEdit({envio,onSave,onClose,lc}){
   );
 }
 
-function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
+function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
   const hoy=fechaHoy();
   const [modFecha,setModFecha]=useState("hoy");
   const [rangoD,setRangoD]=useState(hoy);
@@ -647,7 +706,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
                   <div style={{display:"flex",gap:"3px",alignItems:"center"}}>
                     {esTN&&e.linkTN&&<a href={e.linkTN} target="_blank" rel="noreferrer" onClick={ev=>ev.stopPropagation()} title="Ver en Tienda Nube" style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:"26px",height:"26px",borderRadius:"6px",background:"#0d1c2e",border:"1px solid #38bdf8",textDecoration:"none",flexShrink:0,fontSize:"0.7rem"}}>TN</a>}
                     {e.linkML&&<a href={e.linkML} target="_blank" rel="noreferrer" onClick={ev=>ev.stopPropagation()} title="Ver en ML" style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:"26px",height:"26px",borderRadius:"6px",background:"#0f1420",border:"1px solid #252d40",textDecoration:"none",flexShrink:0}}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>}
-                    {!modoSel&&<button onClick={ev=>{ev.stopPropagation();eliminar(e.id);}} style={{...S.btnSm(false),padding:"1px 6px",fontSize:"0.68rem",color:"#f87171"}}>x</button>}
+                    {!modoSel&&esAdmin&&<button onClick={ev=>{ev.stopPropagation();eliminar(e.id);}} style={{...S.btnSm(false),padding:"1px 6px",fontSize:"0.68rem",color:"#f87171"}}>x</button>}
                   </div>
                   {imp>0&&<span style={{color:"#10b981",fontWeight:700,fontSize:"0.82rem"}}>{fmt(imp)}</span>}
                   {esTN&&e.importeOrden>0&&<span style={{color:"#6b7280",fontSize:"0.7rem"}}>{fmt(e.importeOrden)}</span>}
@@ -682,7 +741,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
           <button onClick={()=>{const f=window.prompt("Nueva fecha (YYYY-MM-DD):");if(!f)return;setEnvios(p=>p.map(e=>seleccionados.has(e.id)?{...e,fecha:f}:e));setSeleccionados(new Set());setModoSel(false);}} style={{...S.btn(false),padding:"0.4rem 0.9rem",fontSize:"0.75rem"}}>Cambiar fecha</button>
           <button onClick={()=>{const t=window.prompt("Turno (AM/MD/PM/Turbo):");if(!t)return;setEnvios(p=>p.map(e=>seleccionados.has(e.id)?{...e,turno:t}:e));setSeleccionados(new Set());setModoSel(false);}} style={{...S.btn(false),padding:"0.4rem 0.9rem",fontSize:"0.75rem"}}>Cambiar turno</button>
           <button onClick={cancelarSel} style={{...S.btn(true),background:"#7f1d1d",padding:"0.4rem 0.9rem",fontSize:"0.75rem"}}>Cancelar</button>
-          <button onClick={eliminarSel} style={{...S.btn(true),background:"#450a0a",padding:"0.4rem 0.9rem",fontSize:"0.75rem",color:"#fca5a5"}}>Eliminar</button>
+          {esAdmin&&<button onClick={eliminarSel} style={{...S.btn(true),background:"#450a0a",padding:"0.4rem 0.9rem",fontSize:"0.75rem",color:"#fca5a5"}}>Eliminar</button>}
           <button onClick={()=>{setModoSel(false);setSeleccionados(new Set());}} style={{...S.btn(false),padding:"0.4rem 0.9rem",fontSize:"0.75rem"}}>Salir</button>
         </div>
       )}
@@ -1895,7 +1954,7 @@ function TabUsuarios({lc}){
 
   const editar=u=>{setForm({usuario:u.usuario,password:u.password,rol:u.rol,logistica:u.logistica||"",activo:u.activo});setEditId(u.id);};
 
-  const ROL_C={admin:{label:"Admin",color:"#6366f1"},colaborador:{label:"Colaborador",color:"#10b981"},logistica:{label:"Logistica",color:"#8b5cf6"}};
+  const ROL_C={admin:{label:"Admin",color:"#6366f1"},colaborador:{label:"Colaborador",color:"#10b981"},logistica:{label:"Logistica",color:"#8b5cf6"},expedicion:{label:"Expedicion",color:"#f59e0b"}};
 
   if(loading)return<div style={{textAlign:"center",padding:"2rem",color:"#4b5563"}}>Cargando...</div>;
 
@@ -1921,6 +1980,7 @@ function TabUsuarios({lc}){
               <option value="admin">Administrador</option>
               <option value="colaborador">Colaborador</option>
               <option value="logistica">Logistica</option>
+                  <option value="expedicion">Expedicion</option>
             </select>
           </div>
           {form.rol==="logistica"&&<div>
@@ -2363,6 +2423,210 @@ function TabTablero({envios,lc,zc}){
   );
 }
 
+
+function VistaExpedicion({envios,setEnvios,sesion,lc}){
+  const hoy=fechaHoy();
+  const [qrInput,setQrInput]=useState("");
+  const [resultado,setResultado]=useState(null); // {ok, envio, msg}
+  const [filLog,setFilLog]=useState("TODOS");
+  const inputRef=useRef(null);
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
+
+  // Envios de hoy asignados, no cancelados
+  const deHoy=envios.filter(e=>{
+    const f=e.fecha||e.fechaVenta||"";
+    return f===hoy&&getEstado(e)==="asignado";
+  });
+  const filtrados=filLog==="TODOS"?deHoy:deHoy.filter(e=>e.trans===filLog);
+
+  // Focus en el input al montar
+  useEffect(()=>{if(inputRef.current)inputRef.current.focus();},[]);
+
+  const procesarScan=useCallback((nro)=>{
+    const srch=nro.trim();
+    if(!srch)return;
+    const found=envios.find(e=>
+      e.nroSeguimiento===srch||
+      e.id===srch||
+      (e.nroSeguimiento&&e.nroSeguimiento.includes(srch))
+    );
+    if(!found){
+      setResultado({ok:false,msg:"No se encontro el envio: "+srch});
+      return;
+    }
+    if(found.preparado){
+      setResultado({ok:"ya",envio:found,msg:"Ya estaba marcado como preparado"});
+      return;
+    }
+    setEnvios(p=>p.map(e=>e.id===found.id?{...e,preparado:true}:e));
+    setResultado({ok:true,envio:found,msg:"Preparado OK"});
+    setTimeout(()=>setResultado(null),3000);
+  },[envios,setEnvios]);
+
+  const handleKey=e=>{
+    if(e.key==="Enter"){procesarScan(qrInput);setQrInput("");}
+  };
+
+  const preparados=deHoy.filter(e=>e.preparado).length;
+  const total=deHoy.length;
+  const pct=total>0?Math.round(preparados/total*100):0;
+
+  return(
+    <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif"}}>
+      <style>{`*{box-sizing:border-box;}`}</style>
+      <div style={{position:"sticky",top:0,zIndex:100,background:"#0f1420",borderBottom:"1px solid #1a1f2e",padding:"0.7rem 1rem",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
+        <div style={{width:"26px",height:"26px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:"7px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>🛵</div>
+        <div>
+          <div style={{fontWeight:800,fontSize:"0.92rem"}}>EnviosHub <span style={{color:"#374151",fontSize:"0.6rem",fontWeight:400}}>v{VERSION}</span></div>
+          <div style={{color:"#f59e0b",fontSize:"0.65rem",fontWeight:700}}>Expedición</div>
+        </div>
+        <div style={{display:"flex",gap:"3px",flexWrap:"wrap",marginLeft:"8px"}}>
+          <button onClick={()=>setFilLog("TODOS")} style={{...S.btnSm(filLog==="TODOS"),padding:"0.28rem 0.6rem",fontSize:"0.72rem"}}>Todos</button>
+          {logActivas.map(l=><button key={l} onClick={()=>setFilLog(l)} style={{...S.btnSm(filLog===l,lc[l]?.color),padding:"0.28rem 0.6rem",fontSize:"0.72rem"}}>{l}</button>)}
+        </div>
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:"0.75rem"}}>
+          <span style={{color:"#4b5563",fontSize:"0.72rem"}}>{sesion.usuario}</span>
+          <button onClick={()=>{clearSession();window.location.reload();}} style={{...S.btnSm(false),color:"#f87171"}}>Salir</button>
+        </div>
+      </div>
+
+      <div style={{padding:"0.85rem 1rem",maxWidth:"800px",margin:"0 auto"}}>
+
+        {/* Scanner FLEX */}
+        <div style={{...S.card,padding:"1rem",marginBottom:"1rem",border:"1px solid #84cc1633"}}>
+          <div style={{color:"#84cc16",fontWeight:700,fontSize:"0.75rem",textTransform:"uppercase",letterSpacing:".06em",marginBottom:"8px"}}>Escaner FLEX — QR / código de barras</div>
+          <div style={{display:"flex",gap:"8px"}}>
+            <input
+              ref={inputRef}
+              value={qrInput}
+              onChange={e=>setQrInput(e.target.value)}
+              onKeyDown={handleKey}
+              placeholder="Escaneá o ingresá el nro de seguimiento..."
+              style={{...S.input,flex:1,fontSize:"0.9rem",padding:"8px 12px"}}
+              autoComplete="off"
+            />
+            <button onClick={()=>{procesarScan(qrInput);setQrInput("");}} style={{...S.btn(true),background:"#0d1c04",border:"1px solid #84cc16",color:"#84cc16",padding:"8px 16px",fontWeight:700}}>OK</button>
+          </div>
+          {resultado&&(
+            <div style={{marginTop:"10px",padding:"10px 14px",borderRadius:"8px",
+              background:resultado.ok===true?"#041f14":resultado.ok==="ya"?"#12172a":"#1c0404",
+              border:"1px solid "+(resultado.ok===true?"#065f46":resultado.ok==="ya"?"#252d40":"#7f1d1d")}}>
+              <div style={{color:resultado.ok===true?"#34d399":resultado.ok==="ya"?"#6b7280":"#f87171",fontWeight:700,fontSize:"0.82rem",marginBottom:resultado.envio?"4px":"0"}}>{resultado.ok===true?"✓":resultado.ok==="ya"?"⟳":"✗"} {resultado.msg}</div>
+              {resultado.envio&&<div style={{fontSize:"0.75rem",color:"#9ca3af"}}>
+                {resultado.envio.direccion} · {resultado.envio.partido}
+                {resultado.envio.trans&&<span style={{marginLeft:"8px",color:lc[resultado.envio.trans]?.color||"#6b7280",fontWeight:700}}>{resultado.envio.trans}</span>}
+              </div>}
+            </div>
+          )}
+        </div>
+
+        {/* Resumen del día */}
+        <div style={{display:"flex",gap:"8px",marginBottom:"0.75rem"}}>
+          <div style={{...S.card,padding:"0.75rem 1rem",flex:1,borderLeft:"3px solid #6366f1"}}>
+            <div style={{color:"#6366f1",fontWeight:800,fontSize:"1.6rem",lineHeight:1}}>{total}</div>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",textTransform:"uppercase",marginTop:"2px"}}>Envios hoy</div>
+          </div>
+          <div style={{...S.card,padding:"0.75rem 1rem",flex:1,borderLeft:"3px solid #10b981"}}>
+            <div style={{color:"#10b981",fontWeight:800,fontSize:"1.6rem",lineHeight:1}}>{preparados}</div>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",textTransform:"uppercase",marginTop:"2px"}}>Preparados</div>
+          </div>
+          <div style={{...S.card,padding:"0.75rem 1rem",flex:1,borderLeft:"3px solid #f59e0b"}}>
+            <div style={{color:"#f59e0b",fontWeight:800,fontSize:"1.6rem",lineHeight:1}}>{total-preparados}</div>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",textTransform:"uppercase",marginTop:"2px"}}>Pendientes</div>
+          </div>
+          <div style={{...S.card,padding:"0.75rem 1rem",flex:2}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:"6px"}}>
+              <span style={{color:"#6b7280",fontSize:"0.62rem",textTransform:"uppercase"}}>Progreso</span>
+              <span style={{color:pct>=80?"#10b981":pct>=50?"#f59e0b":"#f87171",fontWeight:700,fontSize:"0.82rem"}}>{pct}%</span>
+            </div>
+            <div style={{height:"10px",background:"#0f1420",borderRadius:"5px",overflow:"hidden"}}>
+              <div style={{width:pct+"%",height:"100%",background:pct>=80?"#10b981":pct>=50?"#f59e0b":"#f87171",borderRadius:"5px",transition:"width 0.3s"}}/>
+            </div>
+          </div>
+        </div>
+
+        {/* Listado */}
+        <div style={{display:"grid",gap:"4px"}}>
+          {filtrados.length===0&&<div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📦</div><p style={{marginTop:"8px"}}>Sin envios asignados para hoy</p></div>}
+          {filtrados.map(e=>{
+            const lcD=lc[e.trans];
+            const esFlex=e.origen==="ML";
+            return(
+              <div key={e.id} style={{...S.card,padding:"0.55rem 0.75rem",display:"flex",alignItems:"center",gap:"0.5rem",opacity:e.preparado?0.6:1,borderColor:e.preparado?"#065f46":"#252d40"}}>
+                <div onClick={()=>setEnvios(p=>p.map(x=>x.id===e.id?{...x,preparado:!x.preparado}:x))} style={{cursor:"pointer",flexShrink:0}}>
+                  <div style={{width:"22px",height:"22px",borderRadius:"6px",background:e.preparado?"#041f14":"#0f1420",border:"2px solid "+(e.preparado?"#10b981":"#374151"),display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    {e.preparado&&<span style={{color:"#10b981",fontSize:"14px",lineHeight:1}}>✓</span>}
+                  </div>
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",gap:"4px",flexWrap:"wrap",marginBottom:"2px"}}>
+                    {esFlex?<span style={{background:"#0d1c04",color:"#84cc16",border:"1px solid #84cc16",padding:"1px 7px",borderRadius:"4px",fontSize:"9px",fontWeight:700}}>FLEX</span>
+                      :<span style={{background:"#0d1c2e",color:"#38bdf8",border:"1px solid #38bdf8",padding:"1px 7px",borderRadius:"4px",fontSize:"9px",fontWeight:700}}>NO FLEX</span>}
+                    {e.trans&&<Bdg label={e.trans} bg={lcD?.bg||"#1a1f2e"} t={lcD?.color||"#6b7280"}/>}
+                    {e.turno&&<Bdg label={e.turno} bg={TURNO_C[e.turno]?.bg||"#130d2a"} t={TURNO_C[e.turno]?.c||"#a78bfa"}/>}
+                    {e.preparado&&<Bdg label="Preparado" bg="#041f14" t="#10b981"/>}
+                  </div>
+                  <div style={{color:"#e5e7eb",fontSize:"0.8rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}</div>
+                  <div style={{color:"#6b7280",fontSize:"0.7rem"}}>{e.partido}{esFlex&&e.nroSeguimiento?<span style={{marginLeft:"8px",fontFamily:"monospace",color:"#9ca3af"}}>{e.nroSeguimiento}</span>:""}</div>
+                </div>
+                {e.cobranza&&<div style={{color:"#fbbf24",fontWeight:700,fontSize:"0.82rem",flexShrink:0}}>{fmt(e.cobranza)}</div>}
+                {!esFlex&&e.bultos&&<div style={{color:"#60a5fa",fontSize:"0.72rem",flexShrink:0}}>{e.bultos} bulto{e.bultos>1?"s":""}</div>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function imprimirEtiquetas(envio,lc){
+  const bultos=envio.bultos||1;
+  const lcD=lc[envio.trans]||{};
+  const etqs=Array.from({length:bultos},(_,i)=>`
+    <div style="width:9cm;min-height:6cm;border:2px solid #333;border-radius:8px;padding:14px;margin:0 auto 16px;font-family:Arial,sans-serif;page-break-inside:avoid;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+        <div>
+          <div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.04em;">EnviosHub · UMP Papel Distribuidora</div>
+          <div style="font-size:13px;font-weight:700;color:#333;margin-top:2px;">${envio.trans||"Sin asignar"}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:28px;font-weight:900;color:#333;line-height:1;">${i+1}/${bultos}</div>
+          <div style="font-size:10px;color:#666;">bulto${bultos>1?"s":""}</div>
+        </div>
+      </div>
+      <div style="border-top:1px solid #ddd;padding-top:10px;margin-bottom:8px;">
+        <div style="font-size:15px;font-weight:700;color:#111;margin-bottom:4px;">${envio.direccion}</div>
+        <div style="font-size:12px;color:#444;">${[envio.localidad,envio.partido].filter(Boolean).join(" · ")}${envio.cp?" · CP "+envio.cp:""}</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:8px;">
+        <div>
+          ${envio.turno?'<div style="display:inline-block;background:#f0f0f0;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;color:#333;">'+envio.turno+'</div>':""}
+          ${envio.fecha?'<div style="font-size:10px;color:#666;margin-top:3px;">'+envio.fecha+'</div>':""}
+        </div>
+        <div style="text-align:right;">
+          ${envio.origen==="ML"&&envio.nroSeguimiento?'<div style="font-family:monospace;font-size:10px;color:#666;">'+envio.nroSeguimiento+'</div>':""}
+          ${envio.nroOrdenTN?'<div style="font-size:11px;font-weight:700;color:#333;">#'+envio.nroOrdenTN+'</div>':""}
+          ${envio.cobranza?'<div style="font-size:13px;font-weight:700;color:#b45309;">Cobrar $'+Number(envio.cobranza).toLocaleString("es-AR")+'</div>':""}
+        </div>
+      </div>
+    </div>`).join("");
+
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Etiquetas</title>
+  <style>@page{size:A4;margin:10mm;}body{margin:0;padding:8px;}@media print{button{display:none!important;}}</style>
+  </head><body>
+  <div style="text-align:center;margin-bottom:12px;font-family:Arial;font-size:11px;color:#888;">
+    ${envio.direccion} · ${bultos} etiqueta${bultos>1?"s":""}
+  </div>
+  ${etqs}
+  <script>window.onload=function(){window.print();}<\/script>
+  </body></html>`;
+  const w=window.open("","_blank");
+  if(!w){alert("Permite ventanas emergentes.");return;}
+  w.document.write(html);w.document.close();
+}
+
 function ScrollTop(){
   const [vis,setVis]=useState(false);
   useEffect(()=>{
@@ -2460,6 +2724,7 @@ export default function App(){
   // Auth gates
   if(!sesion)return<PantallaLogin onLogin={s=>{setSession(s);setSesion(s);}}/>;
   if(sesion.rol==="logistica")return<VistaLogistica envios={envios} sesion={sesion} lc={lc}/>;
+  if(sesion.rol==="expedicion")return<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>;
 
   if(pantalla==="asignacion"){return<PantallaAsignacion borrador={borrador} fileName={fileName} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc}/>;}
   if(pantalla==="asignacion-tn"){return<PantallaAsignacionTN borrador={borrador} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc}/>;}
@@ -2502,6 +2767,7 @@ export default function App(){
         })}</div>
         <div style={{marginLeft:"auto",display:"flex",gap:"0.35rem",flexWrap:"wrap"}}>
           <button onClick={()=>{const tnSinAsignar=envios.filter(e=>e.origen==="Tienda Nube"&&getEstado(e)==="sin_asignar");if(!tnSinAsignar.length){mostrarToast("No hay pedidos TN sin asignar");return;}setBorrador(tnSinAsignar);setFileName("Pedidos TN sin asignar");setPantalla("asignacion-tn");}} style={{padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#0d1c2e",border:"1px solid #38bdf8",color:"#38bdf8",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>Asignar TN</button>
+          <button onClick={descargarTemplate} style={{padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#0f1420",border:"1px solid #252d40",color:"#9ca3af",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}} title="Descargar plantilla Excel">⬇ Plantilla</button>
           <label style={{cursor:"pointer"}}>
             <input type="file" accept=".xlsx,.xls" style={{display:"none"}} onChange={e=>{if(e.target.files[0]){cargarArchivo(e.target.files[0]);e.target.value="";}}}/>
             <span style={{display:"inline-block",padding:"0.33rem 0.75rem",borderRadius:"7px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",color:"#fff",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>{loading?"...":"Cargar Excel"}</span>
@@ -2514,8 +2780,8 @@ export default function App(){
       <div style={{padding:"0.85rem 1rem",maxWidth:"1400px",margin:"0 auto"}}>
         {error&&<div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.8rem",background:"#1c0a0a",border:"1px solid #7f1d1d",color:"#fca5a5",fontSize:"0.8rem"}}>{error}</div>}
         {tab==="tablero" &&<TabTablero envios={envios} lc={lc} zc={zc}/>}
-        {tab==="envios"  &&<TabEnvios   envios={envios.filter(e=>e.origen!=="ML")} setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel}/>}
-        {tab==="flex"    &&<TabEnvios   envios={envios.filter(e=>e.origen==="ML")}  setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel}/>}
+        {tab==="envios"  &&<TabEnvios   envios={envios.filter(e=>e.origen!=="ML")} setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin}/>}
+        {tab==="flex"    &&<TabEnvios   envios={envios.filter(e=>e.origen==="ML")}  setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin}/>}
         {tab==="imprimir"&&<TabImprimir envios={envios} zc={zc} lc={lc}/>}
         {tab==="manual"  &&<TabManual   setEnvios={setEnvios} onSuccess={()=>{setTab("envios");mostrarToast("Envio agregado");}} lc={lc} enviosExistentes={envios}/>}
         {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZcPersist} lc={lc} setLc={setLcPersist}/>}
