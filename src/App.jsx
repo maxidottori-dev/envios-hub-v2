@@ -24,12 +24,16 @@ function getSession() {
 function setSession(u) { localStorage.setItem(AUTH_KEY, JSON.stringify(u)); }
 function clearSession() { localStorage.removeItem(AUTH_KEY); }
 
-async function loginUsuario(usuario, password, db) {
-  const snap = await db.collection("usuarios").where("usuario","==",usuario).where("activo","==",true).limit(1).get();
-  if (snap.empty) return null;
-  const data = snap.docs[0].data();
-  if (data.password !== password) return null;
-  return { id: snap.docs[0].id, ...data };
+async function loginUsuario(usuario, password) {
+  try {
+    const snap = await getDocs(
+      query(collection(db,"usuarios"), where("usuario","==",usuario), where("activo","==",true), limit(1))
+    );
+    if (snap.empty) return null;
+    const data = snap.docs[0].data();
+    if (data.password !== password) return null;
+    return { id: snap.docs[0].id, ...data };
+  } catch(e) { console.error("login error:", e); return null; }
 }
 
 function cargarXLSX() { return Promise.resolve(XLSXLib); }
@@ -298,7 +302,7 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc}){
                 <div style={{display:"grid",gridTemplateColumns:"70px 1fr",rowGap:"5px",columnGap:"0.75rem",alignItems:"center"}}>
                   <span style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase"}}>Logistica</span>
                   <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
-                    {logActivas.map(l=><button key={l} onClick={()=>setGrupo(ids,"trans",gT===l?"":l)} style={S.btnSm(gT===l,lc[l].color)}>{l}</button>)}
+                    {logActivas.map(l=><button key={l} onClick={()=>setGrupo(ids,"trans",gT===l?"":l)} style={S.btnSm(gT===l,lc[l]?.color||"#6366f1")}>{l}</button>)}
                     {gT&&<button onClick={()=>setGrupo(ids,"trans","")} style={{...S.btnSm(false),color:"#6b7280",fontSize:"0.68rem"}}>x</button>}
                   </div>
                   <span style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase"}}>Fecha</span>
@@ -322,7 +326,7 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc}){
                       <div style={{color:"#4b5563",fontSize:"0.66rem",marginTop:"1px"}}>CP {e.cp} · {e.partido} · ...{e.id.slice(-8)}</div>
                     </div>
                     <div style={{display:"flex",gap:"3px",flexWrap:"wrap",alignItems:"center"}}>
-                      {logActivas.map(l=><button key={l} onClick={()=>setA(e.id,"trans",a.trans===l?"":l)} style={S.btnSm(a.trans===l,lc[l].color)}>{l}</button>)}
+                      {logActivas.map(l=><button key={l} onClick={()=>setA(e.id,"trans",a.trans===l?"":l)} style={S.btnSm(a.trans===l,lc[l]?.color||"#6366f1")}>{l}</button>)}
                       <span style={{color:"#252d40",padding:"0 2px"}}>|</span>
                       {TURNOS.map(t=><button key={t} onClick={()=>setA(e.id,"turno",a.turno===t?"":t)} style={S.btnSm(a.turno===t,"#8b5cf6")}>{t}</button>)}
                       {a.trans&&<Bdg label={a.fecha?fmtCorta(a.fecha):"sin fecha"} bg="#12172a" t="#6b7280"/>}
@@ -514,7 +518,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar}){
   const eliminar=id=>{if(window.confirm("Eliminar este envio?"))setEnvios(p=>p.filter(e=>e.id!==id));};
   const eliminarSel=()=>{if(!window.confirm(`Eliminar ${seleccionados.size} envio(s)?`))return;setEnvios(p=>p.filter(e=>!seleccionados.has(e.id)));setSeleccionados(new Set());setModoSel(false);};
   const reasignarSel=()=>{const items=envios.filter(e=>seleccionados.has(e.id));onReasignar(items);setSeleccionados(new Set());setModoSel(false);};
-  const cancelarSel=()=>{if(!window.confirm(`Cancelar ${seleccionados.size} envio(s)?`))return;setEnvios(p=>p.map(e=>seleccionados.has(e.id)?{...e,estado:"cancelado"}:e));setSeleccionados(new Set());setModoSel(false);};
+  const cancelarSel=()=>{if(!window.confirm(`Cancelar ${seleccionados.size} envio(s)?`))return;setEnvios(p=>p.map(e=>seleccionados.has(e.id)?{...e}:e));setSeleccionados(new Set());setModoSel(false);};
   // Ordenar por nroOrdenTN descendente (mas nuevo arriba)
   const filtradosOrdenados=[...filtrados].sort((a,b)=>{
     const nA=parseInt(a.nroOrdenTN||a.id)||0;
@@ -836,7 +840,7 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes}){
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Zona ML</label><div style={{...S.input,padding:"0.45rem 0.6rem",color:ZONA_ML_COLOR[getZonaML(f.partido)]||"#6b7280",fontSize:"0.8rem",fontWeight:700}}>{getZonaML(f.partido)||"-"}</div></div>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.7rem",marginBottom:"0.7rem"}}>
-          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Logistica</label><div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{logActivas.map(l=><button key={l} onClick={()=>handleTrans(l)} style={S.btnSm(f.trans===l,lc[l].color)}>{l}</button>)}</div></div>
+          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Logistica</label><div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{logActivas.map(l=><button key={l} onClick={()=>handleTrans(l)} style={S.btnSm(f.trans===l,lc[l]?.color||"#6366f1")}>{l}</button>)}</div></div>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Turno</label><div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{TURNOS.map(t=><button key={t} onClick={()=>set("turno",f.turno===t?"":t)} style={S.btnSm(f.turno===t,"#8b5cf6")}>{t}</button>)}</div></div>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Fecha entrega</label><input type="date" value={f.fecha} onChange={e=>set("fecha",e.target.value)} style={{...S.input,width:"100%"}}/></div>
         </div>
@@ -852,7 +856,7 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes}){
 
 function TabTarifas({zc,setZc,lc,setLc}){
   const [subTab,setSubTab]=useState("zonas");
-  const [logSel,setLogSel]=useState("HNOS");
+  const [logSel,setLogSel]=useState("");
   const [tipoMx,setTipoMx]=useState("noflex");
   const [guardado,setGuardado]=useState(false);
   const [editando,setEditando]=useState(null);
@@ -860,7 +864,7 @@ function TabTarifas({zc,setZc,lc,setLc}){
   const [addModal,setAddModal]=useState(false);
   const [newZona,setNewZona]=useState({nombre:"",color:"#6366f1",precio:0});
   const logActivas=Object.keys(lc).filter(k=>lc[k].activa);
-  useEffect(()=>{if(!lc[logSel]?.activa&&logActivas.length>0)setLogSel(logActivas[0]);},[lc]);
+  useEffect(()=>{if((!logSel||!lc[logSel]?.activa)&&logActivas.length>0)setLogSel(logActivas[0]);},[lc]);
   const cfg=zc[logSel]||{zonas:[]};
   const asig=new Set(cfg.zonas.flatMap(z=>z.partidos));
   const sinAsig=ALL_PARTIDOS.filter(p=>!asig.has(p));
@@ -884,7 +888,7 @@ function TabTarifas({zc,setZc,lc,setLc}){
         <button onClick={()=>setSubTab("logisticas")} style={S.btn(subTab==="logisticas")}>Logisticas</button>
         {subTab!=="logisticas"&&<><span style={{color:"#374151",fontSize:"0.65rem",margin:"0 4px"}}>|</span>{Object.entries(lc).filter(([,v])=>v.activa).map(([k,v])=><button key={k} onClick={()=>setLogSel(k)} style={S.btn(logSel===k,v.color)}>{k}</button>)}</>}
         {guardado&&<span style={{color:"#10b981",fontSize:"0.72rem",marginLeft:"8px"}}>✓ Guardado</span>}
-        <button onClick={()=>{setZc(p=>p);setLc(p=>p);setGuardado(true);setTimeout(()=>setGuardado(false),2000);}} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.35rem 1rem",marginLeft:"auto",fontSize:"0.78rem"}}>Guardar</button>
+        <button onClick={()=>{setZc(p=>{const next={...p};setDoc(doc(db,"config","zonas"),next).catch(console.error);return next;});setLc(p=>{const next={...p};setDoc(doc(db,"config","logisticas"),next).catch(console.error);return next;});setGuardado(true);setTimeout(()=>setGuardado(false),2000);}} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.35rem 1rem",marginLeft:"auto",fontSize:"0.78rem"}}>Guardar</button>
       </div>
       {subTab==="zonas"&&<>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(245px,1fr))",gap:"0.85rem",marginBottom:"0.9rem"}}>
@@ -1083,7 +1087,7 @@ function TabInforme({envios,zc,lc}){
       </div>
       <div style={{...S.card,padding:"0.55rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"0.35rem",flexWrap:"wrap",alignItems:"center"}}>
         <button onClick={()=>setLogSel("TODAS")} style={S.btn(logSel==="TODAS")}>TODAS</button>
-        {logActivas.map(l=><button key={l} onClick={()=>setLogSel(l)} style={S.btn(logSel===l,lc[l].color)}>{l}</button>)}
+        {logActivas.map(l=><button key={l} onClick={()=>setLogSel(l)} style={S.btn(logSel===l,lc[l]?.color||"#6366f1")}>{l}</button>)}
         <button onClick={()=>{
           const filas=envSem.map((e,i)=>({
             "#":i+1,Logistica:e.trans||"",Partido:e.partido,Direccion:e.direccion,
@@ -1817,7 +1821,7 @@ function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc}){
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:"0.5rem",flexWrap:"wrap"}}>
                   <span style={{color:"#6b7280",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Logistica:</span>
-                  {logActivas.map(l=><button key={l} onClick={()=>setGrupo(ids,"trans",gT===l?"":l)} style={S.btnSm(gT===l,lc[l].color)}>{l}</button>)}
+                  {logActivas.map(l=><button key={l} onClick={()=>setGrupo(ids,"trans",gT===l?"":l)} style={S.btnSm(gT===l,lc[l]?.color||"#6366f1")}>{l}</button>)}
                   {gT&&<button onClick={()=>setGrupo(ids,"trans","")} style={{...S.btnSm(false),color:"#6b7280"}}>x</button>}
                 </div>
               </div>
@@ -2107,6 +2111,258 @@ function VistaLogistica({envios,sesion,lc}){
   );
 }
 
+
+function TabTablero({envios,lc,zc}){
+  const hoy=fechaHoy();
+  const tmap=buildTarifaMap(zc);
+  const getImp=e=>calcImp(e,tmap,lc,zc);
+
+  // Envios de hoy
+  const deHoy=envios.filter(e=>{
+    const f=e.fecha||e.fechaVenta||"";
+    return f===hoy&&e.estado!=="cancelado";
+  });
+  const flex=deHoy.filter(e=>e.origen==="ML");
+  const noflex=deHoy.filter(e=>e.origen!=="ML");
+  const total=deHoy.length;
+  const sinAsignar=deHoy.filter(e=>getEstado(e)==="sin_asignar");
+  const asignados=deHoy.filter(e=>getEstado(e)==="asignado");
+  const preparados=deHoy.filter(e=>e.preparado);
+  const pct=total>0?Math.round(preparados.length/total*100):0;
+
+  const flexSinAsig=flex.filter(e=>getEstado(e)==="sin_asignar");
+  const noflexSinAsig=noflex.filter(e=>getEstado(e)==="sin_asignar");
+  const flexPrep=flex.filter(e=>e.preparado);
+  const noflexPrep=noflex.filter(e=>e.preparado);
+  const flexPct=flex.length>0?Math.round(flexPrep.length/flex.length*100):0;
+  const noflexPct=noflex.length>0?Math.round(noflexPrep.length/noflex.length*100):0;
+
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
+
+  // Alertas
+  const sinDir=envios.filter(e=>e.alertaDireccion&&getEstado(e)!=="cancelado");
+  const pagoPend=envios.filter(e=>e.pagoEstado==="pendiente"&&getEstado(e)!=="cancelado");
+  const sinAsigHoy=sinAsignar.length;
+
+  // Cobranzas acumuladas
+  const cobPorLog=logActivas.map(l=>{
+    const envsLog=envios.filter(e=>e.trans===l&&e.cobranza!==null&&e.cobranza>0);
+    const deudaAnterior=envsLog.filter(e=>{const f=e.fecha||"";return f<hoy&&!e.cobranzaRecibida;}).reduce((s,e)=>s+(e.cobranza||0),0);
+    const diasDeuda=envsLog.filter(e=>{const f=e.fecha||"";return f<hoy&&!e.cobranzaRecibida;}).reduce((max,e)=>{
+      const dias=Math.floor((new Date(hoy)-new Date(e.fecha||hoy))/86400000);
+      return Math.max(max,dias);
+    },0);
+    const saleHoy=envsLog.filter(e=>(e.fecha||"")==hoy&&!e.cobranzaRecibida).reduce((s,e)=>s+(e.cobranza||0),0);
+    return{l,deudaAnterior,saleHoy,total:deudaAnterior+saleHoy,diasDeuda};
+  }).filter(x=>x.total>0||x.saleHoy>0);
+
+  const cardSt={background:"#1a1f2e",border:"1px solid #252d40",borderRadius:"12px",padding:"14px 16px"};
+  const pillFlex={background:"#0d1c04",color:"#84cc16",border:"1px solid #84cc16",padding:"2px 8px",borderRadius:"5px",fontSize:"10px",fontWeight:700};
+  const pillNoflex={background:"#12172a",color:"#6366f1",border:"1px solid #6366f1",padding:"2px 8px",borderRadius:"5px",fontSize:"10px",fontWeight:700};
+  const pb=(pct2,color)=>(
+    <div style={{marginTop:"8px"}}>
+      <div style={{height:"6px",background:"#0f1420",borderRadius:"3px",overflow:"hidden"}}>
+        <div style={{width:pct2+"%",height:"100%",background:color,borderRadius:"3px"}}/>
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:"9px",color:"#4b5563",marginTop:"2px"}}>
+        <span>Preparados</span><span style={{color}}>{pct2}%</span>
+      </div>
+    </div>
+  );
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:"16px",paddingBottom:"40px"}}>
+      {/* Fecha */}
+      <div style={{color:"#4b5563",fontSize:"0.72rem"}}>{new Date().toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
+
+      {/* 1. RESUMEN */}
+      <div>
+        <div style={{color:"#4b5563",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",marginBottom:"8px"}}>Resumen del día</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"8px"}}>
+          {[
+            {num:total,label:"Total envíos",color:"#6366f1",fl:flex.length,nfl:noflex.length},
+            {num:sinAsignar.length,label:"Sin asignar",color:"#f59e0b",fl:flexSinAsig.length,nfl:noflexSinAsig.length},
+            {num:asignados.length,label:"Asignados",color:"#38bdf8",fl:flex.filter(e=>getEstado(e)==="asignado").length,nfl:noflex.filter(e=>getEstado(e)==="asignado").length},
+            {num:preparados.length,label:"Preparados",color:"#10b981",fl:flexPrep.length,nfl:noflexPrep.length,showPb:true,pct},
+          ].map((x,i)=>(
+            <div key={i} style={{...cardSt,borderLeft:"3px solid "+x.color}}>
+              <div style={{fontWeight:800,fontSize:"2rem",color:x.color,lineHeight:1}}>{x.num}</div>
+              <div style={{color:"#6b7280",fontSize:"0.62rem",textTransform:"uppercase",marginBottom:"6px"}}>{x.label}</div>
+              <div style={{display:"flex",gap:"5px"}}>
+                <span style={pillFlex}>FLEX {x.fl}</span>
+                <span style={pillNoflex}>NO FLEX {x.nfl}</span>
+              </div>
+              {x.showPb&&pb(x.pct,"#10b981")}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 2. DETALLE POR TIPO */}
+      <div>
+        <div style={{color:"#4b5563",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",marginBottom:"8px"}}>Detalle por tipo</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
+          {[
+            {label:"FLEX — Mercado Libre",via:"QR scan",items:flex,prep:flexPrep,sinAsig2:flexSinAsig,pct2:flexPct,color:"#84cc16",border:"#84cc1644"},
+            {label:"NO FLEX — TN + Manual",via:"carga bultos",items:noflex,prep:noflexPrep,sinAsig2:noflexSinAsig,pct2:noflexPct,color:"#6366f1",border:"#6366f144"},
+          ].map((t,i)=>(
+            <div key={i} style={{background:"#12172a",borderRadius:"10px",padding:"12px",border:"1px solid "+t.border}}>
+              <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px"}}>
+                <span style={{...i===0?pillFlex:pillNoflex,fontSize:"11px",padding:"3px 10px"}}>{t.label}</span>
+                <span style={{color:"#4b5563",fontSize:"0.65rem",marginLeft:"auto"}}>vía {t.via}</span>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"6px"}}>
+                {[
+                  {n:t.items.length,l:"Total",c:"#6366f1"},
+                  {n:t.sinAsig2.length,l:"Sin asignar",c:"#f59e0b"},
+                  {n:t.prep.length,l:"Preparados",c:"#10b981"},
+                  {n:t.items.filter(e=>getEstado(e)==="asignado").length,l:"Asignados",c:"#38bdf8"},
+                  {n:t.items.filter(e=>e.preparado===undefined||!e.preparado).length,l:"Sin preparar",c:"#9ca3af"},
+                  {n:t.pct2+"%",l:"% listo",c:t.color},
+                ].map((m,j)=>(
+                  <div key={j} style={{background:"#0f1420",borderRadius:"8px",padding:"8px 10px"}}>
+                    <div style={{fontWeight:800,fontSize:"1.3rem",color:m.c,lineHeight:1}}>{m.n}</div>
+                    <div style={{color:"#6b7280",fontSize:"0.58rem",textTransform:"uppercase",marginTop:"2px"}}>{m.l}</div>
+                  </div>
+                ))}
+              </div>
+              {pb(t.pct2,t.color)}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 3. POR LOGISTICA */}
+      {logActivas.length>0&&<div>
+        <div style={{color:"#4b5563",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",marginBottom:"8px"}}>Por logística</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:"10px"}}>
+          {logActivas.map(l=>{
+            const lcD=lc[l];
+            const envL=deHoy.filter(e=>e.trans===l);
+            if(!envL.length)return null;
+            const prepL=envL.filter(e=>e.preparado);
+            const pctL=envL.length>0?Math.round(prepL.length/envL.length*100):0;
+            const flexL=envL.filter(e=>e.origen==="ML");
+            const noflexL=envL.filter(e=>e.origen!=="ML");
+            const flexPrepL=flexL.filter(e=>e.preparado);
+            const noflexPrepL=noflexL.filter(e=>e.preparado);
+            const pctColor=pctL>=80?"#10b981":pctL>=50?"#f59e0b":"#f87171";
+            const circ=138; // 2*pi*22
+            const dash=Math.round(circ*pctL/100);
+            const amTurno=envL.filter(e=>e.turno==="AM").length;
+            const pmTurno=envL.filter(e=>e.turno==="PM").length;
+            return(
+              <div key={l} style={{background:"#1a1f2e",border:"1px solid #252d40",borderRadius:"12px",overflow:"hidden",borderTop:"3px solid "+lcD.color}}>
+                <div style={{padding:"10px 14px",display:"flex",alignItems:"center",gap:"8px",borderBottom:"1px solid #252d40"}}>
+                  <span style={{color:lcD.color,fontWeight:800,fontSize:"0.92rem"}}>{l}</span>
+                  <div style={{marginLeft:"auto",display:"flex",gap:"3px"}}>
+                    {amTurno>0&&<span style={{background:"#0c1a2e",color:"#60a5fa",padding:"1px 6px",borderRadius:"4px",fontSize:"9px",fontWeight:700}}>AM {amTurno}</span>}
+                    {pmTurno>0&&<span style={{background:"#130d2a",color:"#a78bfa",padding:"1px 6px",borderRadius:"4px",fontSize:"9px",fontWeight:700}}>PM {pmTurno}</span>}
+                  </div>
+                </div>
+                <div style={{padding:"12px 14px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"12px"}}>
+                    <div style={{position:"relative",width:"60px",height:"60px",flexShrink:0}}>
+                      <svg width="60" height="60" viewBox="0 0 60 60" style={{transform:"rotate(-90deg)"}}>
+                        <circle cx="30" cy="30" r="22" fill="none" stroke="#252d40" strokeWidth="9"/>
+                        <circle cx="30" cy="30" r="22" fill="none" stroke={pctColor} strokeWidth="9" strokeDasharray={dash+" "+(circ-dash)} strokeLinecap="round"/>
+                      </svg>
+                      <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        <span style={{fontSize:"13px",fontWeight:800,color:pctColor}}>{pctL}%</span>
+                      </div>
+                    </div>
+                    <div style={{flex:1,fontSize:"11px",display:"grid",gap:"2px"}}>
+                      <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#6b7280"}}>Total</span><span style={{fontWeight:700}}>{envL.length}</span></div>
+                      <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#10b981"}}>Preparados</span><span style={{fontWeight:700,color:"#10b981"}}>{prepL.length}</span></div>
+                      <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#38bdf8"}}>Pendientes</span><span style={{fontWeight:700,color:"#38bdf8"}}>{envL.length-prepL.length}</span></div>
+                    </div>
+                  </div>
+                  {flexL.length>0&&<div style={{marginBottom:"5px"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:"9px",marginBottom:"2px"}}>
+                      <span style={{color:flexPrepL.length===0&&flexL.length>0?"#f87171":"#84cc16",fontWeight:700}}>FLEX{flexPrepL.length===0&&flexL.length>0?" ⚠":""}</span>
+                      <span style={{color:flexPrepL.length===0&&flexL.length>0?"#f87171":"#84cc16"}}>{flexPrepL.length}/{flexL.length}</span>
+                    </div>
+                    <div style={{height:"6px",background:"#0f1420",borderRadius:"3px",overflow:"hidden"}}>
+                      <div style={{width:(flexL.length>0?Math.round(flexPrepL.length/flexL.length*100):0)+"%",height:"100%",background:flexPrepL.length===0&&flexL.length>0?"#f87171":"#84cc16",borderRadius:"3px"}}/>
+                    </div>
+                  </div>}
+                  {noflexL.length>0&&<div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:"9px",marginBottom:"2px"}}>
+                      <span style={{color:"#6366f1",fontWeight:700}}>NO FLEX</span>
+                      <span style={{color:"#6366f1"}}>{noflexPrepL.length}/{noflexL.length}</span>
+                    </div>
+                    <div style={{height:"6px",background:"#0f1420",borderRadius:"3px",overflow:"hidden"}}>
+                      <div style={{width:(noflexL.length>0?Math.round(noflexPrepL.length/noflexL.length*100):0)+"%",height:"100%",background:"#6366f1",borderRadius:"3px"}}/>
+                    </div>
+                  </div>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>}
+
+      {/* 4. ALERTAS + COBRANZAS */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px"}}>
+        <div>
+          <div style={{color:"#4b5563",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",marginBottom:"8px"}}>Alertas</div>
+          {sinAsigHoy>0&&<div style={{display:"flex",gap:"10px",padding:"10px 14px",borderRadius:"10px",marginBottom:"6px",background:"#1c0404",border:"1px solid #7f1d1d",color:"#f87171",fontSize:"0.75rem"}}><span>🔴</span><div><div style={{fontWeight:700,marginBottom:"2px"}}>{sinAsigHoy} pedidos sin asignar hoy</div><div style={{fontSize:"0.68rem",opacity:.7}}>FLEX: {flexSinAsig.length} · NO FLEX: {noflexSinAsig.length}</div></div></div>}
+          {pagoPend.length>0&&<div style={{display:"flex",gap:"10px",padding:"10px 14px",borderRadius:"10px",marginBottom:"6px",background:"#1c1400",border:"1px solid #78350f",color:"#f59e0b",fontSize:"0.75rem"}}><span>🟡</span><div><div style={{fontWeight:700,marginBottom:"2px"}}>{pagoPend.length} pedidos con pago pendiente</div><div style={{fontSize:"0.68rem",opacity:.7}}>Revisar autorización Cta. Corriente</div></div></div>}
+          {sinDir.length>0&&<div style={{display:"flex",gap:"10px",padding:"10px 14px",borderRadius:"10px",marginBottom:"6px",background:"#1c1400",border:"1px solid #78350f",color:"#f59e0b",fontSize:"0.75rem"}}><span>🟡</span><div><div style={{fontWeight:700,marginBottom:"2px"}}>{sinDir.length} pedidos sin dirección completa</div><div style={{fontSize:"0.68rem",opacity:.7}}>Contactar al cliente antes de despachar</div></div></div>}
+          {preparados.length>0&&<div style={{display:"flex",gap:"10px",padding:"10px 14px",borderRadius:"10px",marginBottom:"6px",background:"#041f14",border:"1px solid #065f46",color:"#34d399",fontSize:"0.75rem"}}><span>🟢</span><div><div style={{fontWeight:700,marginBottom:"2px"}}>{preparados.length} pedidos preparados y listos</div><div style={{fontSize:"0.68rem",opacity:.7}}>FLEX: {flexPrep.length} · NO FLEX: {noflexPrep.length}</div></div></div>}
+          {sinAsigHoy===0&&pagoPend.length===0&&sinDir.length===0&&<div style={{display:"flex",gap:"10px",padding:"10px 14px",borderRadius:"10px",background:"#041f14",border:"1px solid #065f46",color:"#34d399",fontSize:"0.75rem"}}><span>✅</span><div style={{fontWeight:700}}>Sin alertas pendientes</div></div>}
+        </div>
+
+        <div>
+          <div style={{color:"#4b5563",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",marginBottom:"8px"}}>Cobranzas por logística</div>
+          <div style={{...cardSt,padding:0,overflow:"hidden"}}>
+            <div style={{background:"#12172a",padding:"8px 14px",borderBottom:"1px solid #252d40",display:"grid",gridTemplateColumns:"80px 1fr 1fr 1fr",gap:"8px"}}>
+              {["Logística","Deuda anterior","Sale hoy","Total"].map((h,i)=>(
+                <div key={i} style={{color:i===1?"#f87171":i===2?"#f59e0b":"#6b7280",fontSize:"0.58rem",fontWeight:700,textTransform:"uppercase",textAlign:i>0?"right":"left"}}>{h}</div>
+              ))}
+            </div>
+            {cobPorLog.length===0&&<div style={{padding:"1rem",color:"#4b5563",fontSize:"0.75rem",textAlign:"center"}}>Sin cobranzas pendientes</div>}
+            {cobPorLog.map(({l,deudaAnterior,saleHoy,total:tot,diasDeuda})=>{
+              const lcD2=lc[l];
+              const atrasado=diasDeuda>=2;
+              const revisar=diasDeuda===1;
+              return(
+                <div key={l} style={{display:"grid",gridTemplateColumns:"80px 1fr 1fr 1fr",gap:"8px",padding:"8px 14px",borderBottom:"1px solid #1a1f2e",alignItems:"center",background:atrasado?"#1c0404":revisar?"#1c1000":"transparent"}}>
+                  <div>
+                    <div style={{color:lcD2.color,fontWeight:700,fontSize:"0.82rem"}}>{l}</div>
+                    {atrasado&&<div style={{background:"#450a0a",color:"#f87171",border:"1px solid #7f1d1d",padding:"1px 6px",borderRadius:"4px",fontSize:"9px",fontWeight:700,marginTop:"2px",display:"inline-block"}}>⚠ Atrasado</div>}
+                    {revisar&&<div style={{background:"#1c1000",color:"#f59e0b",border:"1px solid #78350f",padding:"1px 6px",borderRadius:"4px",fontSize:"9px",fontWeight:700,marginTop:"2px",display:"inline-block"}}>⚠ Revisar</div>}
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    {deudaAnterior>0?<><div style={{color:"#f87171",fontWeight:700,fontSize:"0.78rem"}}>{fmt(deudaAnterior)}</div><div style={{color:"#6b7280",fontSize:"9px"}}>{diasDeuda} día{diasDeuda>1?"s":""} pend.</div></>:<span style={{color:"#4b5563"}}>—</span>}
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    {saleHoy>0?<span style={{color:"#f59e0b",fontWeight:700,fontSize:"0.78rem"}}>{fmt(saleHoy)}</span>:<span style={{color:"#4b5563"}}>—</span>}
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <span style={{color:atrasado?"#f87171":"#e5e7eb",fontWeight:700,fontSize:"0.82rem"}}>{fmt(tot)}</span>
+                  </div>
+                </div>
+              );
+            })}
+            {cobPorLog.length>0&&(()=>{
+              const totDeu=cobPorLog.reduce((s,x)=>s+x.deudaAnterior,0);
+              const totHoy=cobPorLog.reduce((s,x)=>s+x.saleHoy,0);
+              const totTot=cobPorLog.reduce((s,x)=>s+x.total,0);
+              return<div style={{display:"grid",gridTemplateColumns:"80px 1fr 1fr 1fr",gap:"8px",padding:"8px 14px",background:"#12172a",borderTop:"2px solid #252d40"}}>
+                <span style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase"}}>Total</span>
+                <div style={{textAlign:"right",color:"#f87171",fontWeight:800,fontSize:"0.82rem"}}>{totDeu>0?fmt(totDeu):"—"}</div>
+                <div style={{textAlign:"right",color:"#f59e0b",fontWeight:800,fontSize:"0.82rem"}}>{totHoy>0?fmt(totHoy):"—"}</div>
+                <div style={{textAlign:"right",color:"#e5e7eb",fontWeight:800,fontSize:"0.88rem"}}>{fmt(totTot)}</div>
+              </div>;
+            })()}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ScrollTop(){
   const [vis,setVis]=useState(false);
   useEffect(()=>{
@@ -2158,7 +2414,7 @@ export default function App(){
       return next;
     });
   },[]);
-  const [tab,setTab]=useState("envios");
+  const [tab,setTab]=useState("tablero");
   const [error,setError]=useState("");
   const [loading,setLoading]=useState(false);
   const [syncLoading,setSyncLoading]=useState(true);
@@ -2211,6 +2467,7 @@ export default function App(){
   const esAdmin=sesion?.rol==="admin";
   const esColaborador=sesion?.rol==="colaborador";
   const TABS=[
+    {id:"tablero",l:"📊 Tablero"},
     {id:"envios",l:"NO FLEX"},
     {id:"flex",l:"FLEX"},
     {id:"imprimir",l:"Imprimir"},
@@ -2256,6 +2513,7 @@ export default function App(){
       <ScrollTop/>
       <div style={{padding:"0.85rem 1rem",maxWidth:"1400px",margin:"0 auto"}}>
         {error&&<div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.8rem",background:"#1c0a0a",border:"1px solid #7f1d1d",color:"#fca5a5",fontSize:"0.8rem"}}>{error}</div>}
+        {tab==="tablero" &&<TabTablero envios={envios} lc={lc} zc={zc}/>}
         {tab==="envios"  &&<TabEnvios   envios={envios.filter(e=>e.origen!=="ML")} setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel}/>}
         {tab==="flex"    &&<TabEnvios   envios={envios.filter(e=>e.origen==="ML")}  setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel}/>}
         {tab==="imprimir"&&<TabImprimir envios={envios} zc={zc} lc={lc}/>}
