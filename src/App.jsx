@@ -227,6 +227,7 @@ function getWeekNum(ds){const d=new Date(ds+"T00:00:00"),day=d.getDay()||7;d.set
 function weekLabel(ds){const d=new Date(ds+"T00:00:00"),day=d.getDay()||7;const mon=new Date(d);mon.setDate(d.getDate()-(day-1));const sun=new Date(mon);sun.setDate(mon.getDate()+6);const f=x=>String(x.getDate()).padStart(2,"0")+"/"+String(x.getMonth()+1).padStart(2,"0");return"Sem."+getWeekNum(ds).w+" ("+f(mon)+"-"+f(sun)+")";}
 
 const fmt=n=>n?"$"+Number(n).toLocaleString("es-AR"):"-";
+function beepOK(){try{const ctx=new(window.AudioContext||window.webkitAudioContext)();const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.frequency.setValueAtTime(880,ctx.currentTime);o.frequency.setValueAtTime(1100,ctx.currentTime+0.1);g.gain.setValueAtTime(0.3,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.3);o.start(ctx.currentTime);o.stop(ctx.currentTime+0.3);}catch(e){}}
 const fmtN=n=>Number(n).toLocaleString("es-AR");
 
 function exportarXLSX(filas,nombreArchivo){
@@ -306,7 +307,7 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc}){
   const hoy=fechaHoy();
   const [asig,setAsig]=useState({});
   const [modo,setModo]=useState("zona");
-  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([lkey])=>lkey);
   const getA=id=>asig[id]||{trans:"",fecha:hoy,turno:""};
   const setA=(id,k,v)=>setAsig(p=>({...p,[id]:{...getA(id),[k]:v}}));
   const setGrupo=(ids,k,v)=>setAsig(p=>{const n={...p};ids.forEach(id=>{n[id]={...getA(id),[k]:v}});return n;});
@@ -396,7 +397,7 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc}){
 function PanelEdit({envio,onSave,onClose,lc}){
   const [e,setE]=useState({...envio});
   const set=(k,v)=>setE(p=>({...p,[k]:v}));
-  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([lkey])=>lkey);
   const handleTrans=l=>{const t=e.trans===l?"":l;setE(p=>({...p,trans:t,estado:t?"asignado":(p.estado==="cancelado"?"cancelado":"sin_asignar")}));};
   const esTN = e.origen === "Tienda Nube";
   const pagoOk = puedeAsignar(e);
@@ -458,7 +459,7 @@ function PanelEdit({envio,onSave,onClose,lc}){
         </div>
         <div>
           <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Estado</div>
-          <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{Object.entries(ESTADO_C).map(([k,v])=><button key={k} onClick={()=>set("estado",k)} style={S.chip(e.estado===k,v.t,v.bg)}>{v.label}</button>)}</div>
+          <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{Object.entries(ESTADO_C).map(([lkey,v])=><button key={k} onClick={()=>set("estado",k)} style={S.chip(e.estado===k,v.t,v.bg)}>{v.label}</button>)}</div>
         </div>
         <div>
           <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Bultos</div>
@@ -541,7 +542,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
   const [modoSel,setModoSel]=useState(false);
   const tmap=buildTarifaMap(zc);
   const getImp=e=>calcImp(e,tmap,lc,zc);
-  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([lkey])=>lkey);
   const getRango=()=>{
     if(modFecha==="todos") return{d:"",h:""};
     if(modFecha==="hoy")    return{d:hoy,h:hoy};
@@ -757,7 +758,7 @@ function TabImprimir({envios,zc,lc}){
   const [turno,setTurno]=useState("TODOS");
   const [filZona,setFilZona]=useState("TODAS");
   const [filOrigen,setFilOrigen]=useState("TODOS"); // TODOS | FLEX | NO_FLEX
-  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([lkey])=>lkey);
   const tmap=buildTarifaMap(zc);
   const getImp=e=>calcImp(e,tmap,lc,zc);
   const lista=envios.filter(e=>{
@@ -869,7 +870,7 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes}){
   const [err,setErr]=useState("");
   const [dupWarn,setDupWarn]=useState("");
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
-  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([lkey])=>lkey);
   useEffect(()=>{const p=cpAPartido(f.cp);if(p)set("partido",p);},[f.cp]);
   useEffect(()=>{if(f.nroSeguimiento&&(enviosExistentes||[]).some(e=>e.nroSeguimiento===f.nroSeguimiento)){setDupWarn("Ya existe un envio con este numero de seguimiento.");}else{setDupWarn("");};},[f.nroSeguimiento]);
   const handleTrans=l=>{const t=f.trans===l?"":l;setF(p=>({...p,trans:t,estado:t?"asignado":"sin_asignar"}));};
@@ -946,7 +947,7 @@ function TabTarifas({zc,setZc,lc,setLc}){
         <button onClick={()=>setSubTab("zonas")} style={S.btn(subTab==="zonas")}>Zonas y precios</button>
         <button onClick={()=>setSubTab("bultos")} style={S.btn(subTab==="bultos")}>Matriz de precios</button>
         <button onClick={()=>setSubTab("logisticas")} style={S.btn(subTab==="logisticas")}>Logisticas</button>
-        {subTab!=="logisticas"&&<><span style={{color:"#374151",fontSize:"0.65rem",margin:"0 4px"}}>|</span>{Object.entries(lc).filter(([,v])=>v.activa).map(([k,v])=><button key={k} onClick={()=>setLogSel(k)} style={S.btn(logSel===k,v.color)}>{k}</button>)}</>}
+        {subTab!=="logisticas"&&<><span style={{color:"#374151",fontSize:"0.65rem",margin:"0 4px"}}>|</span>{Object.entries(lc).filter(([,v])=>v.activa).map(([lkey,v])=><button key={k} onClick={()=>setLogSel(lkey)} style={S.btn(logSel===lkey,v.color)}>{lkey}</button>)}</>}
         {guardado&&<span style={{color:"#10b981",fontSize:"0.72rem",marginLeft:"8px"}}>✓ Guardado</span>}
         <button onClick={()=>{setZc(p=>{const next={...p};setDoc(doc(db,"config","zonas"),next).catch(console.error);return next;});setLc(p=>{const next={...p};setDoc(doc(db,"config","logisticas"),next).catch(console.error);return next;});setGuardado(true);setTimeout(()=>setGuardado(false),2000);}} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.35rem 1rem",marginLeft:"auto",fontSize:"0.78rem"}}>Guardar</button>
       </div>
@@ -1070,7 +1071,7 @@ function TabTarifas({zc,setZc,lc,setLc}){
       })()}
       {subTab==="logisticas"&&<div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:"0.85rem",marginBottom:"1rem"}}>
-          {Object.entries(lc).map(([k,v])=>(
+          {Object.entries(lc).map(([lkey,v])=>(
             <div key={k} style={{...S.card,borderTop:"3px solid "+(v.activa?v.color:"#374151"),overflow:"hidden",opacity:v.activa?1:0.6}}>
               <div style={{padding:"0.75rem 1rem",display:"flex",alignItems:"center",justifyContent:"space-between"}}><span style={{color:v.activa?v.color:"#6b7280",fontWeight:800,fontSize:"1rem"}}>{v.nombre}</span><button onClick={()=>toggleLog(k)} style={{...S.btnSm(v.activa,v.color),padding:"4px 12px"}}>{v.activa?"Activa":"Desactivar"}</button></div>
               <div style={{padding:"0 1rem 0.75rem",display:"flex",flexDirection:"column",gap:"6px"}}>
@@ -1125,7 +1126,7 @@ function TabInforme({envios,zc,lc}){
   const [desde,setDesde]=useState(sem.d);
   const [hasta,setHasta]=useState(sem.h);
   const [logSel,setLogSel]=useState("TODAS");
-  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([lkey])=>lkey);
   const tmap=buildTarifaMap(zc);
   const getImp=e=>calcImp(e,tmap,lc,zc);
   const envSem=envios.filter(e=>{
@@ -1830,7 +1831,7 @@ function TabLocalidades() {
 // PANTALLA ASIGNACION TN — agrupa por fecha+turno, pre-rellena fecha/turno
 // ════════════════════════════════════════════════════════════════════
 function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc}){
-  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([lkey])=>lkey);
   // Pre-inicializar asig con fecha y turno del datepicker
   const initAsig=()=>{const a={};borrador.forEach(e=>{a[e.id]={trans:"",fecha:e.fecha||fechaHoy(),turno:e.turno||""};});return a;};
   const [asig,setAsig]=useState(initAsig);
@@ -2198,7 +2199,7 @@ function TabTablero({envios,lc,zc}){
   const flexPct=flex.length>0?Math.round(flexPrep.length/flex.length*100):0;
   const noflexPct=noflex.length>0?Math.round(noflexPrep.length/noflex.length*100):0;
 
-  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([lkey])=>lkey);
 
   // Alertas
   const sinDir=envios.filter(e=>e.alertaDireccion&&getEstado(e)!=="cancelado");
@@ -2437,36 +2438,45 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
   const [bultosEdit,setBultosEdit]=useState({}); // {id: value}
   const inputRef=useRef(null);
   const videoRef=useRef(null);
-  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([lkey])=>lkey);
 
   const ayer=()=>{const d=new Date(hoy+"T00:00:00");d.setDate(d.getDate()-1);return d.toISOString().split("T")[0];};
   const manana=()=>{const d=new Date(hoy+"T00:00:00");d.setDate(d.getDate()+1);return d.toISOString().split("T")[0];};
 
-  // Pedidos de la fecha seleccionada, asignados, no cancelados, NO FLEX
+  // NO FLEX de la fecha seleccionada
   const deFecha=envios.filter(e=>{
     const f=e.fecha||e.fechaVenta||"";
     if(f!==fecha)return false;
     if(getEstado(e)!=="asignado")return false;
-    if(e.origen==="ML")return false; // solo NO FLEX
+    if(e.origen==="ML")return false;
     return true;
   });
 
-  // FLEX siempre de hoy para escaneo
-  const flexHoy=envios.filter(e=>e.origen==="ML"&&(e.fecha||e.fechaVenta||"")===hoy&&getEstado(e)==="asignado");
+  // FLEX de la fecha seleccionada (se muestran en lista + scanner)
+  const flexFecha=envios.filter(e=>{
+    const f=e.fecha||e.fechaVenta||"";
+    return e.origen==="ML"&&f===fecha&&getEstado(e)==="asignado";
+  });
 
-  const filtrados=[...deFecha].filter(e=>{
+  // Todos juntos para el listado
+  const todosLista=[...deFecha,...flexFecha];
+
+  const filtrados=[...todosLista].filter(e=>{
     if(filLog!=="TODOS"&&e.trans!==filLog)return false;
     if(soloPendientes&&e.preparado)return false;
-    if(busqueda){const s=busqueda.toLowerCase();return e.direccion.toLowerCase().includes(s)||(e.nroOrdenTN||"").includes(s)||e.partido.toLowerCase().includes(s);}
+    if(busqueda){const s=busqueda.toLowerCase();return e.direccion.toLowerCase().includes(s)||(e.nroOrdenTN||"").includes(s)||(e.nroSeguimiento||"").includes(s)||e.partido.toLowerCase().includes(s);}
     return true;
   }).sort((a,b)=>{
     if(a.trans!==b.trans)return (a.trans||"").localeCompare(b.trans||"");
+    if(a.origen!==b.origen)return a.origen==="ML"?1:-1; // NO FLEX primero
     const ta=TURNOS.indexOf(a.turno),tb=TURNOS.indexOf(b.turno);
     return ta-tb;
   });
 
-  const preparados=deFecha.filter(e=>e.preparado).length;
-  const total=deFecha.length;
+  const preparados=todosLista.filter(e=>e.preparado).length;
+  const total=todosLista.length;
+  const prepNoflex=deFecha.filter(e=>e.preparado).length;
+  const prepFlex=flexFecha.filter(e=>e.preparado).length;
   const pct=total>0?Math.round(preparados/total*100):0;
 
   // Escaneo QR via camara — BarcodeDetector API (Chrome Android nativo)
@@ -2531,6 +2541,7 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
     if(found.preparado){setResultado({ok:"ya",envio:found,msg:"Ya estaba preparado"});setTimeout(()=>setResultado(null),2500);return;}
     setEnvios(p=>p.map(e=>e.id===found.id?{...e,preparado:true}:e));
     setResultado({ok:true,envio:found,msg:"✓ Preparado"});
+    beepOK();
     setTimeout(()=>setResultado(null),2500);
   },[envios,setEnvios]);
 
@@ -2582,11 +2593,19 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
         <div style={{display:"flex",gap:"8px",marginBottom:"0.75rem"}}>
           <div style={{...S.card,padding:"0.7rem 1rem",flex:1,borderLeft:"3px solid #6366f1"}}>
             <div style={{color:"#6366f1",fontWeight:800,fontSize:"1.5rem",lineHeight:1}}>{total}</div>
-            <div style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase",marginTop:"2px"}}>NO FLEX hoy</div>
+            <div style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase",marginTop:"2px"}}>Total</div>
+            <div style={{display:"flex",gap:"4px",marginTop:"4px"}}>
+              <span style={{background:"#0d1c04",color:"#84cc16",border:"1px solid #84cc16",padding:"1px 6px",borderRadius:"4px",fontSize:"9px",fontWeight:700}}>FLEX {flexFecha.length}</span>
+              <span style={{background:"#12172a",color:"#6366f1",border:"1px solid #6366f1",padding:"1px 6px",borderRadius:"4px",fontSize:"9px",fontWeight:700}}>NOFLEX {deFecha.length}</span>
+            </div>
           </div>
           <div style={{...S.card,padding:"0.7rem 1rem",flex:1,borderLeft:"3px solid #10b981"}}>
             <div style={{color:"#10b981",fontWeight:800,fontSize:"1.5rem",lineHeight:1}}>{preparados}</div>
             <div style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase",marginTop:"2px"}}>Preparados</div>
+            <div style={{display:"flex",gap:"4px",marginTop:"4px"}}>
+              <span style={{color:"#84cc16",fontSize:"9px",fontWeight:700}}>F:{prepFlex}/{flexFecha.length}</span>
+              <span style={{color:"#6366f1",fontSize:"9px",fontWeight:700}}>NF:{prepNoflex}/{deFecha.length}</span>
+            </div>
           </div>
           <div style={{...S.card,padding:"0.7rem 1rem",flex:1,borderLeft:"3px solid #f59e0b"}}>
             <div style={{color:"#f59e0b",fontWeight:800,fontSize:"1.5rem",lineHeight:1}}>{total-preparados}</div>
@@ -2606,7 +2625,7 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
         {/* Scanner FLEX */}
         <div style={{...S.card,padding:"0.85rem 1rem",marginBottom:"0.75rem",border:"1px solid #84cc1633"}}>
           <div style={{color:"#84cc16",fontWeight:700,fontSize:"0.7rem",textTransform:"uppercase",letterSpacing:".06em",marginBottom:"8px"}}>
-            Escaner FLEX {flexHoy.length>0?`· ${flexHoy.filter(e=>e.preparado).length}/${flexHoy.length} preparados`:"· sin FLEX hoy"}
+            Escaner FLEX {flexFecha.length>0?`· ${prepFlex}/${flexFecha.length} preparados`:"· sin FLEX esta fecha"}
           </div>
           <div style={{display:"flex",gap:"8px",marginBottom:resultado?"8px":"0"}}>
             <input ref={inputRef} value={qrInput} onChange={e=>setQrInput(e.target.value)}
