@@ -2469,32 +2469,60 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
   const total=deFecha.length;
   const pct=total>0?Math.round(preparados/total*100):0;
 
-  // Escaneo QR via camara
+  // Escaneo QR via camara — BarcodeDetector API (Chrome Android nativo)
   useEffect(()=>{
     if(!camara)return;
     let stream=null;
-    let animId=null;
+    let rafId=null;
+    let activo=true;
+    const canvas=document.createElement("canvas");
+    const ctx=canvas.getContext("2d");
+
     const startCam=async()=>{
       try{
-        stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
-        if(videoRef.current){videoRef.current.srcObject=stream;videoRef.current.play();}
-        // Cargar html5-qrcode via script tag
-        if(!window.Html5Qrcode){
-          await new Promise((res,rej)=>{
-            const s=document.createElement("script");
-            s.src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js";
-            s.onload=res;s.onerror=rej;
-            document.head.appendChild(s);
-          });
+        stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment",width:{ideal:1280},height:{ideal:720}}});
+        if(!videoRef.current||!activo)return;
+        videoRef.current.srcObject=stream;
+        await videoRef.current.play();
+
+        // Verificar soporte de BarcodeDetector
+        if(!("BarcodeDetector" in window)){
+          setResultado({ok:false,msg:"Tu navegador no soporta escaneo QR. Usá el campo de texto."});
+          setCamara(false);
+          return;
         }
-      }catch(err){console.error(err);setCamara(false);}
+        const detector=new window.BarcodeDetector({formats:["qr_code","code_128","code_39","ean_13"]});
+
+        const scan=async()=>{
+          if(!activo||!videoRef.current||videoRef.current.readyState<2){rafId=requestAnimationFrame(scan);return;}
+          try{
+            const barcodes=await detector.detect(videoRef.current);
+            if(barcodes.length>0){
+              const val=barcodes[0].rawValue;
+              // Extraer solo numeros del QR de ML (el nro de seguimiento)
+              const nums=val.replace(/\D/g,"");
+              const nro=nums.length>8?nums:val;
+              procesarScan(nro);
+              setCamara(false);
+              return;
+            }
+          }catch(e){}
+          if(activo)rafId=requestAnimationFrame(scan);
+        };
+        rafId=requestAnimationFrame(scan);
+      }catch(err){
+        console.error("Camara error:",err);
+        setResultado({ok:false,msg:"No se pudo acceder a la cámara. Verificá los permisos."});
+        setCamara(false);
+      }
     };
     startCam();
     return()=>{
+      activo=false;
+      if(rafId)cancelAnimationFrame(rafId);
       if(stream)stream.getTracks().forEach(t=>t.stop());
-      if(animId)cancelAnimationFrame(animId);
     };
-  },[camara]);
+  },[camara,procesarScan]);
 
   const procesarScan=useCallback((nro)=>{
     const srch=nro.trim();if(!srch)return;
