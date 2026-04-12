@@ -5,10 +5,9 @@ export default defineConfig({
   plugins: [react()],
   build: {
     minify: 'esbuild',
-    rollupOptions: {
-      output: {
-        manualChunks: undefined,
-      }
-    }
+    target: 'es2015',
+  },
+  esbuild: {
+    keepNames: true,
   },
 });

@@ -186,7 +186,7 @@ function getMatrizVigente(cfg,fechaEnvio){
   const versiones=[
     {desde:cfg.tarifaVigenciaDesde||"2000-01-01",matrix:cfg.tarifaMatrix},
     ...((cfg.tarifaHistorial||[]).map(h=>({desde:hv.vigenciaDesde,matrix:hv.tarifaMatrix})))
-  ].filter(vv =>v.matrix).sort((sortA,sortB)=>sortB.desde.localeCompare(sortA.desde));
+  ].filter(v =>v.matrix).sort((sortA,sortB)=>sortB.desde.localeCompare(sortA.desde));
   // La mas reciente que sea <= fechaEnvio
   const v=versiones.find(v=>vv.desde<=fecha);
   return v?.matrix||cfg.tarifaMatrix||null;
@@ -219,7 +219,7 @@ function calcImp(e,tmap,lc,zc){
       }
     }
   }
-  if(cfg&&bultos>1){const pb=cfg.preciosBultos?.find(xv =>x.b===bultos);if(pb&&pb.p>0)return pb.p;}
+  if(cfg&&bultos>1){const pb=cfg.preciosBultos?.find(x =>x.b===bultos);if(pb&&pb.p>0)return pb.p;}
   return tmap[e.partido]?.[e.trans]||0;
 }
 
@@ -307,14 +307,14 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc}){
   const hoy=fechaHoy();
   const [asig,setAsig]=useState({});
   const [modo,setModo]=useState("zona");
-  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([lkey])=>lkey);
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const getA=id=>asig[id]||{trans:"",fecha:hoy,turno:""};
   const setA=(id,k,v)=>setAsig(p=>({...p,[id]:{...getA(id),[k]:v}}));
   const setGrupo=(ids,k,v)=>setAsig(p=>{const n={...p};ids.forEach(id=>{n[id]={...getA(id),[k]:v}});return n;});
   const getGrupo=(ids,k)=>{const vals=[...new Set(ids.map(id=>getA(id)[k]||""))];return vals.length===1?vals[0]:"";};
   const grupos={};
   borrador.forEach(e=>{const key=modo==="zona"?(getZonaML(e.partido)||"Otra"):(e.partido||"Sin partido");if(!grupos[key])grupos[key]=[];grupos[key].push(e);});
-  const grupoKeys=modo==="zona"?[...ZONAS_ML_LIST,"Otra"].filter(kv =>grupos[k]):Object.keys(grupos).sort();
+  const grupoKeys=modo==="zona"?[...ZONAS_ML_LIST,"Otra"].filter(k =>grupos[k]):Object.keys(grupos).sort();
   const totalAsig=borrador.filter(e=>getA(e.id).trans).length;
   const confirmar=()=>onConfirmar(borrador.map(e=>({...e,...getA(e.id),estado:getA(e.id).trans?"asignado":"sin_asignar"})));
   return(
@@ -350,7 +350,7 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc}){
                 <div style={{display:"grid",gridTemplateColumns:"70px 1fr",rowGap:"5px",columnGap:"0.75rem",alignItems:"center"}}>
                   <span style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase"}}>Logistica</span>
                   <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
-                    {logActivas.map(itm =><button key={l} onClick={()=>setGrupo(ids,"trans",gT===l?"":l)} style={S.btnSm(gT===l,lc[l]?.color||"#6366f1")}>{l}</button>)}
+                    {logActivas.map(l =><button key={l} onClick={()=>setGrupo(ids,"trans",gT===l?"":l)} style={S.btnSm(gT===l,lc[l]?.color||"#6366f1")}>{l}</button>)}
                     {gT&&<button onClick={()=>setGrupo(ids,"trans","")} style={{...S.btnSm(false),color:"#6b7280",fontSize:"0.68rem"}}>x</button>}
                   </div>
                   <span style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase"}}>Fecha</span>
@@ -361,7 +361,7 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc}){
                   </div>
                   <span style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase"}}>Turno</span>
                   <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
-                    {TURNOS.map(tv =><button key={t} onClick={()=>setGrupo(ids,"turno",gTu===t?"":t)} style={S.btnSm(gTu===t,"#8b5cf6")}>{t}</button>)}
+                    {TURNOS.map(t =><button key={t} onClick={()=>setGrupo(ids,"turno",gTu===t?"":t)} style={S.btnSm(gTu===t,"#8b5cf6")}>{t}</button>)}
                   </div>
                 </div>
               </div>
@@ -374,9 +374,9 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc}){
                       <div style={{color:"#4b5563",fontSize:"0.66rem",marginTop:"1px"}}>CP {e.cp} · {e.partido} · ...{e.id.slice(-8)}</div>
                     </div>
                     <div style={{display:"flex",gap:"3px",flexWrap:"wrap",alignItems:"center"}}>
-                      {logActivas.map(itm =><button key={l} onClick={()=>setA(e.id,"trans",a.trans===l?"":l)} style={S.btnSm(a.trans===l,lc[l]?.color||"#6366f1")}>{l}</button>)}
+                      {logActivas.map(l =><button key={l} onClick={()=>setA(e.id,"trans",a.trans===l?"":l)} style={S.btnSm(a.trans===l,lc[l]?.color||"#6366f1")}>{l}</button>)}
                       <span style={{color:"#252d40",padding:"0 2px"}}>|</span>
-                      {TURNOS.map(tv =><button key={t} onClick={()=>setA(e.id,"turno",a.turno===t?"":t)} style={S.btnSm(a.turno===t,"#8b5cf6")}>{t}</button>)}
+                      {TURNOS.map(t =><button key={t} onClick={()=>setA(e.id,"turno",a.turno===t?"":t)} style={S.btnSm(a.turno===t,"#8b5cf6")}>{t}</button>)}
                       {a.trans&&<Bdg label={a.fecha?fmtCorta(a.fecha):"sin fecha"} bg="#12172a" t="#6b7280"/>}
                     </div>
                   </div>
@@ -397,7 +397,7 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc}){
 function PanelEdit({envio,onSave,onClose,lc}){
   const [e,setE]=useState({...envio});
   const set=(k,v)=>setE(p=>({...p,[k]:v}));
-  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([lkey])=>lkey);
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const handleTrans=l=>{const t=e.trans===l?"":l;setE(p=>({...p,trans:t,estado:t?"asignado":(p.estado==="cancelado"?"cancelado":"sin_asignar")}));};
   const esTN = e.origen === "Tienda Nube";
   const pagoOk = puedeAsignar(e);
@@ -443,11 +443,11 @@ function PanelEdit({envio,onSave,onClose,lc}){
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.6rem 1rem",marginBottom:"0.65rem",opacity:(esTN&&e.pagoEstado==="pendiente")?0.35:1,pointerEvents:(esTN&&e.pagoEstado==="pendiente")?"none":"auto"}}>
         <div>
           <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Logistica</div>
-          <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{logActivas.map(itm =><button key={l} onClick={()=>handleTrans(l)} style={S.chip(e.trans===l,lc[l].color,lc[l].bg)}>{l}</button>)}</div>
+          <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{logActivas.map(l =><button key={l} onClick={()=>handleTrans(l)} style={S.chip(e.trans===l,lc[l].color,lc[l].bg)}>{l}</button>)}</div>
         </div>
         <div>
           <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Turno</div>
-          <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{TURNOS.map(tv =>{const tc=TURNO_C[t]||{c:"#a78bfa",bg:"#130d2a"};return <button key={t} onClick={()=>set("turno",e.turno===t?"":t)} style={S.chip(e.turno===t,tc.c,tc.bg)}>{t}</button>;})}</div>
+          <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{TURNOS.map(t =>{const tc=TURNO_C[t]||{c:"#a78bfa",bg:"#130d2a"};return <button key={t} onClick={()=>set("turno",e.turno===t?"":t)} style={S.chip(e.turno===t,tc.c,tc.bg)}>{t}</button>;})}</div>
         </div>
         <div>
           <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Fecha entrega</div>
@@ -459,7 +459,7 @@ function PanelEdit({envio,onSave,onClose,lc}){
         </div>
         <div>
           <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Estado</div>
-          <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{Object.entries(ESTADO_C).map(([lkey,v])=><button key={k} onClick={()=>set("estado",k)} style={S.chip(e.estado===k,v.t,v.bg)}>{v.label}</button>)}</div>
+          <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{Object.entries(ESTADO_C).map(([k,v])=><button key={k} onClick={()=>set("estado",k)} style={S.chip(e.estado===k,v.t,v.bg)}>{v.label}</button>)}</div>
         </div>
         <div>
           <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Bultos</div>
@@ -492,7 +492,7 @@ function PanelEdit({envio,onSave,onClose,lc}){
       {e.trans&&<div style={{marginBottom:"0.65rem"}}>
         <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"6px"}}>Estado de liquidacion</div>
         <div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>
-          {[{k:"normal",l:"Normal",c:"#10b981"},{k:"cancelado_liq",l:"Cancelado",c:"#f87171"},{k:"no_abonado",l:"No abonado por demora",c:"#f59e0b"}].map(xv =>(
+          {[{k:"normal",l:"Normal",c:"#10b981"},{k:"cancelado_liq",l:"Cancelado",c:"#f87171"},{k:"no_abonado",l:"No abonado por demora",c:"#f59e0b"}].map(x =>(
             <button key={x.k} onClick={()=>set("estadoLiq",x.k)} style={{...S.btnSm((e.estadoLiq||"normal")===x.k,x.c),padding:"3px 10px",fontSize:"0.72rem"}}>{x.l}</button>
           ))}
         </div>
@@ -542,7 +542,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
   const [modoSel,setModoSel]=useState(false);
   const tmap=buildTarifaMap(zc);
   const getImp=e=>calcImp(e,tmap,lc,zc);
-  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([lkey])=>lkey);
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const getRango=()=>{
     if(modFecha==="todos") return{d:"",h:""};
     if(modFecha==="hoy")    return{d:hoy,h:hoy};
@@ -573,7 +573,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
   const activos=filtrados.filter(e=>getEstado(e)!=="cancelado");
   const totalImp=activos.reduce((s,e)=>s+getImp(e),0);
   const sinAsig=filtrados.filter(e=>getEstado(e)==="sin_asignar").length;
-  const porTrans=logActivas.map(itm =>({l,n:activos.filter(e=>e.trans===l).length,v:activos.filter(e=>e.trans===l).reduce((s,e)=>s+getImp(e),0)})).filter(xv =>x.n>0);
+  const porTrans=logActivas.map(l =>({l,n:activos.filter(e=>e.trans===l).length,v:activos.filter(e=>e.trans===l).reduce((s,e)=>s+getImp(e),0)})).filter(x =>x.n>0);
   const toggleSel=id=>setSeleccionados(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
   const saveEnvio=updated=>{setEnvios(p=>p.map(e=>e.id===updated.id?{...updated,estado:getEstado(updated)}:e));setEditId(null);};
   const eliminar=id=>{if(window.confirm("Eliminar este envio?"))setEnvios(p=>p.filter(e=>e.id!==id));};
@@ -606,25 +606,25 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
         <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}}>
           <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"38px"}}>Fecha</span>
           <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
-            {[{k:"todos",l:"Todos"},{k:"hoy",l:"Hoy"},{k:"manana",l:"Manana"},{k:"ayer",l:"Ayer"},{k:"semana",l:"Semana"},{k:"rango",l:"Rango"}].map(xv =><button key={x.k} onClick={()=>setModFecha(x.k)} style={S.btnSm(modFecha===x.k)}>{x.l}</button>)}
+            {[{k:"todos",l:"Todos"},{k:"hoy",l:"Hoy"},{k:"manana",l:"Manana"},{k:"ayer",l:"Ayer"},{k:"semana",l:"Semana"},{k:"rango",l:"Rango"}].map(x =><button key={x.k} onClick={()=>setModFecha(x.k)} style={S.btnSm(modFecha===x.k)}>{x.l}</button>)}
             {modFecha==="rango"&&<><input type="date" value={rangoD} onChange={e=>setRangoD(e.target.value)} style={{...S.input,padding:"3px 7px",width:"128px",fontSize:"0.75rem"}}/><input type="date" value={rangoH} onChange={e=>setRangoH(e.target.value)} style={{...S.input,padding:"3px 7px",width:"128px",fontSize:"0.75rem"}}/></>}
           </div>
           <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
           <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"38px"}}>Estado</span>
           <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
-            {[{k:"no_cancelado",l:"Todos"},{k:"sin_asignar",l:"Sin asignar"},{k:"asignado",l:"Asignado"},{k:"cancelado",l:"Cancelado"}].map(xv =><button key={x.k} onClick={()=>setFilEstado(x.k)} style={S.btnSm(filEstado===x.k,ESTADO_C[x.k]?.t||"#6366f1")}>{x.l}</button>)}
+            {[{k:"no_cancelado",l:"Todos"},{k:"sin_asignar",l:"Sin asignar"},{k:"asignado",l:"Asignado"},{k:"cancelado",l:"Cancelado"}].map(x =><button key={x.k} onClick={()=>setFilEstado(x.k)} style={S.btnSm(filEstado===x.k,ESTADO_C[x.k]?.t||"#6366f1")}>{x.l}</button>)}
           </div>
           <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
           <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"38px"}}>Origen</span>
           <div style={{display:"flex",gap:"3px"}}>
-            {[{k:"TODOS",l:"Todos"},{k:"TN",l:"TN"},{k:"Manual",l:"Manual"}].map(xv =><button key={x.k} onClick={()=>setFilOrigen(x.k)} style={S.btnSm(filOrigen===x.k,x.k==="TN"?"#38bdf8":"#6366f1")}>{x.l}</button>)}
+            {[{k:"TODOS",l:"Todos"},{k:"TN",l:"TN"},{k:"Manual",l:"Manual"}].map(x =><button key={x.k} onClick={()=>setFilOrigen(x.k)} style={S.btnSm(filOrigen===x.k,x.k==="TN"?"#38bdf8":"#6366f1")}>{x.l}</button>)}
           </div>
         </div>
         {/* Fila 2: Logistica */}
         <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap",borderTop:"1px solid #252d40",paddingTop:"5px"}}>
           <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"38px"}}>Logist.</span>
           <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
-            {["TODOS",...logActivas,"SIN ASIGNAR"].map(tv =><button key={t} onClick={()=>setFilTrans(t)} style={S.btnSm(filTrans===t,t==="SIN ASIGNAR"?"#f59e0b":lc[t]?.color||"#6366f1")}>{t}</button>)}
+            {["TODOS",...logActivas,"SIN ASIGNAR"].map(t =><button key={t} onClick={()=>setFilTrans(t)} style={S.btnSm(filTrans===t,t==="SIN ASIGNAR"?"#f59e0b":lc[t]?.color||"#6366f1")}>{t}</button>)}
           </div>
         </div>
         {/* Fila 3: Zona + Turno + Buscar */}
@@ -636,7 +636,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
           <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
           <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"38px"}}>Turno</span>
           <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
-            {["TODOS",...TURNOS].map(tv =><button key={t} onClick={()=>setFilTurno(t)} style={S.btnSm(filTurno===t,"#8b5cf6")}>{t}</button>)}
+            {["TODOS",...TURNOS].map(t =><button key={t} onClick={()=>setFilTurno(t)} style={S.btnSm(filTurno===t,"#8b5cf6")}>{t}</button>)}
           </div>
           <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="🔍 Buscar..." style={{...S.input,width:"190px",marginLeft:"auto"}}/>
         </div>
@@ -758,7 +758,7 @@ function TabImprimir({envios,zc,lc}){
   const [turno,setTurno]=useState("TODOS");
   const [filZona,setFilZona]=useState("TODAS");
   const [filOrigen,setFilOrigen]=useState("TODOS"); // TODOS | FLEX | NO_FLEX
-  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([lkey])=>lkey);
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const tmap=buildTarifaMap(zc);
   const getImp=e=>calcImp(e,tmap,lc,zc);
   const lista=envios.filter(e=>{
@@ -800,14 +800,14 @@ function TabImprimir({envios,zc,lc}){
         </div>
         <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
         <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
-          {["TODOS","FLEX","NO_FLEX"].map(obj =><button key={o} onClick={()=>setFilOrigen(o)} style={o==="FLEX"?{...S.btnSm(filOrigen===o,"#84cc16"),border:filOrigen===o?"1px solid #84cc16":"1px solid #1a3008",color:filOrigen===o?"#84cc16":"#4b7a10"}:S.btnSm(filOrigen===o,"#6366f1")}>{o==="TODOS"?"Todos":o==="FLEX"?"Solo FLEX":"NO FLEX"}</button>)}
+          {["TODOS","FLEX","NO_FLEX"].map(o =><button key={o} onClick={()=>setFilOrigen(o)} style={o==="FLEX"?{...S.btnSm(filOrigen===o,"#84cc16"),border:filOrigen===o?"1px solid #84cc16":"1px solid #1a3008",color:filOrigen===o?"#84cc16":"#4b7a10"}:S.btnSm(filOrigen===o,"#6366f1")}>{o==="TODOS"?"Todos":o==="FLEX"?"Solo FLEX":"NO FLEX"}</button>)}
         </div>
         <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
-        <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["TODOS",...logActivas].map(tv =><button key={t} onClick={()=>setTrans(t)} style={S.btnSm(trans===t,lc[t]?.color||"#6366f1")}>{t}</button>)}</div>
+        <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["TODOS",...logActivas].map(t =><button key={t} onClick={()=>setTrans(t)} style={S.btnSm(trans===t,lc[t]?.color||"#6366f1")}>{t}</button>)}</div>
         <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
         <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["TODAS",...ZONAS_ML_LIST].map(z=><button key={zv} onClick={()=>setFilZona(z)} style={S.btnSm(filZona===z,ZONA_ML_COLOR[z]||"#6366f1")}>{z}</button>)}</div>
         <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
-        <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["TODOS",...TURNOS].map(tv =><button key={t} onClick={()=>setTurno(t)} style={S.btnSm(turno===t,"#8b5cf6")}>{t}</button>)}</div>
+        <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["TODOS",...TURNOS].map(t =><button key={t} onClick={()=>setTurno(t)} style={S.btnSm(turno===t,"#8b5cf6")}>{t}</button>)}</div>
         <div style={{marginLeft:"auto",display:"flex",gap:"6px"}}>
           <button onClick={()=>{
             const filas=lista.map((e,i)=>{
@@ -870,7 +870,7 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes}){
   const [err,setErr]=useState("");
   const [dupWarn,setDupWarn]=useState("");
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
-  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([lkey])=>lkey);
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   useEffect(()=>{const p=cpAPartido(f.cp);if(p)set("partido",p);},[f.cp]);
   useEffect(()=>{if(f.nroSeguimiento&&(enviosExistentes||[]).some(e=>e.nroSeguimiento===f.nroSeguimiento)){setDupWarn("Ya existe un envio con este numero de seguimiento.");}else{setDupWarn("");};},[f.nroSeguimiento]);
   const handleTrans=l=>{const t=f.trans===l?"":l;setF(p=>({...p,trans:t,estado:t?"asignado":"sin_asignar"}));};
@@ -891,7 +891,7 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes}){
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.7rem",marginBottom:"0.7rem"}}>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. venta / referencia</label><input value={f.id} onChange={e=>set("id",e.target.value)} style={{...S.input,width:"100%"}} placeholder="ej. 2000012345"/></div>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. seguimiento</label><input value={f.nroSeguimiento} onChange={e=>set("nroSeguimiento",e.target.value)} style={{...S.input,width:"100%",borderColor:dupWarn?"#f59e0b":"#252d40"}} placeholder="ej. 46669555629"/></div>
-          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Origen</label><div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["ML","Tienda Nube","Particular","Otro"].map(obj =><button key={o} onClick={()=>set("origen",o)} style={S.btnSm(f.origen===o,"#6366f1")}>{o}</button>)}</div></div>
+          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Origen</label><div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["ML","Tienda Nube","Particular","Otro"].map(o =><button key={o} onClick={()=>set("origen",o)} style={S.btnSm(f.origen===o,"#6366f1")}>{o}</button>)}</div></div>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Bultos</label><input type="number" min="1" value={f.bultos||""} onChange={ev=>{const v=parseInt(ev.target.value);set("bultos",v>0?v:"");}} placeholder="1" style={{...S.input,width:"120px",padding:"4px 10px"}}/></div>
         </div>
         <div style={{marginBottom:"0.7rem"}}><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Direccion completa</label><textarea value={f.direccion} onChange={e=>set("direccion",e.target.value)} style={{...S.input,width:"100%",height:"56px",resize:"vertical"}} placeholder="Calle, numero..."/></div>
@@ -901,8 +901,8 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes}){
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Zona ML</label><div style={{...S.input,padding:"0.45rem 0.6rem",color:ZONA_ML_COLOR[getZonaML(f.partido)]||"#6b7280",fontSize:"0.8rem",fontWeight:700}}>{getZonaML(f.partido)||"-"}</div></div>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.7rem",marginBottom:"0.7rem"}}>
-          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Logistica</label><div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{logActivas.map(itm =><button key={l} onClick={()=>handleTrans(l)} style={S.btnSm(f.trans===l,lc[l]?.color||"#6366f1")}>{l}</button>)}</div></div>
-          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Turno</label><div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{TURNOS.map(tv =><button key={t} onClick={()=>set("turno",f.turno===t?"":t)} style={S.btnSm(f.turno===t,"#8b5cf6")}>{t}</button>)}</div></div>
+          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Logistica</label><div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{logActivas.map(l =><button key={l} onClick={()=>handleTrans(l)} style={S.btnSm(f.trans===l,lc[l]?.color||"#6366f1")}>{l}</button>)}</div></div>
+          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Turno</label><div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{TURNOS.map(t =><button key={t} onClick={()=>set("turno",f.turno===t?"":t)} style={S.btnSm(f.turno===t,"#8b5cf6")}>{t}</button>)}</div></div>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Fecha entrega</label><input type="date" value={f.fecha} onChange={e=>set("fecha",e.target.value)} style={{...S.input,width:"100%"}}/></div>
         </div>
         <div style={{marginBottom:"0.6rem"}}><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Observaciones</label><textarea value={f.observaciones} onChange={e=>set("observaciones",e.target.value)} style={{...S.input,display:"block",width:"100%",height:"44px",resize:"vertical",fontSize:"0.8rem"}} placeholder="Notas adicionales..."/></div>
@@ -924,30 +924,30 @@ function TabTarifas({zc,setZc,lc,setLc}){
   const [moverModal,setMoverModal]=useState(null);
   const [addModal,setAddModal]=useState(false);
   const [newZona,setNewZona]=useState({nombre:"",color:"#6366f1",precio:0});
-  const logActivas=Object.keys(lc).filter(kv =>lc[k].activa);
+  const logActivas=Object.keys(lc).filter(k =>lc[k].activa);
   useEffect(()=>{if((!logSel||!lc[logSel]?.activa)&&logActivas.length>0)setLogSel(logActivas[0]);},[lc]);
   const cfg=zc[logSel]||{zonas:[]};
   const asig=new Set(cfg.zonas.flatMap(z=>z.partidos));
-  const sinAsig=ALL_PARTIDOS.filter(pv =>!asig.has(p));
+  const sinAsig=ALL_PARTIDOS.filter(p =>!asig.has(p));
   const upd=fn=>setZc(p=>({...p,[logSel]:{...p[logSel],zonas:fn(p[logSel]?.zonas||[])}}));
   const updP=(id,v)=>upd(zs=>zs.map(z=>zv.id===id?{...zv,precio:parseInt(v)||0}:z));
   const updC=(id,c)=>upd(zs=>zs.map(z=>zv.id===id?{...zv,color:c}:zv));
   const updN=(id,n)=>upd(zs=>zs.map(z=>zv.id===id?{...zv,nombre:n}:zv));
   const elimZ=id=>{if(!window.confirm("Eliminar zona?"))return;upd(zs=>zs.filter(z=>zv.id!==id));};
-  const moverP=(p,dest)=>upd(zs=>zs.map(z=>({...zv,partidos:zv.id===dest?[...new Set([...zv.partidos,p])]:z.partidos.filter(xv =>x!==p)})));
-  const quitarP=p=>upd(zs=>zs.map(z=>({...zv,partidos:zv.partidos.filter(xv =>x!==p)})));
+  const moverP=(p,dest)=>upd(zs=>zs.map(z=>({...zv,partidos:zv.id===dest?[...new Set([...zv.partidos,p])]:z.partidos.filter(x =>x!==p)})));
+  const quitarP=p=>upd(zs=>zs.map(z=>({...zv,partidos:zv.partidos.filter(x =>x!==p)})));
   const addZ=()=>{if(!newZona.nombre.trim())return;const id=newZona.nombre.toUpperCase().replace(/\s+/g,"_")+"_"+Date.now();upd(zs=>[...zs,{id,...newZona,partidos:[]}]);setAddModal(false);setNewZona({nombre:"",color:"#6366f1",precio:0});};
   const toggleLog=k=>setLc(p=>({...p,[k]:{...p[k],activa:!p[k].activa}}));
-  const updBulto=(k,b,p2)=>setLc(p=>({...p,[k]:{...p[k],preciosBultos:p[k].preciosBultos.map(xv =>x.b===b?{...x,p:parseInt(p2)||0}:x)}}));
-  const addBulto=k=>setLc(p=>{const lk=p[k];const maxB=Math.max(...(lk.preciosBultos||[]).map(xv =>x.b),0);return{...p,[k]:{...lk,preciosBultos:[...(lk.preciosBultos||[]),{b:maxB+1,p:0}]}};});
-  const delBulto=(k,b)=>setLc(p=>({...p,[k]:{...p[k],preciosBultos:p[k].preciosBultos.filter(xv =>x.b!==b)}}));
+  const updBulto=(k,b,p2)=>setLc(p=>({...p,[k]:{...p[k],preciosBultos:p[k].preciosBultos.map(x =>x.b===b?{...x,p:parseInt(p2)||0}:x)}}));
+  const addBulto=k=>setLc(p=>{const lk=p[k];const maxB=Math.max(...(lk.preciosBultos||[]).map(x =>x.b),0);return{...p,[k]:{...lk,preciosBultos:[...(lk.preciosBultos||[]),{b:maxB+1,p:0}]}};});
+  const delBulto=(k,b)=>setLc(p=>({...p,[k]:{...p[k],preciosBultos:p[k].preciosBultos.filter(x =>x.b!==b)}}));
   return(
     <div>
       <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"1rem",display:"flex",gap:"4px",flexWrap:"wrap",alignItems:"center"}}>
         <button onClick={()=>setSubTab("zonas")} style={S.btn(subTab==="zonas")}>Zonas y precios</button>
         <button onClick={()=>setSubTab("bultos")} style={S.btn(subTab==="bultos")}>Matriz de precios</button>
         <button onClick={()=>setSubTab("logisticas")} style={S.btn(subTab==="logisticas")}>Logisticas</button>
-        {subTab!=="logisticas"&&<><span style={{color:"#374151",fontSize:"0.65rem",margin:"0 4px"}}>|</span>{Object.entries(lc).filter(([,v])=>v.activa).map(([lkey,v])=><button key={k} onClick={()=>setLogSel(lkey)} style={S.btn(logSel===lkey,v.color)}>{lkey}</button>)}</>}
+        {subTab!=="logisticas"&&<><span style={{color:"#374151",fontSize:"0.65rem",margin:"0 4px"}}>|</span>{Object.entries(lc).filter(([,v])=>v.activa).map(([k,v])=><button key={k} onClick={()=>setLogSel(k)} style={S.btn(logSel===k,v.color)}>{k}</button>)}</>}
         {guardado&&<span style={{color:"#10b981",fontSize:"0.72rem",marginLeft:"8px"}}>✓ Guardado</span>}
         <button onClick={()=>{setZc(p=>{const next={...p};setDoc(doc(db,"config","zonas"),next).catch(console.error);return next;});setLc(p=>{const next={...p};setDoc(doc(db,"config","logisticas"),next).catch(console.error);return next;});setGuardado(true);setTimeout(()=>setGuardado(false),2000);}} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.35rem 1rem",marginLeft:"auto",fontSize:"0.78rem"}}>Guardar</button>
       </div>
@@ -967,13 +967,13 @@ function TabTarifas({zc,setZc,lc,setLc}){
               </div>
               <div style={{padding:"0.45rem 0.65rem",minHeight:"50px",display:"flex",flexWrap:"wrap",gap:"0.25rem",alignContent:"flex-start"}}>
                 {zona.partidos.length===0&&<div style={{color:"#374151",fontSize:"0.7rem",width:"100%",textAlign:"center"}}>Sin partidos</div>}
-                {zona.partidos.map(pv =><div key={p} style={{display:"flex",alignItems:"center",gap:"0.2rem",padding:"2px 6px",background:"#0f1420",border:"1px solid "+zona.color+"44",borderRadius:"5px"}}><button onClick={()=>setMoverModal({p,from:zona.id})} style={{background:"none",border:"none",color:"#d1d5db",cursor:"pointer",fontSize:"0.68rem",padding:0}}>{p}</button><button onClick={()=>quitarP(p)} style={{background:"none",border:"none",color:"#374151",cursor:"pointer",fontSize:"0.6rem",padding:0}}>x</button></div>)}
+                {zona.partidos.map(p =><div key={p} style={{display:"flex",alignItems:"center",gap:"0.2rem",padding:"2px 6px",background:"#0f1420",border:"1px solid "+zona.color+"44",borderRadius:"5px"}}><button onClick={()=>setMoverModal({p,from:zona.id})} style={{background:"none",border:"none",color:"#d1d5db",cursor:"pointer",fontSize:"0.68rem",padding:0}}>{p}</button><button onClick={()=>quitarP(p)} style={{background:"none",border:"none",color:"#374151",cursor:"pointer",fontSize:"0.6rem",padding:0}}>x</button></div>)}
               </div>
             </div>
           ))}
           <div onClick={()=>setAddModal(true)} style={{...S.card,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:"0.4rem",minHeight:"130px",cursor:"pointer",border:"1px dashed #252d40",background:"transparent"}}><span style={{color:"#374151",fontSize:"1.6rem"}}>+</span><span style={{color:"#4b5563",fontSize:"0.78rem"}}>Nueva zona</span></div>
         </div>
-        {sinAsig.length>0&&<div style={{...S.card,padding:"0.65rem 1rem"}}><div style={{color:"#f59e0b",fontWeight:700,fontSize:"0.68rem",marginBottom:"0.4rem"}}>Sin asignar ({sinAsig.length})</div><div style={{display:"flex",flexWrap:"wrap",gap:"0.3rem"}}>{sinAsig.map(pv =><button key={p} onClick={()=>setMoverModal({p,from:null})} style={{padding:"2px 8px",background:"#1c1500",border:"1px solid #78350f",borderRadius:"5px",color:"#fbbf24",fontSize:"0.7rem",cursor:"pointer"}}>{p}</button>)}</div></div>}
+        {sinAsig.length>0&&<div style={{...S.card,padding:"0.65rem 1rem"}}><div style={{color:"#f59e0b",fontWeight:700,fontSize:"0.68rem",marginBottom:"0.4rem"}}>Sin asignar ({sinAsig.length})</div><div style={{display:"flex",flexWrap:"wrap",gap:"0.3rem"}}>{sinAsig.map(p =><button key={p} onClick={()=>setMoverModal({p,from:null})} style={{padding:"2px 8px",background:"#1c1500",border:"1px solid #78350f",borderRadius:"5px",color:"#fbbf24",fontSize:"0.7rem",cursor:"pointer"}}>{p}</button>)}</div></div>}
       </>}
       {subTab==="bultos"&&(()=>{
         const BULTOS_FIJOS=[1,2,3,10,11];
@@ -1071,7 +1071,7 @@ function TabTarifas({zc,setZc,lc,setLc}){
       })()}
       {subTab==="logisticas"&&<div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:"0.85rem",marginBottom:"1rem"}}>
-          {Object.entries(lc).map(([lkey,v])=>(
+          {Object.entries(lc).map(([k,v])=>(
             <div key={k} style={{...S.card,borderTop:"3px solid "+(v.activa?v.color:"#374151"),overflow:"hidden",opacity:v.activa?1:0.6}}>
               <div style={{padding:"0.75rem 1rem",display:"flex",alignItems:"center",justifyContent:"space-between"}}><span style={{color:v.activa?v.color:"#6b7280",fontWeight:800,fontSize:"1rem"}}>{v.nombre}</span><button onClick={()=>toggleLog(k)} style={{...S.btnSm(v.activa,v.color),padding:"4px 12px"}}>{v.activa?"Activa":"Desactivar"}</button></div>
               <div style={{padding:"0 1rem 0.75rem",display:"flex",flexDirection:"column",gap:"6px"}}>
@@ -1126,7 +1126,7 @@ function TabInforme({envios,zc,lc}){
   const [desde,setDesde]=useState(sem.d);
   const [hasta,setHasta]=useState(sem.h);
   const [logSel,setLogSel]=useState("TODAS");
-  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([lkey])=>lkey);
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const tmap=buildTarifaMap(zc);
   const getImp=e=>calcImp(e,tmap,lc,zc);
   const envSem=envios.filter(e=>{
@@ -1148,7 +1148,7 @@ function TabInforme({envios,zc,lc}){
       </div>
       <div style={{...S.card,padding:"0.55rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"0.35rem",flexWrap:"wrap",alignItems:"center"}}>
         <button onClick={()=>setLogSel("TODAS")} style={S.btn(logSel==="TODAS")}>TODAS</button>
-        {logActivas.map(itm =><button key={l} onClick={()=>setLogSel(l)} style={S.btn(logSel===l,lc[l]?.color||"#6366f1")}>{l}</button>)}
+        {logActivas.map(l =><button key={l} onClick={()=>setLogSel(l)} style={S.btn(logSel===l,lc[l]?.color||"#6366f1")}>{l}</button>)}
         <button onClick={()=>{
           const filas=envSem.map((e,i)=>({
             "#":i+1,Logistica:e.trans||"",Partido:e.partido,Direccion:e.direccion,
@@ -1159,7 +1159,7 @@ function TabInforme({envios,zc,lc}){
           exportarXLSX(filas,"informe_"+desde+"_"+hasta);
         }} style={{...S.btnSm(false),color:"#10b981",border:"1px solid #10b981",marginLeft:"auto",padding:"3px 12px",fontSize:"0.72rem"}}>⬇ Excel</button>
       </div>
-      {logsMost.map(itm =>{
+      {logsMost.map(l =>{
         const lcD=lc[l];const envL=envSem.filter(e=>e.trans===l);if(!envL.length)return null;
         const porZona={};
         envLNormal.forEach(e=>{const zi=getZonaLogistica(zc,l,e.partido);const k=zi?zi.nombre:"Sin zona";if(!porZona[k])porZona[k]={nombre:k,color:zi?.color||"#374151",envios:[]};porZona[k].envios.push(e);});
@@ -1330,7 +1330,7 @@ function TabMapa({ envios, lc }) {
   // Renderizar markers
   useEffect(() => {
     if (!leafletMap.current || !window.L) return;
-    markersRef.current.forEach(mv => leafletMap.current.removeLayer(mv));
+    markersRef.current.forEach(m => leafletMap.current.removeLayer(mv));
     markersRef.current = [];
     geoData.forEach(e => {
       const color = modColor === "logistica" ? (LC_COLOR[e.trans] || "#6b7280") : (TC_COLOR[e.turno] || "#6b7280");
@@ -1358,7 +1358,7 @@ function TabMapa({ envios, lc }) {
       {/* Filtros */}
       <div style={{ ...S.card, padding: "0.65rem 1rem", display: "flex", gap: "0.4rem", flexWrap: "wrap", alignItems: "center" }}>
         <span style={{ color: "#4b5563", fontSize: "0.65rem", fontWeight: 700, textTransform: "uppercase" }}>Fecha</span>
-        {[{k:"todos",l:"Todos"},{k:"hoy",l:"Hoy"},{k:"ayer",l:"Ayer"},{k:"semana",l:"Semana"},{k:"rango",l:"Rango"}].map(xv => (
+        {[{k:"todos",l:"Todos"},{k:"hoy",l:"Hoy"},{k:"ayer",l:"Ayer"},{k:"semana",l:"Semana"},{k:"rango",l:"Rango"}].map(x => (
           <button key={x.k} onClick={() => setModFecha(x.k)} style={S.btn(modFecha === x.k)}>{x.l}</button>
         ))}
         {modFecha === "rango" && <>
@@ -1366,9 +1366,9 @@ function TabMapa({ envios, lc }) {
           <input type="date" value={rangoH} onChange={e => setRangoH(e.target.value)} style={{ ...S.input, padding: "4px 8px", width: "132px" }} />
         </>}
         <span style={{ color: "#374151", fontSize: "0.6rem" }}>|</span>
-        {["TODOS", ...logActivas].map(tv => <button key={t} onClick={() => setFilTrans(t)} style={S.btnSm(filTrans === t, lc[t]?.color || "#6366f1")}>{t}</button>)}
+        {["TODOS", ...logActivas].map(t => <button key={t} onClick={() => setFilTrans(t)} style={S.btnSm(filTrans === t, lc[t]?.color || "#6366f1")}>{t}</button>)}
         <span style={{ color: "#374151", fontSize: "0.6rem" }}>|</span>
-        {["TODOS", ...TURNOS].map(tv => <button key={t} onClick={() => setFilTurno(t)} style={S.btnSm(filTurno === t, "#8b5cf6")}>{t}</button>)}
+        {["TODOS", ...TURNOS].map(t => <button key={t} onClick={() => setFilTurno(t)} style={S.btnSm(filTurno === t, "#8b5cf6")}>{t}</button>)}
         <span style={{ color: "#374151", fontSize: "0.6rem" }}>|</span>
         <span style={{ color: "#4b5563", fontSize: "0.65rem", fontWeight: 700, textTransform: "uppercase" }}>Color</span>
         <button onClick={() => setModColor("logistica")} style={S.btnSm(modColor === "logistica", "#6366f1")}>Logistica</button>
@@ -1397,13 +1397,13 @@ function TabMapa({ envios, lc }) {
           {/* Leyenda */}
           <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginLeft: "auto" }}>
             {modColor === "logistica"
-              ? logActivas.filter(itm => geoData.some(e => e.trans === l)).map(itm => (
+              ? logActivas.filter(l => geoData.some(e => e.trans === l)).map(l => (
                   <div key={l} style={{ display: "flex", alignItems: "center", gap: "5px" }}>
                     <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: LC_COLOR[l] || "#6b7280" }} />
                     <span style={{ color: "#9ca3af", fontSize: "0.72rem" }}>{l}</span>
                   </div>
                 ))
-              : TURNOS.filter(tv => geoData.some(e => e.turno === t)).map(tv => (
+              : TURNOS.filter(t => geoData.some(e => e.turno === t)).map(t => (
                   <div key={t} style={{ display: "flex", alignItems: "center", gap: "5px" }}>
                     <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: TC_COLOR[t] || "#6b7280" }} />
                     <span style={{ color: "#9ca3af", fontSize: "0.72rem" }}>{t}</span>
@@ -1482,7 +1482,7 @@ function TabLiquidacion({ envios, setEnvios, lc }) {
   const totalPendiente = totalEsperado - totalRecibido;
 
   // Por logistica - cobranzas
-  const porLogCob = logActivas.map(itm => {
+  const porLogCob = logActivas.map(l => {
     const envL = conCobranza.filter(e => e.trans === l);
     return {
       l,
@@ -1490,17 +1490,17 @@ function TabLiquidacion({ envios, setEnvios, lc }) {
       recibido: envL.filter(e => e.cobranzaRecibida).reduce((s,e) => s + (e.cobranza||0), 0),
       pendienteN: envL.filter(e => !e.cobranzaRecibida).length,
     };
-  }).filter(xv => x.total > 0);
+  }).filter(x => x.total > 0);
 
   // Por logistica - retiros
-  const porLogRet = logActivas.map(itm => {
+  const porLogRet = logActivas.map(l => {
     const envL = conRetiro.filter(e => e.trans === l);
     return {
       l,
       total: envL.length,
       pendiente: envL.filter(e => !e.retiroRecibido).length,
     };
-  }).filter(xv => x.total > 0);
+  }).filter(x => x.total > 0);
 
   const marcarCobranza = (id, recibido) => {
     setEnvios(p => p.map(e => e.id === id ? { ...e, cobranzaRecibida: recibido, cobranzaFecha: recibido ? fechaHoy() : null } : e));
@@ -1528,12 +1528,12 @@ function TabLiquidacion({ envios, setEnvios, lc }) {
         <button onClick={() => setFilEstado("recibido")} style={S.btnSm(filEstado === "recibido", "#10b981")}>Recibidos</button>
         <button onClick={() => setFilEstado("todos")} style={S.btnSm(filEstado === "todos")}>Todos</button>
         <span style={{ color: "#374151", fontSize: "0.6rem" }}>|</span>
-        {["TODOS", ...logActivas].map(tv => (
+        {["TODOS", ...logActivas].map(t => (
           <button key={t} onClick={() => setFilTrans(t)} style={S.btnSm(filTrans === t, lc[t]?.color || "#6366f1")}>{t}</button>
         ))}
         <span style={{ color: "#374151", fontSize: "0.6rem" }}>|</span>
         <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Fecha</span>
-        {[{k:"todos",l:"Todos"},{k:"hoy",l:"Hoy"},{k:"ayer",l:"Ayer"},{k:"rango",l:"Rango"}].map(xv =><button key={x.k} onClick={()=>setFilFecha(x.k)} style={S.btnSm(filFecha===x.k)}>{x.l}</button>)}
+        {[{k:"todos",l:"Todos"},{k:"hoy",l:"Hoy"},{k:"ayer",l:"Ayer"},{k:"rango",l:"Rango"}].map(x =><button key={x.k} onClick={()=>setFilFecha(x.k)} style={S.btnSm(filFecha===x.k)}>{x.l}</button>)}
         {filFecha==="rango"&&<><input type="date" value={rangoD} onChange={e=>setRangoD(e.target.value)} style={{...S.input,padding:"3px 7px",width:"128px",fontSize:"0.75rem"}}/><input type="date" value={rangoH} onChange={e=>setRangoH(e.target.value)} style={{...S.input,padding:"3px 7px",width:"128px",fontSize:"0.75rem"}}/></>}
         <span style={{ color: "#374151", fontSize: "0.6rem" }}>|</span>
         <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar nro orden o dirección..." style={{...S.input,width:"200px",padding:"3px 8px",fontSize:"0.75rem"}}/>
@@ -1770,7 +1770,7 @@ function TabLocalidades() {
         <div style={{ display: "grid", gridTemplateColumns: "100px 1fr auto", gap: "0.5rem", alignItems: "center" }}>
           <input value={newCP} onChange={e => setNewCP(e.target.value)} style={{ ...S.input, width: "100%" }} placeholder="CP (ej. 1900)" />
           <input value={newPartido} onChange={e => setNewPartido(e.target.value)} style={{ ...S.input, width: "100%" }} placeholder="Partido (ej. La Plata)" list="partidos-list" />
-          <datalist id="partidos-list">{partidos.map(pv => <option key={p} value={p} />)}</datalist>
+          <datalist id="partidos-list">{partidos.map(p => <option key={p} value={p} />)}</datalist>
           <button onClick={agregar} style={{ ...S.btn(true), background: "linear-gradient(135deg,#6366f1,#8b5cf6)", whiteSpace: "nowrap" }}>+ Agregar</button>
         </div>
       </div>
@@ -1831,7 +1831,7 @@ function TabLocalidades() {
 // PANTALLA ASIGNACION TN — agrupa por fecha+turno, pre-rellena fecha/turno
 // ════════════════════════════════════════════════════════════════════
 function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc}){
-  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([lkey])=>lkey);
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   // Pre-inicializar asig con fecha y turno del datepicker
   const initAsig=()=>{const a={};borrador.forEach(e=>{a[e.id]={trans:"",fecha:e.fecha||fechaHoy(),turno:e.turno||""};});return a;};
   const [asig,setAsig]=useState(initAsig);
@@ -1882,7 +1882,7 @@ function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc}){
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:"0.5rem",flexWrap:"wrap"}}>
                   <span style={{color:"#6b7280",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Logistica:</span>
-                  {logActivas.map(itm =><button key={l} onClick={()=>setGrupo(ids,"trans",gT===l?"":l)} style={S.btnSm(gT===l,lc[l]?.color||"#6366f1")}>{l}</button>)}
+                  {logActivas.map(l =><button key={l} onClick={()=>setGrupo(ids,"trans",gT===l?"":l)} style={S.btnSm(gT===l,lc[l]?.color||"#6366f1")}>{l}</button>)}
                   {gT&&<button onClick={()=>setGrupo(ids,"trans","")} style={{...S.btnSm(false),color:"#6b7280"}}>x</button>}
                 </div>
               </div>
@@ -1901,7 +1901,7 @@ function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc}){
                       <div style={{color:"#4b5563",fontSize:"0.68rem"}}>{e.localidad?e.localidad+" · ":""}{e.partido}{zml?" · "+zml:""}</div>
                     </div>
                     <div style={{display:"flex",gap:"3px",flexWrap:"wrap",alignItems:"center"}}>
-                      {logActivas.map(itm =><button key={l} onClick={()=>setA(e.id,"trans",a.trans===l?"":l)} style={S.btnSm(a.trans===l,lc[l].color)} disabled={!puedeAsignar(e)}>{l}</button>)}
+                      {logActivas.map(l =><button key={l} onClick={()=>setA(e.id,"trans",a.trans===l?"":l)} style={S.btnSm(a.trans===l,lc[l].color)} disabled={!puedeAsignar(e)}>{l}</button>)}
                     </div>
                   </div>
                 );
@@ -1928,7 +1928,7 @@ function TabUsuarios({lc}){
   const [form,setForm]=useState({usuario:"",password:"",rol:"colaborador",logistica:"",activo:true});
   const [editId,setEditId]=useState(null);
   const [toast,setToast]=useState("");
-  const logActivas=Object.keys(lc).filter(kv =>lc[k].activa);
+  const logActivas=Object.keys(lc).filter(k =>lc[k].activa);
 
   const mostrarToast=msg=>{setToast(msg);setTimeout(()=>setToast(""),2500);};
 
@@ -1989,7 +1989,7 @@ function TabUsuarios({lc}){
             <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Logistica asignada</div>
             <select value={form.logistica} onChange={e=>setForm(p=>({...p,logistica:e.target.value}))} style={{...S.input,width:"100%"}}>
               <option value="">Elegir...</option>
-              {logActivas.map(itm =><option key={l} value={l}>{l}</option>)}
+              {logActivas.map(l =><option key={l} value={l}>{l}</option>)}
             </select>
           </div>}
         </div>
@@ -2076,10 +2076,10 @@ function VistaLogistica({envios,sesion,lc}){
           <div style={{color:lcD.color,fontSize:"0.65rem",fontWeight:700}}>{logNombre}</div>
         </div>
         <div style={{display:"flex",gap:"3px",flexWrap:"wrap",marginLeft:"8px"}}>
-          {[{k:"hoy",l:"Hoy"},{k:"proximos",l:"Proximos 7 dias"},{k:"todos",l:"Todos"},{k:"rango",l:"Rango"}].map(xv =><button key={x.k} onClick={()=>setModFecha(x.k)} style={{...S.btn(modFecha===x.k),padding:"0.28rem 0.6rem",fontSize:"0.72rem"}}>{x.l}</button>)}
+          {[{k:"hoy",l:"Hoy"},{k:"proximos",l:"Proximos 7 dias"},{k:"todos",l:"Todos"},{k:"rango",l:"Rango"}].map(x =><button key={x.k} onClick={()=>setModFecha(x.k)} style={{...S.btn(modFecha===x.k),padding:"0.28rem 0.6rem",fontSize:"0.72rem"}}>{x.l}</button>)}
           {modFecha==="rango"&&<><input type="date" value={rangoD} onChange={e=>setRangoD(e.target.value)} style={{...S.input,padding:"3px 8px",width:"130px",fontSize:"0.72rem"}}/><input type="date" value={rangoH} onChange={e=>setRangoH(e.target.value)} style={{...S.input,padding:"3px 8px",width:"130px",fontSize:"0.72rem"}}/></>}
           <span style={{color:"#374151",fontSize:"0.6rem",alignSelf:"center"}}>|</span>
-          {["TODOS",...TURNOS].map(tv =><button key={t} onClick={()=>setFilTurno(t)} style={{...S.btnSm(filTurno===t,"#8b5cf6"),padding:"0.28rem 0.6rem",fontSize:"0.72rem"}}>{t}</button>)}
+          {["TODOS",...TURNOS].map(t =><button key={t} onClick={()=>setFilTurno(t)} style={{...S.btnSm(filTurno===t,"#8b5cf6"),padding:"0.28rem 0.6rem",fontSize:"0.72rem"}}>{t}</button>)}
         </div>
         <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar..." style={{...S.input,width:"160px",padding:"0.3rem 0.65rem",fontSize:"0.78rem"}}/>
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:"0.75rem"}}>
@@ -2199,7 +2199,7 @@ function TabTablero({envios,lc,zc}){
   const flexPct=flex.length>0?Math.round(flexPrep.length/flex.length*100):0;
   const noflexPct=noflex.length>0?Math.round(noflexPrep.length/noflex.length*100):0;
 
-  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([lkey])=>lkey);
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
 
   // Alertas
   const sinDir=envios.filter(e=>e.alertaDireccion&&getEstado(e)!=="cancelado");
@@ -2207,7 +2207,7 @@ function TabTablero({envios,lc,zc}){
   const sinAsigHoy=sinAsignar.length;
 
   // Cobranzas acumuladas
-  const cobPorLog=logActivas.map(itm =>{
+  const cobPorLog=logActivas.map(l =>{
     const envsLog=envios.filter(e=>e.trans===l&&e.cobranza!==null&&e.cobranza>0);
     const deudaAnterior=envsLog.filter(e=>{const f=e.fecha||"";return f<hoy&&!e.cobranzaRecibida;}).reduce((s,e)=>s+(e.cobranza||0),0);
     const diasDeuda=envsLog.filter(e=>{const f=e.fecha||"";return f<hoy&&!e.cobranzaRecibida;}).reduce((max,e)=>{
@@ -2216,7 +2216,7 @@ function TabTablero({envios,lc,zc}){
     },0);
     const saleHoy=envsLog.filter(e=>(e.fecha||"")==hoy&&!e.cobranzaRecibida).reduce((s,e)=>s+(e.cobranza||0),0);
     return{l,deudaAnterior,saleHoy,total:deudaAnterior+saleHoy,diasDeuda};
-  }).filter(xv =>x.total>0||x.saleHoy>0);
+  }).filter(x =>x.total>0||x.saleHoy>0);
 
   const cardSt={background:"#1a1f2e",border:"1px solid #252d40",borderRadius:"12px",padding:"14px 16px"};
   const pillFlex={background:"#0d1c04",color:"#84cc16",border:"1px solid #84cc16",padding:"2px 8px",borderRadius:"5px",fontSize:"10px",fontWeight:700};
@@ -2298,7 +2298,7 @@ function TabTablero({envios,lc,zc}){
       {logActivas.length>0&&<div>
         <div style={{color:"#4b5563",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",marginBottom:"8px"}}>Por logística</div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:"10px"}}>
-          {logActivas.map(itm =>{
+          {logActivas.map(l =>{
             const lcD=lc[l];
             const envL=deHoy.filter(e=>e.trans===l);
             if(!envL.length)return null;
@@ -2438,7 +2438,7 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
   const [bultosEdit,setBultosEdit]=useState({}); // {id: value}
   const inputRef=useRef(null);
   const videoRef=useRef(null);
-  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([lkey])=>lkey);
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
 
   const ayer=()=>{const d=new Date(hoy+"T00:00:00");d.setDate(d.getDate()-1);return d.toISOString().split("T")[0];};
   const manana=()=>{const d=new Date(hoy+"T00:00:00");d.setDate(d.getDate()+1);return d.toISOString().split("T")[0];};
@@ -2530,7 +2530,7 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
     return()=>{
       activo=false;
       if(rafId)cancelAnimationFrame(rafId);
-      if(stream)stream.getTracks().forEach(tv =>t.stop());
+      if(stream)stream.getTracks().forEach(t =>t.stop());
     };
   },[camara,procesarScan]);
 
@@ -2582,7 +2582,7 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
         {/* Selector de fecha */}
         <div style={{...S.card,padding:"0.6rem 1rem",marginBottom:"0.75rem",display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}}>
           <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Fecha</span>
-          {[{l:"Ayer",v:ayer()},{l:"Hoy",v:hoy},{l:"Mañana",v:manana()}].map(xv =>(
+          {[{l:"Ayer",v:ayer()},{l:"Hoy",v:hoy},{l:"Mañana",v:manana()}].map(x =>(
             <button key={x.v} onClick={()=>setFecha(x.v)} style={S.btnSm(fecha===x.v)}>{x.l}</button>
           ))}
           <input type="date" value={fecha} onChange={e=>setFecha(e.target.value)} style={{...S.input,padding:"3px 8px",width:"138px",fontSize:"0.78rem"}}/>
@@ -2651,7 +2651,7 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
         {/* Filtros NO FLEX */}
         <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"0.6rem",alignItems:"center"}}>
           <button onClick={()=>setFilLog("TODOS")} style={S.btnSm(filLog==="TODOS")}>Todos</button>
-          {logActivas.map(itm =><button key={l} onClick={()=>setFilLog(l)} style={S.btnSm(filLog===l,lc[l]?.color)}>{l}</button>)}
+          {logActivas.map(l =><button key={l} onClick={()=>setFilLog(l)} style={S.btnSm(filLog===l,lc[l]?.color)}>{l}</button>)}
           <button onClick={()=>setSoloPendientes(!soloPendientes)} style={{...S.btnSm(soloPendientes,"#f59e0b"),marginLeft:"auto"}}>Solo pendientes</button>
         </div>
 
@@ -2900,7 +2900,7 @@ export default function App(){
           <div style={{fontWeight:800,fontSize:"0.92rem"}}>EnviosHub <span style={{color:"#374151",fontSize:"0.6rem",fontWeight:400}}>v{VERSION}</span></div>
           <div style={{color:"#374151",fontSize:"0.58rem"}}>{syncLoading?"Conectando...":(envios.length>0?envios.length+" envios":"Sin envios")}</div>
         </div>
-        <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{TABS.map(tv =>{
+        <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{TABS.map(t =>{
           const isFlex=t.id==="flex";
           const isActive=tab===t.id;
           const style=isFlex
