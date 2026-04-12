@@ -91,11 +91,11 @@ function parsearExcel(file) {
         let esTemplate=false;
         let hFila=-1;
         for(let i=0;i<Math.min(filas.length,5);i++){
-          if(filas[i].some(c=>typeof cv==="string"&&cv.toLowerCase().includes("nro_seguimiento"))){hFila=i;esTemplate=true;break;}
+          if(filas[i].some(c=>typeof c==="string"&&c.toLowerCase().includes("nro_seguimiento"))){hFila=i;esTemplate=true;break;}
         }
         if(!esTemplate){
           for(let i=0;i<Math.min(filas.length,15);i++){
-            if(filas[i].some(c=>typeof cv==="string"&&cv.includes("# de venta"))){hFila=i;break;}
+            if(filas[i].some(c=>typeof c==="string"&&c.includes("# de venta"))){hFila=i;break;}
           }
         }
         if(hFila<0) throw new Error("Formato no reconocido. Usa el reporte de ML o la plantilla de EnviosHub.");
@@ -176,8 +176,8 @@ const ZONAS_INIT={
 
 const ALL_PARTIDOS=["CABA","Avellaneda","Lanus","Quilmes","Lomas de Zamora","Almirante Brown","Berazategui","Esteban Echeverria","Florencio Varela","Hurlingham","Ituzaingo","Jose C Paz","La Matanza Norte","La Matanza Sur","Malvinas Argentinas","Merlo","Moreno","Moron","San Fernando","San Isidro","San Martin","San Miguel","Tigre","Tres de Febrero","Vicente Lopez","La Plata","Zarate","Ensenada","Berisso","Escobar","Marcos Paz","Pilar","Presidente Peron","Canuelas","Lujan","Gral. Rodriguez","Ex.de la Cruz","San Vicente","Campana","Ezeiza"];
 
-function buildTarifaMap(zc){const m={};Object.entries(zc).forEach(([l,c])=>c.zonas.forEach(z=>zv.partidos.forEach(p=>{if(!m[p])m[p]={};m[p][l]=z.precio;})));return m;}
-function getZonaLogistica(zc,trans,partido){return zc[trans]?zc[trans].zonas.find(z=>zv.partidos.includes(partido))||null:null;}
+function buildTarifaMap(zc){const m={};Object.entries(zc).forEach(([l,c])=>c.zonas.forEach(z=>z.partidos.forEach(p=>{if(!m[p])m[p]={};m[p][l]=z.precio;})));return m;}
+function getZonaLogistica(zc,trans,partido){return zc[trans]?zc[trans].zonas.find(z=>z.partidos.includes(partido))||null:null;}
 function getMatrizVigente(cfg,fechaEnvio){
   // Devuelve la tarifaMatrix vigente para una fecha dada
   if(!cfg)return null;
@@ -185,10 +185,10 @@ function getMatrizVigente(cfg,fechaEnvio){
   // Construir lista de versiones: [{desde, matrix}]
   const versiones=[
     {desde:cfg.tarifaVigenciaDesde||"2000-01-01",matrix:cfg.tarifaMatrix},
-    ...((cfg.tarifaHistorial||[]).map(h=>({desde:hv.vigenciaDesde,matrix:hv.tarifaMatrix})))
-  ].filter(v =>v.matrix).sort((sortA,sortB)=>sortB.desde.localeCompare(sortA.desde));
+    ...((cfg.tarifaHistorial||[]).map(h=>({desde:h.vigenciaDesde,matrix:h.tarifaMatrix}))))
+  ].filter(v =>v.matrix).sort((a,b)=>b.desde.localeCompare(a.desde));
   // La mas reciente que sea <= fechaEnvio
-  const v=versiones.find(v=>vv.desde<=fecha);
+  const v=versiones.find(v=>v.desde<=fecha);
   return v?.matrix||cfg.tarifaMatrix||null;
 }
 
@@ -581,9 +581,9 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
   const reasignarSel=()=>{const items=envios.filter(e=>seleccionados.has(e.id));onReasignar(items);setSeleccionados(new Set());setModoSel(false);};
   const cancelarSel=()=>{if(!window.confirm(`Cancelar ${seleccionados.size} envio(s)?`))return;setEnvios(p=>p.map(e=>seleccionados.has(e.id)?{...e}:e));setSeleccionados(new Set());setModoSel(false);};
   // Ordenar por nroOrdenTN descendente (mas nuevo arriba)
-  const filtradosOrdenados=[...filtrados].sort((sortA,sortB)=>{
-    const nA=parseInt(sortA.nroOrdenTN||sortA.id)||0;
-    const nB=parseInt(sortB.nroOrdenTN||sortB.id)||0;
+  const filtradosOrdenados=[...filtrados].sort((a,b)=>{
+    const nA=parseInt(a.nroOrdenTN||a.id)||0;
+    const nB=parseInt(b.nroOrdenTN||b.id)||0;
     return nB-nA;
   });
 
@@ -631,7 +631,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
         <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap",borderTop:"1px solid #252d40",paddingTop:"5px"}}>
           <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"38px"}}>Zona</span>
           <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
-            {["TODAS",...ZONAS_ML_LIST].map(z=><button key={zv} onClick={()=>setFilZona(z)} style={S.btnSm(filZona===z,ZONA_ML_COLOR[z]||"#6366f1")}>{z}</button>)}
+            {["TODAS",...ZONAS_ML_LIST].map(z=><button key={z} onClick={()=>setFilZona(z)} style={S.btnSm(filZona===z,ZONA_ML_COLOR[z]||"#6366f1")}>{z}</button>)}
           </div>
           <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
           <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"38px"}}>Turno</span>
@@ -805,7 +805,7 @@ function TabImprimir({envios,zc,lc}){
         <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
         <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["TODOS",...logActivas].map(t =><button key={t} onClick={()=>setTrans(t)} style={S.btnSm(trans===t,lc[t]?.color||"#6366f1")}>{t}</button>)}</div>
         <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
-        <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["TODAS",...ZONAS_ML_LIST].map(z=><button key={zv} onClick={()=>setFilZona(z)} style={S.btnSm(filZona===z,ZONA_ML_COLOR[z]||"#6366f1")}>{z}</button>)}</div>
+        <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["TODAS",...ZONAS_ML_LIST].map(z=><button key={z} onClick={()=>setFilZona(z)} style={S.btnSm(filZona===z,ZONA_ML_COLOR[z]||"#6366f1")}>{z}</button>)}</div>
         <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
         <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["TODOS",...TURNOS].map(t =><button key={t} onClick={()=>setTurno(t)} style={S.btnSm(turno===t,"#8b5cf6")}>{t}</button>)}</div>
         <div style={{marginLeft:"auto",display:"flex",gap:"6px"}}>
@@ -930,12 +930,12 @@ function TabTarifas({zc,setZc,lc,setLc}){
   const asig=new Set(cfg.zonas.flatMap(z=>z.partidos));
   const sinAsig=ALL_PARTIDOS.filter(p =>!asig.has(p));
   const upd=fn=>setZc(p=>({...p,[logSel]:{...p[logSel],zonas:fn(p[logSel]?.zonas||[])}}));
-  const updP=(id,v)=>upd(zs=>zs.map(z=>zv.id===id?{...zv,precio:parseInt(v)||0}:z));
-  const updC=(id,c)=>upd(zs=>zs.map(z=>zv.id===id?{...zv,color:c}:zv));
-  const updN=(id,n)=>upd(zs=>zs.map(z=>zv.id===id?{...zv,nombre:n}:zv));
-  const elimZ=id=>{if(!window.confirm("Eliminar zona?"))return;upd(zs=>zs.filter(z=>zv.id!==id));};
-  const moverP=(p,dest)=>upd(zs=>zs.map(z=>({...zv,partidos:zv.id===dest?[...new Set([...zv.partidos,p])]:z.partidos.filter(x =>x!==p)})));
-  const quitarP=p=>upd(zs=>zs.map(z=>({...zv,partidos:zv.partidos.filter(x =>x!==p)})));
+  const updP=(id,v)=>upd(zs=>zs.map(z=>z.id===id?{...z,precio:parseInt(v)||0}:z));
+  const updC=(id,c)=>upd(zs=>zs.map(z=>z.id===id?{...z,color:c}:z));
+  const updN=(id,n)=>upd(zs=>zs.map(z=>z.id===id?{...z,nombre:n}:z));
+  const elimZ=id=>{if(!window.confirm("Eliminar zona?"))return;upd(zs=>zs.filter(z=>z.id!==id));};
+  const moverP=(p,dest)=>upd(zs=>zs.map(z=>({...z,partidos:z.id===dest?[...new Set([...z.partidos,p])]:z.partidos.filter(x=>x!==p)})));
+  const quitarP=p=>upd(zs=>zs.map(z=>({...z,partidos:z.partidos.filter(x=>x!==p)})));
   const addZ=()=>{if(!newZona.nombre.trim())return;const id=newZona.nombre.toUpperCase().replace(/\s+/g,"_")+"_"+Date.now();upd(zs=>[...zs,{id,...newZona,partidos:[]}]);setAddModal(false);setNewZona({nombre:"",color:"#6366f1",precio:0});};
   const toggleLog=k=>setLc(p=>({...p,[k]:{...p[k],activa:!p[k].activa}}));
   const updBulto=(k,b,p2)=>setLc(p=>({...p,[k]:{...p[k],preciosBultos:p[k].preciosBultos.map(x =>x.b===b?{...x,p:parseInt(p2)||0}:x)}}));
@@ -1023,7 +1023,7 @@ function TabTarifas({zc,setZc,lc,setLc}){
               </div>
               {historial.length>0&&<div style={{minWidth:"180px"}}>
                 <div style={{color:"#4b5563",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Historial</div>
-                {[...historial].sort((sortA,sortB)=>sortB.vigenciaDesde.localeCompare(sortA.vigenciaDesde)).map((h,i)=>(
+                {[...historial].sort((a,b)=>b.vigenciaDesde.localeCompare(a.vigenciaDesde)).map((h,i)=>(
                   <div key={i} style={{fontSize:"0.72rem",color:"#6b7280",padding:"2px 0",borderBottom:"1px solid #1a1f2e"}}>
                     Desde {h.vigenciaDesde} · {Object.keys(h.tarifaMatrix||{}).length} zonas
                   </div>
@@ -1035,8 +1035,8 @@ function TabTarifas({zc,setZc,lc,setLc}){
                 <thead>
                   <tr style={{background:"#12172a",borderBottom:"1px solid #252d40"}}>
                     <th style={{...thSt,width:"80px"}}>Bultos</th>
-                    {zonas.map(z=><th key={zv.id} style={{...thSt,textAlign:"center"}}>
-                      <span style={{color:zv.color,fontWeight:700}}>{zv.nombre}</span>
+                    {zonas.map(z=><th key={z.id} style={{...thSt,textAlign:"center"}}>
+                      <span style={{color:z.color,fontWeight:700}}>{z.nombre}</span>
                     </th>)}
                   </tr>
                 </thead>
@@ -1047,7 +1047,7 @@ function TabTarifas({zc,setZc,lc,setLc}){
                         {b===10?"4-10 bultos":b===11?"11+ bultos":b===1?"1 bulto":b+" bultos"}
                       </td>
                       {zonas.map(z=>{
-                        const val=getM(zv.id,b);
+                        const val=getM(z.id,b);
                         return(
                           <td key={z.id} style={{...tdSt,textAlign:"center",padding:"4px 8px"}}>
                             <input
@@ -1107,7 +1107,7 @@ function TabTarifas({zc,setZc,lc,setLc}){
           </div>
         </div>
       </div>}
-      {moverModal&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}><div style={{...S.card,padding:"1.1rem",width:"100%",maxWidth:"320px"}}><h3 style={{margin:"0 0 0.2rem",fontWeight:800,fontSize:"0.95rem"}}>Mover: {moverModal.p}</h3><p style={{margin:"0 0 0.9rem",color:"#9ca3af",fontSize:"0.82rem"}}>A que zona?</p><div style={{display:"grid",gap:"0.35rem"}}>{cfg.zonas.filter(z=>zv.id!==moverModal.from).map(z=><button key={zv.id} onClick={()=>{moverP(moverModal.p,z.id);setMoverModal(null);}} style={{padding:"0.5rem 0.9rem",background:"#0f1420",border:"1px solid "+z.color,borderRadius:"8px",color:z.color,fontWeight:700,cursor:"pointer",textAlign:"left",fontSize:"0.82rem",display:"flex",justifyContent:"space-between"}}><span>{z.nombre}</span><span style={{color:"#6b7280",fontWeight:400}}>{fmt(z.precio)}</span></button>)}</div><button onClick={()=>setMoverModal(null)} style={{...S.btn(false),marginTop:"0.65rem",width:"100%"}}>Cancelar</button></div></div>}
+      {moverModal&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}><div style={{...S.card,padding:"1.1rem",width:"100%",maxWidth:"320px"}}><h3 style={{margin:"0 0 0.2rem",fontWeight:800,fontSize:"0.95rem"}}>Mover: {moverModal.p}</h3><p style={{margin:"0 0 0.9rem",color:"#9ca3af",fontSize:"0.82rem"}}>A que zona?</p><div style={{display:"grid",gap:"0.35rem"}}>{cfg.zonas.filter(z=>z.id!==moverModal.from).map(z=><button key={z.id} onClick={()=>{moverP(moverModal.p,z.id);setMoverModal(null);}} style={{padding:"0.5rem 0.9rem",background:"#0f1420",border:"1px solid "+z.color,borderRadius:"8px",color:z.color,fontWeight:700,cursor:"pointer",textAlign:"left",fontSize:"0.82rem",display:"flex",justifyContent:"space-between"}}><span>{z.nombre}</span><span style={{color:"#6b7280",fontWeight:400}}>{fmt(z.precio)}</span></button>)}</div><button onClick={()=>setMoverModal(null)} style={{...S.btn(false),marginTop:"0.65rem",width:"100%"}}>Cancelar</button></div></div>}
       {addModal&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}><div style={{...S.card,padding:"1.25rem",width:"100%",maxWidth:"320px"}}><h3 style={{margin:"0 0 0.9rem",fontWeight:800}}>Nueva zona - {logSel}</h3><div style={{display:"grid",gap:"0.65rem"}}><div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nombre</label><input value={newZona.nombre} onChange={e=>setNewZona(p=>({...p,nombre:e.target.value}))} style={{...S.input,width:"100%"}} placeholder="ej. ZONA 4"/></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.65rem"}}><div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Color</label><input type="color" value={newZona.color} onChange={e=>setNewZona(p=>({...p,color:e.target.value}))} style={{width:"100%",height:"34px",borderRadius:"7px",border:"1px solid #252d40",cursor:"pointer"}}/></div><div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Precio</label><input type="number" value={newZona.precio} onChange={e=>setNewZona(p=>({...p,precio:parseInt(e.target.value)||0}))} style={{...S.input,width:"100%"}}/></div></div></div><div style={{display:"flex",gap:"0.5rem",marginTop:"1rem",justifyContent:"flex-end"}}><button onClick={()=>setAddModal(false)} style={S.btn(false)}>Cancelar</button><button onClick={addZ} style={{...S.btn(true),background:lc[logSel]?.color||"#6366f1"}}>Crear</button></div></div></div>}
     </div>
   );
@@ -1188,7 +1188,7 @@ function TabInforme({envios,zc,lc}){
                     const zonaTotal=zona.envios.reduce((s,e)=>s+getImp(e),0);
                     return([
                       <tr key={zona.nombre+"_h"} style={{background:"#12172a",borderTop:"1px solid #252d40"}}><td colSpan={4} style={{...tdSt,padding:"0.35rem 0.8rem"}}><span style={{display:"inline-block",padding:"1px 8px",borderRadius:"5px",background:zona.color+"22",color:zona.color,fontWeight:700,fontSize:"0.75rem"}}>{zona.nombre}</span><span style={{color:"#4b5563",fontSize:"0.7rem",marginLeft:"8px"}}>{zona.envios.length} envios · {fmt(zonaTotal)}</span></td></tr>,
-                      ...Object.values(porValor).sort((sortA,sortB)=>sortB.valor-sortA.valor).map(({valor,count,total,partidos})=>(
+                      ...Object.values(porValor).sort((a,b)=>b.valor-a.valor).map(({valor,count,total,partidos})=>(
                         <tr key={zona.nombre+valor} style={{borderBottom:"1px solid #1a1f2e"}}><td style={{...tdSt,color:"#6b7280",paddingLeft:"1.5rem",fontSize:"0.75rem",whiteSpace:"normal"}}>{[...partidos].join(", ")}</td><td style={{...tdSt,textAlign:"center",color:"#e5e7eb"}}>{count}</td><td style={{...tdSt,textAlign:"right",color:"#9ca3af"}}>{fmt(valor)}</td><td style={{...tdSt,textAlign:"right",color:"#10b981",fontWeight:600}}>{fmt(total)}</td></tr>
                       ))
                     ]);
@@ -1330,7 +1330,7 @@ function TabMapa({ envios, lc }) {
   // Renderizar markers
   useEffect(() => {
     if (!leafletMap.current || !window.L) return;
-    markersRef.current.forEach(m => leafletMap.current.removeLayer(mv));
+    markersRef.current.forEach(m => leafletMap.current.removeLayer(m));
     markersRef.current = [];
     geoData.forEach(e => {
       const color = modColor === "logistica" ? (LC_COLOR[e.trans] || "#6b7280") : (TC_COLOR[e.turno] || "#6b7280");
@@ -1934,7 +1934,7 @@ function TabUsuarios({lc}){
 
   useEffect(()=>{
     const unsub=onSnapshot(collection(db,"usuarios"),snap=>{
-      setUsuarios(snap.docs.map(d=>({id:dv.id,...dv.data()})));
+      setUsuarios(snap.docs.map(d=>({id:d.id,...d.data()})));
       setLoading(false);
     });
     return()=>unsub();
@@ -2056,10 +2056,10 @@ function VistaLogistica({envios,sesion,lc}){
     if(filTurno!=="TODOS"&&e.turno!==filTurno)return false;
     if(busqueda){const srch=busqueda.toLowerCase();return e.direccion.toLowerCase().includes(srch)||e.partido.toLowerCase().includes(srch)||(e.clienteNombre||"").toLowerCase().includes(srch)||(e.nroOrdenTN||"").includes(srch);}
     return true;
-  }).sort((sortA,sortB)=>{
-    const fa=sortA.fecha||sortA.fechaVenta||"";const fb=sortB.fecha||sortB.fechaVenta||"";
+  }).sort((a,b)=>{
+    const fa=a.fecha||a.fechaVenta||"";const fb=b.fecha||b.fechaVenta||"";
     if(fa!==fb)return fa.localeCompare(fb);
-    const ta=TURNOS.indexOf(sortA.turno);const tb=TURNOS.indexOf(sortB.turno);
+    const ta=TURNOS.indexOf(a.turno);const tb=TURNOS.indexOf(b.turno);
     return ta-tb;
   });
 
@@ -2466,10 +2466,10 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
     if(soloPendientes&&e.preparado)return false;
     if(busqueda){const s=busqueda.toLowerCase();return e.direccion.toLowerCase().includes(s)||(e.nroOrdenTN||"").includes(s)||(e.nroSeguimiento||"").includes(s)||e.partido.toLowerCase().includes(s);}
     return true;
-  }).sort((sortA,sortB)=>{
-    if(sortA.trans!==sortB.trans)return (sortA.trans||"").localeCompare(sortB.trans||"");
-    if(sortA.origen!==sortB.origen)return sortA.origen==="ML"?1:-1; // NO FLEX primero
-    const ta=TURNOS.indexOf(sortA.turno),tb=TURNOS.indexOf(sortB.turno);
+  }).sort((a,b)=>{
+    if(a.trans!==b.trans)return (a.trans||"").localeCompare(b.trans||"");
+    if(a.origen!==b.origen)return a.origen==="ML"?1:-1; // NO FLEX primero
+    const ta=TURNOS.indexOf(a.turno),tb=TURNOS.indexOf(b.turno);
     return ta-tb;
   });
 
@@ -2834,8 +2834,8 @@ export default function App(){
 
   useEffect(()=>{
     const unsub=onSnapshot(collection(db,"envios"),(snap)=>{
-      const docs=snap.docs.map(d=>({...dv.data(),id:d.id}));
-      docs.sort((sortA,sortB)=>(sortB.fechaVenta||sortB.fecha||"").localeCompare(sortA.fechaVenta||sortA.fecha||""));
+      const docs=snap.docs.map(d=>({...d.data(),id:d.id}));
+      docs.sort((a,b)=>(b.fechaVenta||b.fecha||"").localeCompare(a.fechaVenta||a.fecha||""));
       setEnviosLocal(docs);setSyncLoading(false);
     },(err)=>{console.error(err);setSyncLoading(false);});
     return()=>unsub();
@@ -2847,8 +2847,8 @@ export default function App(){
   const setEnvios=useCallback((updater)=>{
     setEnviosLocal(prev=>{
       const next=typeof updater==="function"?updater(prev):updater;
-      next.forEach(e=>{const old=prev.find(p=>pv.id===e.id);if(!old||JSON.stringify(old)!==JSON.stringify(e))guardarEnvio(e);});
-      prev.forEach(e=>{if(!next.find(n=>nv.id===e.id))eliminarEnvio(e.id);});
+      next.forEach(e=>{const old=prev.find(p=>p.id===e.id);if(!old||JSON.stringify(old)!==JSON.stringify(e))guardarEnvio(e);});
+      prev.forEach(e=>{if(!next.find(n=>n.id===e.id))eliminarEnvio(e.id);});
       return next;
     });
   },[]);
