@@ -2482,7 +2482,10 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
   // procesarScan debe declararse ANTES del useEffect que lo usa como dep
   const procesarScan=useCallback((nro)=>{
     const srch=nro.trim();if(!srch)return;
-    const found=envios.find(e=>e.nroSeguimiento===srch||e.id===srch||(e.nroSeguimiento&&e.nroSeguimiento.includes(srch)));
+    // Buscar por coincidencia exacta, luego por startsWith (QR puede tener digits extra)
+    let found=envios.find(e=>e.nroSeguimiento===srch||e.id===srch);
+    if(!found) found=envios.find(e=>e.nroSeguimiento&&srch.startsWith(e.nroSeguimiento));
+    if(!found) found=envios.find(e=>e.nroSeguimiento&&e.nroSeguimiento.startsWith(srch));
     if(!found){setResultado({ok:false,msg:"No encontrado: "+srch});setTimeout(()=>setResultado(null),2500);return;}
     if(found.preparado){setResultado({ok:"ya",envio:found,msg:"Ya estaba preparado"});setTimeout(()=>setResultado(null),2500);return;}
     setEnvios(pv=>pv.map(e=>e.id===found.id?{...e,preparado:true}:e));
@@ -2531,9 +2534,10 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
             const barcodes=await detector.detect(videoRef.current);
             if(barcodes.length>0){
               const val=barcodes[0].rawValue;
-              // Extraer solo numeros del QR de ML (el nro de seguimiento)
+              // El QR de ML contiene más datos — el nro de seguimiento son los primeros 11 dígitos
               const nums=val.replace(/\D/g,"");
-              const nro=nums.length>8?nums:val;
+              // Intentar match directo contra envios existentes primero
+              const nro=nums.slice(0,11)||val;
               procesarScan(nro);
               setCamara(false);
               return;
