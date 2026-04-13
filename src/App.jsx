@@ -2433,6 +2433,7 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
   const [resultado,setResultado]=useState(null);
   const [filLog,setFilLog]=useState("TODOS");
   const [soloPendientes,setSoloPendientes]=useState(false);
+  const [filTipo,setFilTipo]=useState("TODOS"); // TODOS | FLEX | NOFLEX
   const [busqueda,setBusqueda]=useState("");
   const [camara,setCamara]=useState(false);
   const [bultosEdit,setBultosEdit]=useState({}); // {id: value}
@@ -2463,6 +2464,8 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
 
   const filtrados=[...todosLista].filter(e=>{
     if(filLog!=="TODOS"&&e.trans!==filLog)return false;
+    if(filTipo==="FLEX"&&e.origen!=="ML")return false;
+    if(filTipo==="NOFLEX"&&e.origen==="ML")return false;
     if(soloPendientes&&e.preparado)return false;
     if(busqueda){const s=busqueda.toLowerCase();return e.direccion.toLowerCase().includes(s)||(e.nroOrdenTN||"").includes(s)||(e.nroSeguimiento||"").includes(s)||e.partido.toLowerCase().includes(s);}
     return true;
@@ -2482,16 +2485,19 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
   // procesarScan debe declararse ANTES del useEffect que lo usa como dep
   const procesarScan=useCallback((nro)=>{
     const srch=nro.trim();if(!srch)return;
-    // Buscar por coincidencia exacta, luego por startsWith (QR puede tener digits extra)
-    let found=envios.find(e=>e.nroSeguimiento===srch||e.id===srch);
-    if(!found) found=envios.find(e=>e.nroSeguimiento&&srch.startsWith(e.nroSeguimiento));
-    if(!found) found=envios.find(e=>e.nroSeguimiento&&e.nroSeguimiento.startsWith(srch));
-    if(!found){setResultado({ok:false,msg:"No encontrado: "+srch});setTimeout(()=>setResultado(null),2500);return;}
-    if(found.preparado){setResultado({ok:"ya",envio:found,msg:"Ya estaba preparado"});setTimeout(()=>setResultado(null),2500);return;}
+    const nums=srch.replace(/\D/g,"");
+    // 1. Match exacto por nroSeguimiento o id
+    let found=envios.find(e=>e.nroSeguimiento===srch||e.id===srch||e.nroSeguimiento===nums);
+    // 2. El QR tiene datos extra al final: el nro del envio es prefijo del QR escaneado
+    if(!found) found=envios.find(e=>e.nroSeguimiento&&nums.startsWith(e.nroSeguimiento));
+    // 3. El nro del envio tiene datos extra: el QR es prefijo del nro registrado
+    if(!found) found=envios.find(e=>e.nroSeguimiento&&e.nroSeguimiento.startsWith(nums));
+    if(!found){setResultado({ok:false,msg:"No encontrado: "+srch.slice(0,20)});setTimeout(()=>setResultado(null),30000);return;}
+    if(found.preparado){setResultado({ok:"ya",envio:found,msg:"Ya estaba preparado"});setTimeout(()=>setResultado(null),30000);return;}
     setEnvios(pv=>pv.map(e=>e.id===found.id?{...e,preparado:true}:e));
     setResultado({ok:true,envio:found,msg:"✓ Preparado"});
     beepOK();
-    setTimeout(()=>setResultado(null),2500);
+    setTimeout(()=>setResultado(null),30000);
   },[envios,setEnvios]);
 
   const confirmarBultos=useCallback((envio)=>{
@@ -2534,11 +2540,8 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
             const barcodes=await detector.detect(videoRef.current);
             if(barcodes.length>0){
               const val=barcodes[0].rawValue;
-              // El QR de ML contiene más datos — el nro de seguimiento son los primeros 11 dígitos
-              const nums=val.replace(/\D/g,"");
-              // Intentar match directo contra envios existentes primero
-              const nro=nums.slice(0,11)||val;
-              procesarScan(nro);
+              // El QR de ML tiene datos extra — pasar el valor completo y dejar que procesarScan encuentre el match
+              procesarScan(val);
               setCamara(false);
               return;
             }
@@ -2649,10 +2652,11 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
             <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"140px",height:"140px",border:"2px solid #84cc16",borderRadius:"8px",boxShadow:"0 0 0 9999px rgba(0,0,0,0.4)"}}/>
             <button onClick={()=>setCamara(false)} style={{position:"absolute",top:"8px",right:"8px",background:"rgba(0,0,0,0.7)",border:"1px solid #84cc16",color:"#84cc16",borderRadius:"6px",padding:"4px 10px",fontSize:"12px",cursor:"pointer"}}>Cerrar</button>
           </div>}
-          {resultado&&<div style={{padding:"8px 12px",borderRadius:"8px",
+          {resultado&&<div onClick={()=>setResultado(null)} style={{padding:"8px 12px",borderRadius:"8px",cursor:"pointer",
             background:resultado.ok===true?"#041f14":resultado.ok==="ya"?"#12172a":"#1c0404",
-            border:"1px solid "+(resultado.ok===true?"#065f46":resultado.ok==="ya"?"#252d40":"#7f1d1d"),color:resultado.ok===true?"#34d399":resultado.ok==="ya"?"#6b7280":"#f87171",fontSize:"0.82rem",fontWeight:700}}>
-            {resultado.msg}{resultado.envio&&<span style={{fontWeight:400,marginLeft:"8px",color:"#9ca3af"}}>{resultado.envio.direccion}</span>}
+            border:"1px solid "+(resultado.ok===true?"#065f46":resultado.ok==="ya"?"#252d40":"#7f1d1d"),color:resultado.ok===true?"#34d399":resultado.ok==="ya"?"#6b7280":"#f87171",fontSize:"0.82rem",fontWeight:700,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"8px"}}>
+            <div>{resultado.msg}{resultado.envio&&<div style={{fontWeight:400,color:"#9ca3af",marginTop:"2px",fontSize:"0.75rem"}}>{resultado.envio.direccion} {resultado.envio.trans?<span style={{color:resultado.envio.trans&&lc[resultado.envio.trans]?.color||"#6b7280",fontWeight:700}}>· {resultado.envio.trans}</span>:""}</div>}</div>
+            <span style={{opacity:0.5,fontSize:"0.75rem",flexShrink:0}}>✕ cerrar</span>
           </div>}
         </div>
 
