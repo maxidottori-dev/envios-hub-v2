@@ -2479,6 +2479,28 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
   const prepFlex=flexFecha.filter(e=>e.preparado).length;
   const pct=total>0?Math.round(preparados/total*100):0;
 
+  // procesarScan debe declararse ANTES del useEffect que lo usa como dep
+  const procesarScan=useCallback((nro)=>{
+    const srch=nro.trim();if(!srch)return;
+    const found=envios.find(e=>e.nroSeguimiento===srch||e.id===srch||(e.nroSeguimiento&&e.nroSeguimiento.includes(srch)));
+    if(!found){setResultado({ok:false,msg:"No encontrado: "+srch});setTimeout(()=>setResultado(null),2500);return;}
+    if(found.preparado){setResultado({ok:"ya",envio:found,msg:"Ya estaba preparado"});setTimeout(()=>setResultado(null),2500);return;}
+    setEnvios(pv=>pv.map(e=>e.id===found.id?{...e,preparado:true}:e));
+    setResultado({ok:true,envio:found,msg:"✓ Preparado"});
+    beepOK();
+    setTimeout(()=>setResultado(null),2500);
+  },[envios,setEnvios]);
+
+  const confirmarBultos=useCallback((envio)=>{
+    const bv=parseInt(bultosEdit[envio.id]??envio.bultos);
+    if(!bv||bv<1)return;
+    setEnvios(pv=>pv.map(e=>e.id===envio.id?{...e,bultos:bv,preparado:true}:e));
+    setBultosEdit(pv=>({...pv,[envio.id]:bv}));
+  },[bultosEdit,setEnvios]);
+
+  // Focus en input al montar
+  useEffect(()=>{if(inputRef.current)inputRef.current.focus();},[]);
+
   // Escaneo QR via camara — BarcodeDetector API (Chrome Android nativo)
   useEffect(()=>{
     if(!camara)return;
@@ -2533,24 +2555,6 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
       if(stream)stream.getTracks().forEach(t =>t.stop());
     };
   },[camara,procesarScan]);
-
-  const procesarScan=useCallback((nro)=>{
-    const srch=nro.trim();if(!srch)return;
-    const found=envios.find(e=>e.nroSeguimiento===srch||e.id===srch||(e.nroSeguimiento&&e.nroSeguimiento.includes(srch)));
-    if(!found){setResultado({ok:false,msg:"No encontrado: "+srch});setTimeout(()=>setResultado(null),2500);return;}
-    if(found.preparado){setResultado({ok:"ya",envio:found,msg:"Ya estaba preparado"});setTimeout(()=>setResultado(null),2500);return;}
-    setEnvios(p=>p.map(e=>e.id===found.id?{...e,preparado:true}:e));
-    setResultado({ok:true,envio:found,msg:"✓ Preparado"});
-    beepOK();
-    setTimeout(()=>setResultado(null),2500);
-  },[envios,setEnvios]);
-
-  const confirmarBultos=(envio)=>{
-    const v=parseInt(bultosEdit[envio.id]??envio.bultos);
-    if(!v||v<1)return;
-    setEnvios(p=>p.map(e=>e.id===envio.id?{...e,bultos:v,preparado:true}:e));
-    setBultosEdit(p=>({...p,[envio.id]:v}));
-  };
 
   // Agrupar por logistica
   const grupos={};
