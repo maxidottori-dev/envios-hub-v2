@@ -2660,11 +2660,18 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
           </div>}
         </div>
 
-        {/* Filtros NO FLEX */}
-        <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"0.6rem",alignItems:"center"}}>
+        {/* Filtros por logistica */}
+        <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"0.5rem",alignItems:"center"}}>
           <button onClick={()=>setFilLog("TODOS")} style={S.btnSm(filLog==="TODOS")}>Todos</button>
           {logActivas.map(l =><button key={l} onClick={()=>setFilLog(l)} style={S.btnSm(filLog===l,lc[l]?.color)}>{l}</button>)}
           <button onClick={()=>setSoloPendientes(!soloPendientes)} style={{...S.btnSm(soloPendientes,"#f59e0b"),marginLeft:"auto"}}>Solo pendientes</button>
+        </div>
+        {/* Filtro FLEX / NO FLEX */}
+        <div style={{display:"flex",gap:"6px",marginBottom:"0.6rem",alignItems:"center"}}>
+          <button onClick={()=>setFilTipo("TODOS")} style={S.btnSm(filTipo==="TODOS")}>Todos</button>
+          <button onClick={()=>setFilTipo("FLEX")} style={{...S.btnSm(filTipo==="FLEX"),background:filTipo==="FLEX"?"#0d1c04":"#0f1420",color:filTipo==="FLEX"?"#84cc16":"#4b7a10",border:"1px solid "+(filTipo==="FLEX"?"#84cc16":"#1a3008")}}>FLEX</button>
+          <button onClick={()=>setFilTipo("NOFLEX")} style={S.btnSm(filTipo==="NOFLEX","#6366f1")}>NO FLEX</button>
+          <span style={{color:"#4b5563",fontSize:"0.68rem",marginLeft:"4px"}}>{filtrados.length} pedidos</span>
         </div>
 
         {/* Buscar */}
