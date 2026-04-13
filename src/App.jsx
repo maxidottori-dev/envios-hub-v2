@@ -2037,6 +2037,7 @@ function VistaLogistica({envios,sesion,lc}){
   const [rangoD,setRangoD]=useState(hoy);
   const [rangoH,setRangoH]=useState(hoy);
   const [filTurno,setFilTurno]=useState("TODOS");
+  const [filTipo,setFilTipo]=useState("TODOS");
   const [busqueda,setBusqueda]=useState("");
   const [expandId,setExpandId]=useState(null);
   const logNombre=sesion.logistica;
@@ -2054,6 +2055,8 @@ function VistaLogistica({envios,sesion,lc}){
     if(modFecha==="proximos"&&(fEnv<hoy||fEnv>hasta7))return false;
     if(modFecha==="rango"&&(fEnv<rangoD||fEnv>rangoH))return false;
     if(filTurno!=="TODOS"&&e.turno!==filTurno)return false;
+    if(filTipo==="FLEX"&&e.origen!=="ML")return false;
+    if(filTipo==="NOFLEX"&&e.origen==="ML")return false;
     if(busqueda){const srch=busqueda.toLowerCase();return e.direccion.toLowerCase().includes(srch)||e.partido.toLowerCase().includes(srch)||(e.clienteNombre||"").toLowerCase().includes(srch)||(e.nroOrdenTN||"").includes(srch);}
     return true;
   }).sort((a,b)=>{
@@ -2080,6 +2083,10 @@ function VistaLogistica({envios,sesion,lc}){
           {modFecha==="rango"&&<><input type="date" value={rangoD} onChange={e=>setRangoD(e.target.value)} style={{...S.input,padding:"3px 8px",width:"130px",fontSize:"0.72rem"}}/><input type="date" value={rangoH} onChange={e=>setRangoH(e.target.value)} style={{...S.input,padding:"3px 8px",width:"130px",fontSize:"0.72rem"}}/></>}
           <span style={{color:"#374151",fontSize:"0.6rem",alignSelf:"center"}}>|</span>
           {["TODOS",...TURNOS].map(t =><button key={t} onClick={()=>setFilTurno(t)} style={{...S.btnSm(filTurno===t,"#8b5cf6"),padding:"0.28rem 0.6rem",fontSize:"0.72rem"}}>{t}</button>)}
+          <span style={{color:"#374151",fontSize:"0.6rem",alignSelf:"center"}}>|</span>
+          <button onClick={()=>setFilTipo("TODOS")} style={{...S.btnSm(filTipo==="TODOS"),padding:"0.28rem 0.6rem",fontSize:"0.72rem"}}>Todos</button>
+          <button onClick={()=>setFilTipo("FLEX")} style={{padding:"0.28rem 0.6rem",fontSize:"0.72rem",borderRadius:"6px",fontWeight:700,cursor:"pointer",background:filTipo==="FLEX"?"#0d1c04":"#0f1420",color:filTipo==="FLEX"?"#84cc16":"#4b7a10",border:"1px solid "+(filTipo==="FLEX"?"#84cc16":"#1a3008")}}>FLEX</button>
+          <button onClick={()=>setFilTipo("NOFLEX")} style={{...S.btnSm(filTipo==="NOFLEX","#6366f1"),padding:"0.28rem 0.6rem",fontSize:"0.72rem"}}>NO FLEX</button>
         </div>
         <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar..." style={{...S.input,width:"160px",padding:"0.3rem 0.65rem",fontSize:"0.78rem"}}/>
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:"0.75rem"}}>
