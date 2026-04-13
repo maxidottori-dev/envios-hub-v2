@@ -185,7 +185,7 @@ function getMatrizVigente(cfg,fechaEnvio){
   // Construir lista de versiones: [{desde, matrix}]
   const versiones=[
     {desde:cfg.tarifaVigenciaDesde||"2000-01-01",matrix:cfg.tarifaMatrix},
-    ...((cfg.tarifaHistorial||[]).map(h=>({desde:h.vigenciaDesde,matrix:h.tarifaMatrix}))))
+    ...(cfg.tarifaHistorial||[]).map(h=>({desde:h.vigenciaDesde,matrix:h.tarifaMatrix}))
   ].filter(v =>v.matrix).sort((a,b)=>b.desde.localeCompare(a.desde));
   // La mas reciente que sea <= fechaEnvio
   const v=versiones.find(v=>v.desde<=fecha);
