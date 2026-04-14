@@ -1935,7 +1935,7 @@ function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc}){
 function TabUsuarios({lc}){
   const [usuarios,setUsuarios]=useState([]);
   const [loading,setLoading]=useState(true);
-  const [form,setForm]=useState({usuario:"",password:"",rol:"colaborador",logistica:"",activo:true});
+  const [form,setForm]=useState({usuario:"",password:"",rol:"colaborador",logistica:"",esChofer:false,activo:true});
   const [editId,setEditId]=useState(null);
   const [toast,setToast]=useState("");
   const logActivas=Object.keys(lc).filter(k =>lc[k].activa);
@@ -1955,7 +1955,7 @@ function TabUsuarios({lc}){
     if(form.rol==="logistica"&&!form.logistica){mostrarToast("Selecciona la logistica para este usuario");return;}
     const id=editId||("usr_"+Date.now());
     await setDoc(doc(db,"usuarios",id),{...form,usuario:form.usuario.toLowerCase().trim()});
-    setForm({usuario:"",password:"",rol:"colaborador",logistica:"",activo:true});
+    setForm({usuario:"",password:"",rol:"colaborador",logistica:"",esChofer:false,activo:true});
     setEditId(null);
     mostrarToast(editId?"Usuario actualizado":"Usuario creado");
   };
@@ -1996,6 +1996,10 @@ function TabUsuarios({lc}){
             </select>
           </div>
           {form.rol==="logistica"&&<div>
+            <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}>
+              <input type="checkbox" id="esChofer" checked={form.esChofer||false} onChange={ev=>setForm(p=>({...p,esChofer:ev.target.checked}))} style={{width:"16px",height:"16px",cursor:"pointer"}}/>
+              <label htmlFor="esChofer" style={{color:"#9ca3af",fontSize:"0.78rem",cursor:"pointer"}}>Vista Chofer (app móvil simplificada para el repartidor)</label>
+            </div>
             <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Logistica asignada</div>
             <select value={form.logistica} onChange={e=>setForm(p=>({...p,logistica:e.target.value}))} style={{...S.input,width:"100%"}}>
               <option value="">Elegir...</option>
@@ -2005,7 +2009,7 @@ function TabUsuarios({lc}){
         </div>
         <div style={{display:"flex",gap:"0.5rem"}}>
           <button onClick={guardar} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)"}}>{editId?"Guardar cambios":"Crear usuario"}</button>
-          {editId&&<button onClick={()=>{setEditId(null);setForm({usuario:"",password:"",rol:"colaborador",logistica:"",activo:true});}} style={S.btn(false)}>Cancelar</button>}
+          {editId&&<button onClick={()=>{setEditId(null);setForm({usuario:"",password:"",rol:"colaborador",logistica:"",esChofer:false,activo:true});}} style={S.btn(false)}>Cancelar</button>}
         </div>
       </div>
 
@@ -2022,6 +2026,7 @@ function TabUsuarios({lc}){
                   <span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.88rem"}}>{u.usuario}</span>
                   <span style={{padding:"1px 8px",background:rc.color+"22",color:rc.color,borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>{rc.label}</span>
                   {u.rol==="logistica"&&u.logistica&&<span style={{padding:"1px 8px",background:lc[u.logistica]?.bg||"#1a1f2e",color:lc[u.logistica]?.color||"#6b7280",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>{u.logistica}</span>}
+                  {u.esChofer&&<span style={{padding:"1px 8px",background:"#1c1500",color:"#f59e0b",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>🛵 Chofer</span>}
                   {!u.activo&&<span style={{padding:"1px 8px",background:"#1c0a0a",color:"#f87171",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>Inactivo</span>}
                 </div>
               </div>
@@ -2190,6 +2195,206 @@ function VistaLogistica({envios,sesion,lc}){
   );
 }
 
+
+
+// Motivos de entrega fallida
+const MOTIVOS_FALLO=[
+  {k:"cerrado_no_atendio",l:"Cerrado / No atendió",icon:"🔒"},
+  {k:"sin_efectivo",l:"Cliente sin efectivo",icon:"💸"},
+  {k:"rechazo",l:"Rechazo del pedido",icon:"📦"},
+  {k:"otro",l:"Otro motivo",icon:"✏️"},
+];
+
+function VistaChofer({envios,setEnvios,sesion,lc}){
+  const hoy=fechaHoy();
+  const [tab,setTab]=useState("pendientes");
+  const [expandFallo,setExpandFallo]=useState(null); // id del envio con panel fallo abierto
+  const [motivoSel,setMotivoSel]=useState({});  // {id: motivo}
+  const [notaFallo,setNotaFallo]=useState({});  // {id: texto}
+  const [notaModal,setNotaModal]=useState(null); // {id, nota}
+  const [notaTemp,setNotaTemp]=useState("");
+  const logNombre=sesion.logistica;
+  const lcD=lc[logNombre]||{color:"#6366f1"};
+
+  const misEnvios=[...envios].filter(e=>{
+    if(e.trans!==logNombre)return false;
+    if(getEstado(e)==="cancelado")return false;
+    const f=e.fecha||e.fechaVenta||"";
+    return f===hoy;
+  }).sort((a,b)=>{
+    const ta=TURNOS.indexOf(a.turno),tb=TURNOS.indexOf(b.turno);
+    return ta-tb;
+  });
+
+  const pendientes=misEnvios.filter(e=>!e.entregado&&getEstado(e)!=="fallido");
+  const entregados=misEnvios.filter(e=>e.entregado);
+  const fallidos=misEnvios.filter(e=>e.estadoEntrega==="fallido"&&!e.entregado);
+  const total=misEnvios.length;
+  const pct=total>0?Math.round(entregados.length/total*100):0;
+
+  const marcarEntregado=useCallback((envio)=>{
+    setEnvios(pv=>pv.map(e=>e.id===envio.id?{...e,entregado:true,estadoEntrega:"entregado",fechaEntrega:hoy,cobranzaRecibida:envio.cobranza!==null?true:e.cobranzaRecibida}:e));
+    setExpandFallo(null);
+  },[setEnvios,hoy]);
+
+  const confirmarFallo=useCallback((envio)=>{
+    const motivo=motivoSel[envio.id]||"";
+    if(!motivo)return;
+    const nota=notaFallo[envio.id]||"";
+    const motivoLabel=MOTIVOS_FALLO.find(m=>m.k===motivo)?.l||motivo;
+    const obs=motivoLabel+(nota?" — "+nota:"");
+    setEnvios(pv=>pv.map(e=>e.id===envio.id?{...e,estadoEntrega:"fallido",motivoFallo:motivo,observacionFallo:obs}:e));
+    setExpandFallo(null);
+  },[motivoSel,notaFallo,setEnvios]);
+
+  const guardarNota=useCallback(()=>{
+    if(!notaModal)return;
+    setEnvios(pv=>pv.map(e=>e.id===notaModal.id?{...e,observaciones:notaTemp}:e));
+    setNotaModal(null);
+  },[notaModal,notaTemp,setEnvios]);
+
+  const lista=tab==="pendientes"?[...pendientes,...fallidos]:entregados;
+
+  return(
+    <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif",maxWidth:"500px",margin:"0 auto"}}>
+      <style>{`*{box-sizing:border-box;}`}</style>
+
+      {/* Header */}
+      <div style={{position:"sticky",top:0,zIndex:100,background:"#0f1420",borderBottom:"1px solid #1a1f2e"}}>
+        <div style={{padding:"0.7rem 1rem",display:"flex",alignItems:"center",gap:"0.75rem"}}>
+          <div style={{width:"26px",height:"26px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:"7px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:"14px"}}>🛵</div>
+          <div>
+            <div style={{fontWeight:800,fontSize:"0.92rem"}}>EnviosHub <span style={{color:"#374151",fontSize:"0.6rem",fontWeight:400}}>v{VERSION}</span></div>
+            <div style={{color:lcD.color,fontSize:"0.65rem",fontWeight:700}}>{logNombre}</div>
+          </div>
+          <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:"0.75rem"}}>
+            <span style={{color:"#4b5563",fontSize:"0.7rem"}}>{sesion.usuario}</span>
+            <button onClick={()=>{clearSession();window.location.reload();}} style={{...S.btnSm(false),color:"#f87171"}}>Salir</button>
+          </div>
+        </div>
+        {/* Tabs */}
+        <div style={{display:"flex",borderTop:"1px solid #1a1f2e"}}>
+          {[{k:"pendientes",l:`Pendientes (${pendientes.length+fallidos.length})`},{k:"entregados",l:`Entregados (${entregados.length})`}].map(t=>(
+            <button key={t.k} onClick={()=>setTab(t.k)} style={{flex:1,padding:"10px",fontSize:"0.72rem",fontWeight:700,background:"none",border:"none",borderBottom:"2px solid "+(tab===t.k?"#6366f1":"transparent"),color:tab===t.k?"#fff":"#4b5563",cursor:"pointer"}}>{t.l}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{padding:"12px"}}>
+        {/* Resumen */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:"6px",marginBottom:"10px"}}>
+          {[
+            {n:total,l:"Total",c:"#6366f1"},
+            {n:entregados.length,l:"Entregados",c:"#10b981"},
+            {n:fallidos.length,l:"Fallidos",c:"#f87171"},
+            {n:pendientes.length,l:"Pendientes",c:"#f59e0b"},
+          ].map((x,i)=>(
+            <div key={i} style={{background:"#1a1f2e",borderRadius:"10px",padding:"8px",textAlign:"center"}}>
+              <div style={{fontWeight:800,fontSize:"1.3rem",color:x.c,lineHeight:1}}>{x.n}</div>
+              <div style={{color:"#6b7280",fontSize:"0.58rem",textTransform:"uppercase",marginTop:"2px"}}>{x.l}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{background:"#1a1f2e",borderRadius:"6px",overflow:"hidden",marginBottom:"14px"}}>
+          <div style={{height:"6px",background:"#0f1420"}}>
+            <div style={{width:pct+"%",height:"100%",background:pct>=80?"#10b981":pct>=50?"#f59e0b":"#6366f1",transition:"width 0.3s"}}/>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",padding:"3px 10px",fontSize:"10px",color:"#4b5563"}}>
+            <span>Progreso del día</span>
+            <span style={{color:pct>=80?"#10b981":pct>=50?"#f59e0b":"#6366f1",fontWeight:700}}>{pct}%</span>
+          </div>
+        </div>
+
+        {/* Lista */}
+        {lista.length===0&&<div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}>
+          <div style={{fontSize:"2rem"}}>{tab==="entregados"?"✅":"📦"}</div>
+          <p style={{marginTop:"8px"}}>{tab==="entregados"?"Sin entregas aún":"Sin pendientes"}</p>
+        </div>}
+
+        {lista.map(envio=>{
+          const esFallido=envio.estadoEntrega==="fallido";
+          const esTN=envio.origen==="Tienda Nube";
+          const falloAbierto=expandFallo===envio.id;
+          return(
+            <div key={envio.id} style={{background:"#1a1f2e",border:"1px solid "+(esFallido?"#7f1d1d":envio.entregado?"#065f46":"#252d40"),borderRadius:"12px",overflow:"hidden",marginBottom:"8px",opacity:envio.entregado?0.6:1}}>
+              {/* Info */}
+              <div style={{padding:"12px 14px"}}>
+                <div style={{display:"flex",gap:"4px",flexWrap:"wrap",marginBottom:"5px"}}>
+                  {esFallido&&<span style={{background:"#1c0404",color:"#f87171",border:"1px solid #f87171",padding:"1px 7px",borderRadius:"4px",fontSize:"9px",fontWeight:700}}>❌ Entrega fallida</span>}
+                  {envio.entregado&&<span style={{background:"#041f14",color:"#10b981",border:"1px solid #10b981",padding:"1px 7px",borderRadius:"4px",fontSize:"9px",fontWeight:700}}>✓ Entregado</span>}
+                  {!esFallido&&!envio.entregado&&<span style={{background:"#1a1f2e",color:"#9ca3af",border:"1px solid #374151",padding:"1px 7px",borderRadius:"4px",fontSize:"9px",fontWeight:700}}>Sin entregar</span>}
+                  {envio.turno&&<Bdg label={envio.turno} bg={TURNO_C[envio.turno]?.bg||"#130d2a"} t={TURNO_C[envio.turno]?.c||"#a78bfa"}/>}
+                  {esTN&&<span style={{background:"#0d1c2e",color:"#38bdf8",border:"1px solid #38bdf8",padding:"1px 7px",borderRadius:"4px",fontSize:"9px",fontWeight:700}}>#{envio.nroOrdenTN}</span>}
+                  {envio.bultos>0&&<span style={{background:"#12172a",color:"#60a5fa",padding:"1px 7px",borderRadius:"4px",fontSize:"9px",fontWeight:700}}>{envio.bultos} bulto{envio.bultos>1?"s":""}</span>}
+                </div>
+                <div style={{color:"#e5e7eb",fontSize:"0.88rem",fontWeight:600,marginBottom:"2px"}}>{envio.direccion}</div>
+                <div style={{color:"#6b7280",fontSize:"0.72rem"}}>{envio.localidad?envio.localidad+" · ":""}{envio.partido}{envio.cp?" · CP "+envio.cp:""}</div>
+                {esFallido&&envio.observacionFallo&&<div style={{marginTop:"5px",color:"#f87171",fontSize:"0.72rem"}}>⚠ {envio.observacionFallo}</div>}
+                {envio.observaciones&&!esFallido&&<div style={{marginTop:"5px",color:"#9ca3af",fontSize:"0.72rem",fontStyle:"italic"}}>"{envio.observaciones}"</div>}
+                {envio.notasCliente&&<div style={{marginTop:"5px",background:"#0d1119",borderRadius:"6px",padding:"5px 8px",color:"#9ca3af",fontSize:"0.72rem"}}>📋 {envio.notasCliente}</div>}
+              </div>
+
+              {/* Cobranza */}
+              {envio.cobranza!==null&&!envio.entregado&&<div style={{background:"#1c1500",padding:"8px 14px",borderTop:"1px solid #252d40",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase"}}>💰 Cobrar en efectivo</div>
+                  <div style={{color:"#fbbf24",fontWeight:800,fontSize:"1rem"}}>{fmt(envio.cobranza)}</div>
+                </div>
+                <div style={{color:"#6b7280",fontSize:"0.68rem",textAlign:"right"}}>{envio.formaPago||"Efectivo"}</div>
+              </div>}
+              {envio.entregado&&envio.cobranza!==null&&<div style={{background:"#041f14",padding:"6px 14px",borderTop:"1px solid #065f46",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div style={{color:"#10b981",fontSize:"0.72rem",fontWeight:700}}>✓ Cobrado</div>
+                <div style={{color:"#10b981",fontWeight:700}}>{fmt(envio.cobranza)}</div>
+              </div>}
+
+              {/* Acciones — solo si no está entregado */}
+              {!envio.entregado&&!falloAbierto&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px",padding:"10px 14px",background:"#12172a",borderTop:"1px solid #1a1f2e"}}>
+                <button onClick={()=>marcarEntregado(envio)} style={{padding:"9px",borderRadius:"8px",fontWeight:700,fontSize:"0.78rem",background:"#041f14",color:"#10b981",border:"1px solid #10b981",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:"2px"}}>
+                  <span style={{fontSize:"16px"}}>✅</span><small style={{fontSize:"0.62rem"}}>Entregar</small>
+                </button>
+                <button onClick={()=>setExpandFallo(envio.id)} style={{padding:"9px",borderRadius:"8px",fontWeight:700,fontSize:"0.78rem",background:"#1c0404",color:"#f87171",border:"1px solid #f87171",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:"2px"}}>
+                  <span style={{fontSize:"16px"}}>❌</span><small style={{fontSize:"0.62rem"}}>Fallo</small>
+                </button>
+                <button onClick={()=>{setNotaTemp(envio.observaciones||"");setNotaModal({id:envio.id});}} style={{padding:"9px",borderRadius:"8px",fontWeight:700,fontSize:"0.78rem",background:"#0f1420",color:"#9ca3af",border:"1px solid #252d40",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:"6px",gridColumn:"1/-1"}}>
+                  <span style={{fontSize:"14px"}}>📝</span><small style={{fontSize:"0.72rem"}}>{envio.observaciones?"Editar nota":"Agregar nota"}</small>
+                </button>
+              </div>}
+
+              {/* Panel fallo */}
+              {falloAbierto&&<div style={{padding:"12px 14px",background:"#1c0404",borderTop:"1px solid #7f1d1d"}}>
+                <div style={{color:"#f87171",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",marginBottom:"8px"}}>¿Por qué no se entregó?</div>
+                <div style={{display:"flex",flexDirection:"column",gap:"5px",marginBottom:"8px"}}>
+                  {MOTIVOS_FALLO.map(m=>(
+                    <button key={m.k} onClick={()=>setMotivoSel(pv=>({...pv,[envio.id]:m.k}))} style={{padding:"9px 12px",borderRadius:"8px",background:motivoSel[envio.id]===m.k?"#1c0404":"#12172a",border:"1px solid "+(motivoSel[envio.id]===m.k?"#f87171":"#374151"),color:motivoSel[envio.id]===m.k?"#f87171":"#e5e7eb",fontSize:"0.78rem",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:"8px"}}>
+                      <span style={{fontSize:"15px"}}>{m.icon}</span>{m.l}
+                    </button>
+                  ))}
+                </div>
+                <textarea value={notaFallo[envio.id]||""} onChange={ev=>setNotaFallo(pv=>({...pv,[envio.id]:ev.target.value}))} placeholder="Nota adicional (opcional)..." style={{...S.input,width:"100%",height:"56px",resize:"none",fontSize:"0.8rem",marginBottom:"8px"}}/>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px"}}>
+                  <button onClick={()=>setExpandFallo(null)} style={{padding:"10px",borderRadius:"8px",background:"#12172a",border:"1px solid #374151",color:"#9ca3af",fontWeight:700,cursor:"pointer"}}>Cancelar</button>
+                  <button onClick={()=>confirmarFallo(envio)} disabled={!motivoSel[envio.id]} style={{padding:"10px",borderRadius:"8px",background:motivoSel[envio.id]?"#f87171":"#374151",color:"#fff",fontWeight:700,cursor:"pointer",opacity:motivoSel[envio.id]?1:0.5}}>Confirmar</button>
+                </div>
+              </div>}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Modal nota */}
+      {notaModal&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
+        <div style={{...S.card,padding:"1.2rem",width:"100%",maxWidth:"360px"}}>
+          <div style={{fontWeight:700,fontSize:"0.9rem",marginBottom:"10px"}}>Nota del envío</div>
+          <textarea value={notaTemp} onChange={ev=>setNotaTemp(ev.target.value)} placeholder="Escribí una nota..." style={{...S.input,width:"100%",height:"80px",resize:"none",marginBottom:"10px"}}/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px"}}>
+            <button onClick={()=>setNotaModal(null)} style={{...S.btn(false),padding:"0.5rem"}}>Cancelar</button>
+            <button onClick={guardarNota} style={{...S.btn(true),padding:"0.5rem"}}>Guardar</button>
+          </div>
+        </div>
+      </div>}
+    </div>
+  );
+}
 
 function TabTablero({envios,lc,zc}){
   const hoy=fechaHoy();
@@ -2905,7 +3110,11 @@ export default function App(){
 
   // Auth gates
   if(!sesion)return<PantallaLogin onLogin={s=>{setSession(s);setSesion(s);}}/>;
-  if(sesion.rol==="logistica")return<VistaLogistica envios={envios} sesion={sesion} lc={lc}/>;
+  if(sesion.rol==="logistica"){
+    const esChofer=sesion.esChofer===true;
+    if(esChofer)return<VistaChofer envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>;
+    return<VistaLogistica envios={envios} sesion={sesion} lc={lc}/>;
+  }
   if(sesion.rol==="expedicion")return<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>;
 
   if(pantalla==="asignacion"){return<PantallaAsignacion borrador={borrador} fileName={fileName} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc}/>;}
