@@ -482,6 +482,16 @@ function PanelEdit({envio,onSave,onClose,lc}){
         </div>
       </div>
 
+      {/* Dirección editable */}
+      <div style={{marginBottom:"0.5rem"}}>
+        <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Dirección</div>
+        <textarea value={e.direccion||""} onChange={ev=>set("direccion",ev.target.value)} placeholder="Calle, número..." style={{...S.input,display:"block",width:"100%",height:"48px",resize:"vertical",fontSize:"0.8rem"}}/>
+        <div style={{display:"flex",gap:"6px",marginTop:"4px"}}>
+          <input value={e.localidad||""} onChange={ev=>set("localidad",ev.target.value)} placeholder="Barrio/Localidad" style={{...S.input,flex:1,padding:"3px 8px",fontSize:"0.75rem"}}/>
+          <input value={e.partido||""} onChange={ev=>set("partido",ev.target.value)} placeholder="Partido" style={{...S.input,flex:1,padding:"3px 8px",fontSize:"0.75rem"}}/>
+          <input value={e.cp||""} onChange={ev=>set("cp",ev.target.value)} placeholder="CP" style={{...S.input,width:"70px",padding:"3px 8px",fontSize:"0.75rem"}}/>
+        </div>
+      </div>
       {/* Notas de la orden — editable (incluye datepicker) */}
       <div style={{marginBottom:"0.5rem"}}>
         <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>{esTN?"Notas de la orden":"Observaciones"}</div>

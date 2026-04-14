@@ -74,13 +74,41 @@ export default async function handler(req, res) {
     if (data.estado === "cancelado") return res.status(200).json({ ok: true, skipped: "cancelled" });
 
     const update = { notasOrden, notasCliente };
+
+    // Actualizar fecha/turno si viene del datepicker y no estaban asignados
     if (datepickerRaw) {
       update.datepickerRaw = datepickerRaw;
       if (!data.fecha) update.fecha = fecha;
       if (!data.turno) update.turno = turno;
     }
+
+    // Actualizar dirección si el envío todavía no fue asignado a ninguna logística
+    if (!data.trans) {
+      const ship = order.shipping_address || {};
+      const calleNum = [ship.address, ship.number].filter(Boolean).join(" ");
+      const pisoDepto = ship.floor ? "Piso/Dto " + ship.floor : "";
+      const newDir = [calleNum, pisoDepto].filter(Boolean).join(", ");
+      const newCp = String(ship.zipcode || order.billing_zipcode || "").replace(/\D/g, "");
+      const newCiudad = ship.city || order.billing_city || "";
+      const newLocalidad = ship.locality || order.billing_locality || "";
+      if (newDir) {
+        update.direccion = newDir || data.direccion;
+        update.cp = newCp || data.cp;
+        update.ciudad = newCiudad || data.ciudad;
+        update.localidad = newLocalidad || data.localidad;
+        console.log("WEBHOOK DIR_UPDATED", order.id, newDir);
+      }
+    }
+
+    // Actualizar pagoEstado
     if (data.pagoEstado !== "cuenta_corriente") {
       update.pagoEstado = getPagoEstadoInicial(order);
+    }
+
+    // Si TN marca como pagado y la cobranza no fue recibida aún → limpiar cobranza
+    if (order.payment_status === "paid" && !data.cobranzaRecibida) {
+      update.cobranza = null;
+      console.log("WEBHOOK COBRANZA_CLEARED", order.id, "payment_status=paid, cobranzaRecibida=false");
     }
 
     await docRef.update(update);
