@@ -1161,12 +1161,12 @@ function TabInforme({envios,zc,lc}){
       </div>
       {logsMost.map(l =>{
         const lcD=lc[l];const envL=envSem.filter(e=>e.trans===l);if(!envL.length)return null;
+        const envLNormal=envL.filter(e=>!e.estadoLiq||e.estadoLiq==="normal");
+        const envLNoAbonado=envL.filter(e=>e.estadoLiq==="cancelado_liq"||e.estadoLiq==="no_abonado");
         const porZona={};
         envLNormal.forEach(e=>{const zi=getZonaLogistica(zc,l,e.partido);const k=zi?zi.nombre:"Sin zona";if(!porZona[k])porZona[k]={nombre:k,color:zi?.color||"#374151",envios:[]};porZona[k].envios.push(e);});
         // Agregar no abonados en seccion separada si existen
         if(envLNoAbonado.length){if(!porZona["_no_abonado"])porZona["_no_abonado"]={nombre:"No abonados / Cancelados",color:"#f87171",envios:[]};envLNoAbonado.forEach(e=>porZona["_no_abonado"].envios.push(e));}
-        const envLNormal=envL.filter(e=>!e.estadoLiq||e.estadoLiq==="normal");
-        const envLNoAbonado=envL.filter(e=>e.estadoLiq==="cancelado_liq"||e.estadoLiq==="no_abonado");
         const totalL=envLNormal.reduce((s,e)=>s+getImp(e),0);
         const totalNoAbonado=envLNoAbonado.reduce((s,e)=>s+getImp(e),0);
         return(
