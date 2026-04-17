@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+himport { useState, useCallback, useEffect, useRef } from "react";
 import * as XLSXLib from "xlsx";
 import { db } from "./firebase.js";
 import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where, getDocs, limit } from "firebase/firestore";
@@ -586,8 +586,8 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
   const porTrans=logActivas.map(l =>({l,n:activos.filter(e=>e.trans===l).length,v:activos.filter(e=>e.trans===l).reduce((s,e)=>s+getImp(e),0)})).filter(x =>x.n>0);
   const toggleSel=id=>setSeleccionados(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
   const saveEnvio=updated=>{setEnvios(p=>p.map(e=>e.id===updated.id?{...updated,estado:getEstado(updated)}:e));setEditId(null);};
-  const eliminar=id=>{if(window.confirm("Eliminar este envio?"))setEnvios(p=>p.filter(e=>e.id!==id));};
-  const eliminarSel=()=>{if(!window.confirm(`Eliminar ${seleccionados.size} envio(s)?`))return;setEnvios(p=>p.filter(e=>!seleccionados.has(e.id)));setSeleccionados(new Set());setModoSel(false);};
+  const eliminar=async id=>{if(window.confirm("Eliminar este envio?")){await deleteDoc(doc(db,"envios",id));setEnvios(p=>p.filter(e=>e.id!==id));}};
+  const eliminarSel=async()=>{if(!window.confirm(`Eliminar ${seleccionados.size} envio(s)?`))return;await Promise.all([...seleccionados].map(id=>deleteDoc(doc(db,"envios",id))));setEnvios(p=>p.filter(e=>!seleccionados.has(e.id)));setSeleccionados(new Set());setModoSel(false);};
   const reasignarSel=()=>{const items=envios.filter(e=>seleccionados.has(e.id));onReasignar(items);setSeleccionados(new Set());setModoSel(false);};
   const cancelarSel=()=>{if(!window.confirm(`Cancelar ${seleccionados.size} envio(s)?`))return;setEnvios(p=>p.map(e=>seleccionados.has(e.id)?{...e}:e));setSeleccionados(new Set());setModoSel(false);};
   // Ordenar por nroOrdenTN descendente (mas nuevo arriba)
