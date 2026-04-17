@@ -589,7 +589,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
   const eliminar=async id=>{if(window.confirm("Eliminar este envio?")){await deleteDoc(doc(db,"envios",id));setEnvios(p=>p.filter(e=>e.id!==id));}};
   const eliminarSel=async()=>{if(!window.confirm(`Eliminar ${seleccionados.size} envio(s)?`))return;await Promise.all([...seleccionados].map(id=>deleteDoc(doc(db,"envios",id))));setEnvios(p=>p.filter(e=>!seleccionados.has(e.id)));setSeleccionados(new Set());setModoSel(false);};
   const reasignarSel=()=>{const items=envios.filter(e=>seleccionados.has(e.id));onReasignar(items);setSeleccionados(new Set());setModoSel(false);};
-  const cancelarSel=()=>{if(!window.confirm(`Cancelar ${seleccionados.size} envio(s)?`))return;setEnvios(p=>p.map(e=>seleccionados.has(e.id)?{...e}:e));setSeleccionados(new Set());setModoSel(false);};
+  const cancelarSel=async()=>{if(!window.confirm(`Cancelar ${seleccionados.size} envio(s)?`))return;await Promise.all([...seleccionados].map(id=>setDoc(doc(db,"envios",id),{estado:"cancelado"},{merge:true})));setEnvios(p=>p.map(e=>seleccionados.has(e.id)?{...e,estado:"cancelado"}:e));setSeleccionados(new Set());setModoSel(false);};
   // Ordenar por nroOrdenTN descendente (mas nuevo arriba)
   const filtradosOrdenados=[...filtrados].sort((a,b)=>{
     const nA=parseInt(a.nroOrdenTN||a.id)||0;
