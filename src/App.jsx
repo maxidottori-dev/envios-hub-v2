@@ -864,6 +864,11 @@ function TabImprimir({envios,zc,lc}){
               return(
               <tr key={e.id} style={{borderBottom:"1px solid #1a1f2e",background:i%2===0?"transparent":"#0d1119"}}>
                 <td style={{...tdSt,textAlign:"center",color:"#4b5563"}}>{i+1}</td>
+                <td style={{...tdSt,textAlign:"center",width:"52px"}}>
+                  {esFlex&&e.loteImportacion
+                    ?<span style={{background:"#0d1c04",color:"#84cc16",padding:"1px 5px",borderRadius:"4px",fontSize:"0.68rem",fontWeight:700,whiteSpace:"nowrap"}}>{new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})}</span>
+                    :<span style={{color:"#374151"}}>—</span>}
+                </td>
                 <td style={{...tdSt,whiteSpace:"normal",lineHeight:1.3}}>{dir}</td>
                 <td style={{...tdSt,fontFamily:"monospace",fontSize:"0.72rem",color:esFlex?"#9ca3af":"#7dd3fc"}}>{nroRef}</td>
                 <td style={tdSt}>{zml}</td>
