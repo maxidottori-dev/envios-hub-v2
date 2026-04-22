@@ -36,6 +36,67 @@ async function loginUsuario(usuario, password) {
   } catch(e) { console.error("login error:", e); return null; }
 }
 
+
+// ════════════════════════════════════════════════════════════════════
+// IMPORTAR ETIQUETAS FLEX (PDF)
+// ════════════════════════════════════════════════════════════════════
+const cargarPDFLib=()=>new Promise(resolve=>{
+  if(window.pdfjsLib){resolve(window.pdfjsLib);return;}
+  const s=document.createElement("script");
+  s.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+  s.onload=()=>{
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    resolve(window.pdfjsLib);
+  };
+  document.head.appendChild(s);
+});
+
+const MESES_ES={"ENE":"01","FEB":"02","MAR":"03","ABR":"04","MAY":"05","JUN":"06","JUL":"07","AGO":"08","SEP":"09","OCT":"10","NOV":"11","DIC":"12"};
+const parsarFechaFlex=(txt)=>{
+  const m=txt.match(/FLEX\s+(\d{1,2})\s+([A-Z]{3})/i);
+  if(!m)return"";
+  const dia=String(m[1]).padStart(2,"0");
+  const mes=MESES_ES[(m[2]||"").toUpperCase()]||"01";
+  const anio=new Date().getFullYear();
+  return`${anio}-${mes}-${dia}`;
+};
+const parsearEtiquetasPDF=async(file)=>{
+  const lib=await cargarPDFLib();
+  const buf=await file.arrayBuffer();
+  const pdf=await lib.getDocument({data:buf}).promise;
+  const etiquetas=[];
+  for(let i=1;i<=pdf.numPages;i++){
+    const page=await pdf.getPage(i);
+    const tc=await page.getTextContent();
+    const txt=tc.items.map(x=>x.str).join("
+");
+    if(!txt.includes("FLEX")||!txt.includes("Destinatario:"))continue;
+    const nroM=txt.match(/Envio:\s*(\d+)\s+(\d+)/i);
+    if(!nroM)continue;
+    const nroSeguimiento=(nroM[1]+nroM[2]).trim();
+    const cpM=txt.match(/CP:\s*(\d{4,5})/);
+    const tipoM=txt.match(/(COMERCIAL|RESIDENCIAL)/);
+    const dirM=txt.match(/Direccion:\s*([^
+]+)/i);
+    const barrioM=txt.match(/Barrio:\s*([^
+]+)/i);
+    const refM=txt.match(/Referencia:\s*([\s\S]+?)(?=Destinatario:|$)/i);
+    const destM=txt.match(/Destinatario:\s*([^
+]+)/i);
+    etiquetas.push({
+      nroSeguimiento,
+      cp:cpM?cpM[1].trim():"",
+      tipoEntrega:tipoM?tipoM[1]:"",
+      direccion:dirM?dirM[1].trim():"",
+      localidad:barrioM?barrioM[1].trim():"",
+      referencia:refM?refM[1].replace(/
+/g," ").trim():"",
+      destinatario:destM?destM[1].trim():"",
+      fecha:parsarFechaFlex(txt),
+    });
+  }
+  return etiquetas;
+};
 function cargarXLSX() { return Promise.resolve(XLSXLib); }
 
 const CP_P = {"1601":"La Plata","1607":"San Isidro","1608":"Tigre","1609":"San Isidro","1610":"Tigre","1611":"Tigre","1612":"Malvinas Argentinas","1613":"Malvinas Argentinas","1614":"Malvinas Argentinas","1615":"Malvinas Argentinas","1616":"Malvinas Argentinas","1617":"Tigre","1618":"Tigre","1619":"Escobar","1620":"Escobar","1621":"Tigre","1622":"Escobar","1623":"Escobar","1624":"Tigre","1625":"Escobar","1626":"Escobar","1627":"Escobar","1628":"Escobar","1629":"Pilar","1630":"Pilar","1631":"Pilar","1632":"Pilar","1633":"Pilar","1634":"Pilar","1635":"Pilar","1636":"Vicente Lopez","1637":"Vicente Lopez","1638":"Vicente Lopez","1640":"San Isidro","1641":"San Isidro","1642":"San Isidro","1643":"San Isidro","1644":"San Fernando","1645":"San Fernando","1646":"San Fernando","1647":"Zarate","1648":"Tigre","1649":"San Fernando","1650":"San Martin","1651":"San Martin","1653":"San Martin","1655":"San Martin","1657":"San Martin","1659":"San Miguel","1660":"Jose C Paz","1661":"San Miguel","1662":"San Miguel","1663":"San Miguel","1664":"Pilar","1665":"Jose C Paz","1666":"Jose C Paz","1667":"Pilar","1669":"Pilar","1670":"Tigre","1671":"Tigre","1672":"San Martin","1674":"Tres de Febrero","1675":"Tres de Febrero","1676":"Tres de Febrero","1678":"Tres de Febrero","1682":"Tres de Febrero","1683":"Tres de Febrero","1684":"Moron","1685":"Moron","1686":"Hurlingham","1687":"Tres de Febrero","1688":"Hurlingham","1689":"La Matanza Norte","1692":"Tres de Febrero","1702":"Tres de Febrero","1703":"Tres de Febrero","1704":"La Matanza Norte","1706":"Moron","1707":"Moron","1708":"Moron","1712":"Moron","1713":"Ituzaingo","1714":"Ituzaingo","1715":"Ituzaingo","1716":"Merlo","1718":"Merlo","1721":"Merlo","1722":"Merlo","1723":"Merlo","1724":"Merlo","1727":"Marcos Paz","1736":"Moreno","1738":"Moreno","1740":"Moreno","1742":"Moreno","1743":"Moreno","1744":"Moreno","1745":"Moreno","1746":"Moreno","1748":"Gral. Rodriguez","1749":"Gral. Rodriguez","1751":"La Matanza Norte","1752":"La Matanza Norte","1753":"La Matanza Norte","1754":"La Matanza Norte","1755":"La Matanza Norte","1757":"La Matanza Sur","1758":"La Matanza Sur","1759":"La Matanza Sur","1761":"La Matanza Norte","1763":"La Matanza Sur","1764":"La Matanza Sur","1765":"La Matanza Sur","1766":"La Matanza Norte","1768":"La Matanza Norte","1770":"La Matanza Norte","1771":"La Matanza Norte","1772":"La Matanza Norte","1774":"La Matanza Norte","1778":"La Matanza Norte","1785":"La Matanza Norte","1786":"La Matanza Sur","1801":"Ezeiza","1802":"Ezeiza","1803":"Ezeiza","1804":"Ezeiza","1805":"Esteban Echeverria","1806":"Ezeiza","1807":"Ezeiza","1808":"Canuelas","1812":"Canuelas","1813":"Ezeiza","1814":"Canuelas","1815":"Canuelas","1816":"Canuelas","1821":"Lomas de Zamora","1822":"Lanus","1823":"Lanus","1824":"Lanus","1825":"Lanus","1826":"Lanus","1827":"Lomas de Zamora","1828":"Lomas de Zamora","1829":"Lomas de Zamora","1831":"Lomas de Zamora","1832":"Lomas de Zamora","1833":"Lomas de Zamora","1834":"Lomas de Zamora","1835":"Lomas de Zamora","1836":"Lomas de Zamora","1837":"Berazategui","1838":"Esteban Echeverria","1839":"Esteban Echeverria","1840":"Quilmes","1841":"Esteban Echeverria","1842":"Esteban Echeverria","1843":"Almirante Brown","1844":"Almirante Brown","1845":"Almirante Brown","1846":"Almirante Brown","1847":"Almirante Brown","1848":"Almirante Brown","1849":"Almirante Brown","1851":"Almirante Brown","1852":"Almirante Brown","1853":"Florencio Varela","1854":"Almirante Brown","1855":"Almirante Brown","1856":"Almirante Brown","1858":"Presidente Peron","1859":"Florencio Varela","1860":"Berazategui","1861":"Berazategui","1862":"Presidente Peron","1863":"Florencio Varela","1864":"San Vicente","1865":"San Vicente","1867":"Florencio Varela","1868":"Avellaneda","1869":"Avellaneda","1870":"Avellaneda","1871":"Avellaneda","1872":"Avellaneda","1873":"Avellaneda","1874":"Avellaneda","1875":"Avellaneda","1876":"Quilmes","1877":"Quilmes","1878":"Quilmes","1879":"Quilmes","1880":"Berazategui","1881":"Quilmes","1882":"Quilmes","1883":"Quilmes","1884":"Berazategui","1885":"Berazategui","1886":"Berazategui","1887":"Florencio Varela","1888":"Florencio Varela","1889":"Florencio Varela","1890":"Berazategui","1891":"Florencio Varela","1893":"Berazategui","1894":"La Plata","1895":"La Plata","1896":"La Plata","1897":"La Plata","1900":"La Plata","1901":"La Plata","1902":"La Plata","1903":"La Plata","1904":"La Plata","1905":"La Plata","1906":"La Plata","1907":"La Plata","1908":"La Plata","1909":"La Plata","1910":"La Plata","1912":"La Plata","1914":"La Plata","1923":"Berisso","1924":"Berisso","1925":"Ensenada","1926":"Ensenada","1927":"Ensenada","1929":"Berisso","1931":"Ensenada","1984":"San Vicente","2800":"Zarate","2801":"Zarate","2802":"Zarate","2804":"Campana","2805":"Campana","2806":"Zarate","2808":"Zarate","2812":"Campana","2814":"Ex.de la Cruz","2816":"Campana","6700":"Lujan","6701":"Lujan","6702":"Lujan","6703":"Ex.de la Cruz","6706":"Lujan","6708":"Lujan","6712":"Lujan"};
@@ -402,6 +463,22 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc}){
   );
 }
 
+// ════════════════════════════════════════════════════════════════════
+// QR MODAL
+// ════════════════════════════════════════════════════════════════════
+function QRModal({nro,onClose}){
+  return(
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#12172a",border:"1px solid #6366f1",borderRadius:"16px",padding:"24px 28px",textAlign:"center",boxShadow:"0 8px 40px #0008"}}>
+        <div style={{color:"#9ca3af",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:"6px"}}>Codigo QR</div>
+        <div style={{color:"#e5e7eb",fontWeight:700,fontFamily:"monospace",fontSize:"0.82rem",marginBottom:"14px"}}>{nro}</div>
+        <img src={"https://api.qrserver.com/v1/create-qr-code/?size=260x260&data="+nro} alt="QR" style={{borderRadius:"8px",display:"block",margin:"0 auto"}}/>
+        <button onClick={onClose} style={{marginTop:"16px",background:"#1a1f2e",border:"1px solid #252d40",color:"#9ca3af",padding:"7px 22px",borderRadius:"8px",cursor:"pointer",fontSize:"0.8rem"}}>Cerrar</button>
+      </div>
+    </div>
+  );
+}
+
 function PanelEdit({envio,onSave,onClose,lc}){
   const [e,setE]=useState({...envio});
   const set=(k,v)=>setE(p=>({...p,[k]:v}));
@@ -500,6 +577,23 @@ function PanelEdit({envio,onSave,onClose,lc}){
           <input value={e.cp||""} onChange={ev=>set("cp",ev.target.value)} placeholder="CP" style={{...S.input,width:"70px",padding:"3px 8px",fontSize:"0.75rem"}}/>
         </div>
       </div>
+      {/* Datos FLEX — destinatario, tipo entrega, referencia, QR */}
+      {e.origen==="ML"&&(
+        <div style={{marginBottom:"0.65rem",background:"#0d1119",border:"1px solid #1a3008",borderRadius:"10px",padding:"0.65rem 1rem"}}>
+          <div style={{color:"#84cc16",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"8px"}}>Datos de la etiqueta FLEX</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.35rem 1rem",marginBottom:"8px",fontSize:"0.78rem"}}>
+            {e.destinatario&&<div style={{gridColumn:"1/-1"}}><span style={{color:"#6b7280"}}>Destinatario: </span><span style={{color:"#e5e7eb",fontWeight:600}}>{e.destinatario}</span></div>}
+            {e.tipoEntrega&&<div><span style={{background:e.tipoEntrega==="COMERCIAL"?"#0c1a40":"#0a1a0a",color:e.tipoEntrega==="COMERCIAL"?"#38bdf8":"#86efac",border:"1px solid "+(e.tipoEntrega==="COMERCIAL"?"#38bdf8":"#86efac"),borderRadius:"4px",padding:"1px 8px",fontSize:"0.7rem",fontWeight:700}}>{e.tipoEntrega}</span></div>}
+            {e.nroSeguimiento&&<div style={{display:"flex",alignItems:"center",gap:"6px"}}><button onClick={()=>set("_showQR",!e._showQR)} style={{...S.btnSm(e._showQR,"#6366f1"),padding:"2px 10px",fontSize:"0.7rem"}}>📷 Ver QR</button></div>}
+          </div>
+          {e._showQR&&e.nroSeguimiento&&<QRModal nro={e.nroSeguimiento} onClose={()=>set("_showQR",false)}/>}
+          <div>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Referencia / instrucciones</div>
+            <textarea value={e.referencia||""} onChange={ev=>set("referencia",ev.target.value)} placeholder="Indicaciones de entrega..." style={{...S.input,display:"block",width:"100%",height:"52px",resize:"vertical",fontSize:"0.78rem"}}/>
+          </div>
+        </div>
+      )}
+
       {/* Notas de la orden — editable (incluye datepicker) */}
       <div style={{marginBottom:"0.5rem"}}>
         <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>{esTN?"Notas de la orden":"Observaciones"}</div>
@@ -716,6 +810,8 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
                   <div style={{color:"#9ca3af",fontSize:"0.74rem",marginTop:"2px",display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center"}}>
                     {!esTN&&<span style={{fontFamily:"monospace",color:"#9ca3af"}}>...{e.id.slice(-10)}</span>}
                     {e.nroSeguimiento&&<span style={{background:"#0f1420",padding:"0 5px",borderRadius:"4px",border:"1px solid #252d40",color:"#9ca3af"}}>📦 {e.nroSeguimiento}</span>}
+                    {e.tipoEntrega&&<span style={{background:e.tipoEntrega==="COMERCIAL"?"#0c1a40":"#0a1a0a",color:e.tipoEntrega==="COMERCIAL"?"#38bdf8":"#86efac",border:"1px solid "+(e.tipoEntrega==="COMERCIAL"?"#1e4060":"#1a3a1a"),borderRadius:"4px",padding:"0 5px",fontSize:"0.68rem",fontWeight:700}}>{e.tipoEntrega}</span>}
+                    {e.destinatario&&<span style={{color:"#cbd5e1",fontWeight:500,fontSize:"0.74rem"}}>· {e.destinatario}</span>}
                     <span style={{color:"#9ca3af"}}>· {e.localidad?e.localidad+" · ":""}{e.partido}</span>
                     {e.fechaVenta&&<span style={{color:"#6b7280"}}>· venta {fmtCorta(e.fechaVenta)}</span>}
                     {e.formaPago&&esTN&&<span style={{color:e.formaPago==="Efectivo"?"#fbbf24":"#9ca3af",fontWeight:e.formaPago==="Efectivo"?700:400}}>· {e.formaPago}</span>}
@@ -3182,6 +3278,71 @@ export default function App(){
         <div style={{marginLeft:"auto",display:"flex",gap:"0.35rem",flexWrap:"wrap"}}>
           <button onClick={()=>{const tnSinAsignar=envios.filter(e=>e.origen==="Tienda Nube"&&getEstado(e)==="sin_asignar");if(!tnSinAsignar.length){mostrarToast("No hay pedidos TN sin asignar");return;}setBorrador(tnSinAsignar);setFileName("Pedidos TN sin asignar");setPantalla("asignacion-tn");}} style={{padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#0d1c2e",border:"1px solid #38bdf8",color:"#38bdf8",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>Asignar TN</button>
           <button onClick={descargarTemplate} style={{padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#0f1420",border:"1px solid #252d40",color:"#9ca3af",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}} title="Descargar plantilla Excel">⬇ Plantilla</button>
+          <label style={{cursor:"pointer"}}>
+            <input type="file" accept=".pdf" style={{display:"none"}} onChange={async ev=>{
+              const f=ev.target.files[0];if(!f){return;}ev.target.value="";
+              setLoading(true);
+              try{
+                const etiquetas=await parsearEtiquetasPDF(f);
+                if(!etiquetas.length){mostrarToast("No se encontraron etiquetas FLEX en el PDF");setLoading(false);return;}
+                let creados=0,actualizados=0,saltados=0;
+                const hoy=fechaHoy();
+                for(const et of etiquetas){
+                  const existe=envios.find(e=>e.nroSeguimiento===et.nroSeguimiento);
+                  if(existe){
+                    // Ya existe → actualizar solo campos de etiqueta
+                    const ref=doc(db,"envios",existe.id);
+                    const upd={};
+                    if(et.destinatario)upd.destinatario=et.destinatario;
+                    if(et.referencia)upd.referencia=et.referencia;
+                    if(et.tipoEntrega)upd.tipoEntrega=et.tipoEntrega;
+                    if(et.localidad&&!existe.localidad)upd.localidad=et.localidad;
+                    if(et.fecha&&!existe.fecha)upd.fecha=et.fecha;
+                    if(Object.keys(upd).length){await setDoc(ref,upd,{merge:true});actualizados++;}
+                    else saltados++;
+                  } else {
+                    // No existe → crear envío completo
+                    const id=et.nroSeguimiento;
+                    const ref=doc(db,"envios",id);
+                    const nuevoEnvio={
+                      id,
+                      nroSeguimiento:et.nroSeguimiento,
+                      linkML:"https://www.mercadolibre.com.ar/ventas/"+et.nroSeguimiento+"/detalle",
+                      origen:"ML",
+                      direccion:et.direccion||"",
+                      localidad:et.localidad||"",
+                      partido:"",
+                      cp:et.cp||"",
+                      ciudad:"",
+                      fecha:et.fecha||hoy,
+                      fechaVenta:hoy,
+                      turno:"",
+                      trans:"",
+                      bultos:null,
+                      cobranza:null,
+                      cambio:null,
+                      retiro:null,
+                      observaciones:"",
+                      importe:0,
+                      destinatario:et.destinatario||"",
+                      referencia:et.referencia||"",
+                      tipoEntrega:et.tipoEntrega||"",
+                      preparado:false,
+                    };
+                    await setDoc(ref,nuevoEnvio);
+                    creados++;
+                  }
+                }
+                const partes=[];
+                if(creados)partes.push(`${creados} creado(s)`);
+                if(actualizados)partes.push(`${actualizados} actualizado(s)`);
+                if(saltados)partes.push(`${saltados} sin cambios`);
+                mostrarToast(partes.join(" · ")||"Sin novedades");
+              }catch(err){mostrarToast("Error al procesar PDF: "+err.message);}
+              setLoading(false);
+            }}/>
+            <span style={{display:"inline-block",padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#0a1a0a",border:"1px solid #84cc16",color:"#84cc16",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>{loading?"...":"📦 Etiquetas PDF"}</span>
+          </label>
           <label style={{cursor:"pointer"}}>
             <input type="file" accept=".xlsx,.xls" style={{display:"none"}} onChange={e=>{if(e.target.files[0]){cargarArchivo(e.target.files[0]);e.target.value="";}}}/>
             <span style={{display:"inline-block",padding:"0.33rem 0.75rem",borderRadius:"7px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",color:"#fff",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>{loading?"...":"Cargar Excel"}</span>
