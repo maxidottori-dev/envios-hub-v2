@@ -74,7 +74,7 @@ const parsearEtiquetasPDF=async(file)=>{
     if(!nroM)continue;
     const nroSeguimiento=(nroM[1]+nroM[2]).trim();
     const cpM=txt.match(/CP:\s*(\d{4,5})/);
-    const tipoM=txt.match(/(COMERCIAL|RESIDENCIAL)/);
+    const tipoM=txt.match(/(COMERCIAL|RESIDENCIAL)/);
     const dirM=txt.match(/Direccion:\s*([^\n]+)/i);
     const barrioM=txt.match(/Barrio:\s*([^\n]+)/i);
     const refM=txt.match(/Referencia:\s*([\s\S]+?)(?=Destinatario:|$)/i);
@@ -85,8 +85,7 @@ const parsearEtiquetasPDF=async(file)=>{
       tipoEntrega:tipoM?tipoM[1]:"",
       direccion:dirM?dirM[1].trim():"",
       localidad:barrioM?barrioM[1].trim():"",
-      referencia:refM?refM[1].replace(/
-/g," ").trim():"",
+      referencia:refM?refM[1].replace(/\n/g," ").trim():"",
       destinatario:destM?destM[1].trim():"",
       fecha:parsarFechaFlex(txt),
     });
