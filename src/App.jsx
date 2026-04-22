@@ -75,13 +75,10 @@ const parsearEtiquetasPDF=async(file)=>{
     const nroSeguimiento=(nroM[1]+nroM[2]).trim();
     const cpM=txt.match(/CP:\s*(\d{4,5})/);
     const tipoM=txt.match(/(COMERCIAL|RESIDENCIAL)/);
-    const dirM=txt.match(/Direccion:\s*([^
-]+)/i);
-    const barrioM=txt.match(/Barrio:\s*([^
-]+)/i);
+    const dirM=txt.match(/Direccion:\s*([^\n]+)/i);
+    const barrioM=txt.match(/Barrio:\s*([^\n]+)/i);
     const refM=txt.match(/Referencia:\s*([\s\S]+?)(?=Destinatario:|$)/i);
-    const destM=txt.match(/Destinatario:\s*([^
-]+)/i);
+    const destM=txt.match(/Destinatario:\s*([^\n]+)/i);
     etiquetas.push({
       nroSeguimiento,
       cp:cpM?cpM[1].trim():"",
