@@ -403,7 +403,7 @@ function PanelEdit({envio,onSave,onClose,lc}){
   const [e,setE]=useState({...envio});
   const set=(k,v)=>setE(p=>({...p,[k]:v}));
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
-  const handleTrans=l=>{const t=e.trans===l?"":l;setE(p=>({...p,trans:t,estado:t?"asignado":(p.estado==="cancelado"?"cancelado":"sin_asignar")}));};
+  const handleTrans=l=>{const t=e.trans===l?"":l;setE(p=>({...p,trans:t,estado:t?"asignado":(p.estado==="cancelado"?"cancelado":"sin_asignar"),asignadoEn:t?new Date().toISOString():p.asignadoEn}));};
   const esTN = e.origen === "Tienda Nube";
   const pagoOk = puedeAsignar(e);
   const autorizarCC=()=>setE(p=>({...p,pagoEstado:"cuenta_corriente"}));
@@ -785,11 +785,24 @@ function TabImprimir({envios,zc,lc}){
     if(filOrigen==="FLEX"&&e.origen!=="ML")return false;
     if(filOrigen==="NO_FLEX"&&e.origen==="ML")return false;
     return e.estado!=="cancelado";
+  }).sort((a,b)=>{
+    const ta=a.asignadoEn||a.fechaVenta||a.fecha||"";
+    const tb=b.asignadoEn||b.fechaVenta||b.fecha||"";
+    return ta.localeCompare(tb);
   });
   const totalImp=lista.reduce((s,e)=>s+getImp(e),0);
   const cobTotal=lista.filter(e=>e.cobranza).reduce((s,e)=>s+(e.cobranza||0),0);
   const hayCobro=lista.some(e=>e.cobranza!==null&&e.cobranza>0);
 
+
+  const nombreArchivoExport=(ext)=>{
+    const ahora=new Date();
+    const fd=ahora.toISOString().split("T")[0];
+    const hora=ahora.toTimeString().slice(0,5).replace(":","h");
+    const log=trans==="TODOS"?"TODAS":trans;
+    const tur=turno==="TODOS"?"todos-turnos":turno;
+    return `envios_${log}_${tur}_${fd}_${hora}.${ext}`;
+  };
   const generarPDF=()=>{
     const ahora=new Date();
     const ts=ahora.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+" "+ahora.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
@@ -802,7 +815,7 @@ function TabImprimir({envios,zc,lc}){
       const cobrar=e.cobranza?"$"+Number(e.cobranza).toLocaleString("es-AR"):"—";
       return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}"><td style="text-align:center;width:20px;border-bottom:0.5px solid #ddd;padding:3px 4px;color:#888;">${i+1}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-weight:500;">${dir}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-family:monospace;font-size:10px;color:#444;width:110px;">${nroRef}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:45px;">${zml}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:32px;text-align:center;">${e.turno||"—"}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:42px;text-align:center;">${e.fecha?fmtCorta(e.fecha):"—"}</td>${hayCobro?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:72px;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:18px;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td></tr>`;
     }).join("");
-    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Envios ${fecha}</title><style>@page{size:A4 landscape;margin:8mm 10mm;}body{font-family:Arial,sans-serif;font-size:11px;margin:0;color:#111;}table{width:100%;border-collapse:collapse;}th{background:#e8e8e8;padding:3px 4px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;color:#555;border-bottom:1.5px solid #333;}@media print{button{display:none!important;}}</style></head><body><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;"><span style="font-weight:700;font-size:13px;">Hoja de salida — ${trans==="TODOS"?"Todas las logisticas":trans} · ${fecha} · ${turno==="TODOS"?"Todos los turnos":turno} · ${origenLabel}</span><span style="font-size:10px;color:#888;">Impreso: ${ts} · ${lista.length} envios</span></div><table><thead><tr><th style="width:20px;">#</th><th>Direccion · Localidad · Partido · CP</th><th style="width:100px;">Nro envio / orden</th><th style="width:45px;">Zona</th><th style="width:32px;">Turno</th><th style="width:42px;">Fecha</th>${hayCobro?"<th style='width:72px;text-align:right;'>Cobrar</th>":""}<th style="width:18px;text-align:center;">Chk</th></tr></thead><tbody>${rows}</tbody></table><div style="border-top:1.5px solid #333;margin-top:4px;padding-top:3px;font-size:9px;color:#555;display:flex;gap:16px;"><span>Total: <strong>${lista.length} envios</strong></span>${cobTotal?`<span>Cobranzas: <strong style="color:#b45309;">$${cobTotal.toLocaleString("es-AR")}</strong></span>`:""}</div><script>window.onload=function(){window.print();}<\/script></body></html>`;
+    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${nombreArchivoExport("pdf")}</title><style>@page{size:A4 landscape;margin:8mm 10mm;}body{font-family:Arial,sans-serif;font-size:11px;margin:0;color:#111;}table{width:100%;border-collapse:collapse;}th{background:#e8e8e8;padding:3px 4px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;color:#555;border-bottom:1.5px solid #333;}@media print{button{display:none!important;}}</style></head><body><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;"><span style="font-weight:700;font-size:13px;">Hoja de salida — ${trans==="TODOS"?"Todas las logisticas":trans} · ${fecha} · ${turno==="TODOS"?"Todos los turnos":turno} · ${origenLabel}</span><span style="font-size:10px;color:#888;">Impreso: ${ts} · ${lista.length} envios</span></div><table><thead><tr><th style="width:20px;">#</th><th>Direccion · Localidad · Partido · CP</th><th style="width:100px;">Nro envio / orden</th><th style="width:45px;">Zona</th><th style="width:32px;">Turno</th><th style="width:42px;">Fecha</th>${hayCobro?"<th style='width:72px;text-align:right;'>Cobrar</th>":""}<th style="width:18px;text-align:center;">Chk</th></tr></thead><tbody>${rows}</tbody></table><div style="border-top:1.5px solid #333;margin-top:4px;padding-top:3px;font-size:9px;color:#555;display:flex;gap:16px;"><span>Total: <strong>${lista.length} envios</strong></span>${cobTotal?`<span>Cobranzas: <strong style="color:#b45309;">$${cobTotal.toLocaleString("es-AR")}</strong></span>`:""}</div><script>window.onload=function(){window.print();}<\/script></body></html>`;
     const w=window.open("","_blank");if(!w){alert("Permite ventanas emergentes.");return;}w.document.write(html);w.document.close();
   };
 
@@ -832,7 +845,7 @@ function TabImprimir({envios,zc,lc}){
                 Zona:getZonaML(e.partido)||"",Turno:e.turno||"",Fecha:e.fecha||"",
                 Cobrar:e.cobranza||""};
             });
-            exportarXLSX(filas,"imprimir_"+fechaHoy());
+            exportarXLSX(filas,nombreArchivoExport("xlsx").replace(".xlsx",""));
           }} style={{...S.btn(false),border:"1px solid #10b981",color:"#10b981",padding:"0.4rem 0.9rem",fontSize:"0.78rem"}}>⬇ Excel</button>
           <button onClick={generarPDF} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.5rem 1.1rem"}}>Generar PDF</button>
         </div>
@@ -888,7 +901,7 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes}){
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   useEffect(()=>{const p=cpAPartido(f.cp);if(p)set("partido",p);},[f.cp]);
   useEffect(()=>{if(f.nroSeguimiento&&(enviosExistentes||[]).some(e=>e.nroSeguimiento===f.nroSeguimiento)){setDupWarn("Ya existe un envio con este numero de seguimiento.");}else{setDupWarn("");};},[f.nroSeguimiento]);
-  const handleTrans=l=>{const t=f.trans===l?"":l;setF(p=>({...p,trans:t,estado:t?"asignado":"sin_asignar"}));};
+  const handleTrans=l=>{const t=f.trans===l?"":l;setF(p=>({...p,trans:t,estado:t?"asignado":"sin_asignar",asignadoEn:t?new Date().toISOString():p.asignadoEn}));};
   const guardar=()=>{
     if(!f.id.trim()){setErr("El numero de venta es obligatorio.");return;}
     if(!f.direccion.trim()){setErr("La direccion es obligatoria.");return;}
