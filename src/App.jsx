@@ -44,7 +44,12 @@ function cpAPartido(cp) {
   const s = String(cp||"").replace(/\D/g,"");
   const n = parseInt(s);
   if (n >= 1000 && n <= 1499) return "CABA";
-  return CP_P[s] || "";
+  if (CP_P[s]) return CP_P[s];
+  try {
+    const extra = JSON.parse(localStorage.getItem("envhub_cp_extra") || "{}");
+    if (extra[s]) return extra[s];
+  } catch(e) {}
+  return "";
 }
 
 const ZONA_ML = {"CABA":"CABA","Avellaneda":"PL","Lanus":"PL","Quilmes":"PL","Lomas de Zamora":"LOMAS","Almirante Brown":"SUR","Berazategui":"SUR","Esteban Echeverria":"SUR","Florencio Varela":"SUR","Hurlingham":"NOE","Ituzaingo":"NOE","Jose C Paz":"NOE","La Matanza Norte":"NOE","La Matanza Sur":"NOE","Malvinas Argentinas":"NOE","Merlo":"NOE","Moreno":"NOE","Moron":"NOE","San Fernando":"NOE","San Isidro":"NOE","San Martin":"NOE","San Miguel":"NOE","Tigre":"NOE","Tres de Febrero":"NOE","Vicente Lopez":"NOE","La Plata":"GBA2","Zarate":"GBA2","Ensenada":"GBA2","Berisso":"GBA2","Escobar":"GBA2","Marcos Paz":"GBA2","Pilar":"GBA2","Presidente Peron":"GBA2","Canuelas":"GBA2","Lujan":"GBA2","Gral. Rodriguez":"GBA2","Ex.de la Cruz":"GBA2","San Vicente":"GBA2","Campana":"GBA2","Ezeiza":"GBA2"};
@@ -1714,12 +1719,8 @@ function TabLiquidacion({ envios, setEnvios, lc }) {
 // ════════════════════════════════════════════════════════════════════
 const CP_P_INIT = {"1601":"La Plata","1607":"San Isidro","1608":"Tigre","1609":"San Isidro","1610":"Tigre","1611":"Tigre","1612":"Malvinas Argentinas","1613":"Malvinas Argentinas","1614":"Malvinas Argentinas","1615":"Malvinas Argentinas","1616":"Malvinas Argentinas","1617":"Tigre","1618":"Tigre","1619":"Escobar","1620":"Escobar","1621":"Tigre","1622":"Escobar","1623":"Escobar","1624":"Tigre","1625":"Escobar","1626":"Escobar","1627":"Escobar","1628":"Escobar","1629":"Pilar","1630":"Pilar","1631":"Pilar","1632":"Pilar","1633":"Pilar","1634":"Pilar","1635":"Pilar","1636":"Vicente Lopez","1637":"Vicente Lopez","1638":"Vicente Lopez","1640":"San Isidro","1641":"San Isidro","1642":"San Isidro","1643":"San Isidro","1644":"San Fernando","1645":"San Fernando","1646":"San Fernando","1647":"Zarate","1648":"Tigre","1649":"San Fernando","1650":"San Martin","1651":"San Martin","1653":"San Martin","1655":"San Martin","1657":"San Martin","1659":"San Miguel","1660":"Jose C Paz","1661":"San Miguel","1662":"San Miguel","1663":"San Miguel","1664":"Pilar","1665":"Jose C Paz","1666":"Jose C Paz","1667":"Pilar","1669":"Pilar","1670":"Tigre","1671":"Tigre","1672":"San Martin","1674":"Tres de Febrero","1675":"Tres de Febrero","1676":"Tres de Febrero","1678":"Tres de Febrero","1682":"Tres de Febrero","1683":"Tres de Febrero","1684":"Moron","1685":"Moron","1686":"Hurlingham","1687":"Tres de Febrero","1688":"Hurlingham","1689":"La Matanza Norte","1692":"Tres de Febrero","1702":"Tres de Febrero","1703":"Tres de Febrero","1704":"La Matanza Norte","1706":"Moron","1707":"Moron","1708":"Moron","1712":"Moron","1713":"Ituzaingo","1714":"Ituzaingo","1715":"Ituzaingo","1716":"Merlo","1718":"Merlo","1721":"Merlo","1722":"Merlo","1723":"Merlo","1724":"Merlo","1727":"Marcos Paz","1736":"Moreno","1738":"Moreno","1740":"Moreno","1742":"Moreno","1743":"Moreno","1744":"Moreno","1745":"Moreno","1746":"Moreno","1748":"Gral. Rodriguez","1749":"Gral. Rodriguez","1751":"La Matanza Norte","1752":"La Matanza Norte","1753":"La Matanza Norte","1754":"La Matanza Norte","1755":"La Matanza Norte","1757":"La Matanza Sur","1758":"La Matanza Sur","1759":"La Matanza Sur","1761":"La Matanza Norte","1763":"La Matanza Sur","1764":"La Matanza Sur","1765":"La Matanza Sur","1766":"La Matanza Norte","1768":"La Matanza Norte","1770":"La Matanza Norte","1771":"La Matanza Norte","1772":"La Matanza Norte","1774":"La Matanza Norte","1778":"La Matanza Norte","1785":"La Matanza Norte","1786":"La Matanza Sur","1801":"Ezeiza","1802":"Ezeiza","1803":"Ezeiza","1804":"Ezeiza","1805":"Esteban Echeverria","1806":"Ezeiza","1807":"Ezeiza","1808":"Canuelas","1812":"Canuelas","1813":"Ezeiza","1814":"Canuelas","1815":"Canuelas","1816":"Canuelas","1821":"Lomas de Zamora","1822":"Lanus","1823":"Lanus","1824":"Lanus","1825":"Lanus","1826":"Lanus","1827":"Lomas de Zamora","1828":"Lomas de Zamora","1829":"Lomas de Zamora","1831":"Lomas de Zamora","1832":"Lomas de Zamora","1833":"Lomas de Zamora","1834":"Lomas de Zamora","1835":"Lomas de Zamora","1836":"Lomas de Zamora","1837":"Berazategui","1838":"Esteban Echeverria","1839":"Esteban Echeverria","1840":"Quilmes","1841":"Esteban Echeverria","1842":"Esteban Echeverria","1843":"Almirante Brown","1844":"Almirante Brown","1845":"Almirante Brown","1846":"Almirante Brown","1847":"Almirante Brown","1848":"Almirante Brown","1849":"Almirante Brown","1851":"Almirante Brown","1852":"Almirante Brown","1853":"Florencio Varela","1854":"Almirante Brown","1855":"Almirante Brown","1856":"Almirante Brown","1858":"Presidente Peron","1859":"Florencio Varela","1860":"Berazategui","1861":"Berazategui","1862":"Presidente Peron","1863":"Florencio Varela","1864":"San Vicente","1865":"San Vicente","1867":"Florencio Varela","1868":"Avellaneda","1869":"Avellaneda","1870":"Avellaneda","1871":"Avellaneda","1872":"Avellaneda","1873":"Avellaneda","1874":"Avellaneda","1875":"Avellaneda","1876":"Quilmes","1877":"Quilmes","1878":"Quilmes","1879":"Quilmes","1880":"Berazategui","1881":"Quilmes","1882":"Quilmes","1883":"Quilmes","1884":"Berazategui","1885":"Berazategui","1886":"Berazategui","1887":"Florencio Varela","1888":"Florencio Varela","1889":"Florencio Varela","1890":"Berazategui","1891":"Florencio Varela","1893":"Berazategui","1894":"La Plata","1895":"La Plata","1896":"La Plata","1897":"La Plata","1900":"La Plata","1901":"La Plata","1902":"La Plata","1903":"La Plata","1904":"La Plata","1905":"La Plata","1906":"La Plata","1907":"La Plata","1908":"La Plata","1909":"La Plata","1910":"La Plata","1912":"La Plata","1914":"La Plata","1923":"Berisso","1924":"Berisso","1925":"Ensenada","1926":"Ensenada","1927":"Ensenada","1929":"Berisso","1931":"Ensenada","1984":"San Vicente","2800":"Zarate","2801":"Zarate","2802":"Zarate","2804":"Campana","2805":"Campana","2806":"Zarate","2808":"Zarate","2812":"Campana","2814":"Ex.de la Cruz","2816":"Campana","6700":"Lujan","6701":"Lujan","6702":"Lujan","6703":"Ex.de la Cruz","6706":"Lujan","6708":"Lujan","6712":"Lujan"};
 
-function TabLocalidades() {
-  const [tabla, setTabla] = useState(() => {
-    const stored = localStorage.getItem("envhub_cp_extra");
-    const extra = stored ? JSON.parse(stored) : {};
-    return { ...CP_P_INIT, ...extra };
-  });
+function TabLocalidades({cpExtra,setCpExtra}) {
+  const tabla={...CP_P_INIT,...cpExtra};
   const [busqueda, setBusqueda] = useState("");
   const [editCP, setEditCP] = useState(null);
   const [editVal, setEditVal] = useState("");
@@ -1728,9 +1729,7 @@ function TabLocalidades() {
   const [toast, setToast] = useState("");
 
   const mostrarToast = msg => { setToast(msg); setTimeout(() => setToast(""), 2000); };
-
   const partidos = [...new Set(Object.values(tabla))].sort();
-
   const filas = Object.entries(tabla)
     .filter(([cp, p]) => {
       if (!busqueda) return true;
@@ -1740,27 +1739,23 @@ function TabLocalidades() {
     .sort(([a], [b]) => parseInt(a) - parseInt(b));
 
   const guardar = (cp, partido) => {
-    const nueva = { ...tabla, [cp]: partido };
-    setTabla(nueva);
-    // Guardar extras (los que no estan en el init)
-    const extra = {};
-    Object.entries(nueva).forEach(([k, v]) => { if (CP_P_INIT[k] !== v) extra[k] = v; });
-    localStorage.setItem("envhub_cp_extra", JSON.stringify(extra));
-    // Actualizar el mapa global en runtime
-    CP_P[cp] = partido;
+    const nuevaExtra={...cpExtra};
+    if(!CP_P_INIT[cp]||CP_P_INIT[cp]!==partido) nuevaExtra[cp]=partido;
+    else delete nuevaExtra[cp];
+    setDoc(doc(db,"config","cp_extra"),nuevaExtra).catch(console.error);
+    setCpExtra(nuevaExtra);
+    CP_P[cp]=partido;
     setEditCP(null);
-    mostrarToast("Guardado");
+    mostrarToast("Guardado en Firebase ✓");
   };
 
   const eliminar = (cp) => {
     if (!window.confirm("Eliminar CP " + cp + "?")) return;
-    const nueva = { ...tabla };
-    delete nueva[cp];
-    setTabla(nueva);
-    const extra = {};
-    Object.entries(nueva).forEach(([k, v]) => { if (CP_P_INIT[k] !== v) extra[k] = v; });
-    localStorage.setItem("envhub_cp_extra", JSON.stringify(extra));
-    delete CP_P[cp];
+    const nuevaExtra={...cpExtra};
+    delete nuevaExtra[cp];
+    setDoc(doc(db,"config","cp_extra"),nuevaExtra).catch(console.error);
+    setCpExtra(nuevaExtra);
+    if(CP_P_INIT[cp]) CP_P[cp]=CP_P_INIT[cp]; else delete CP_P[cp];
     mostrarToast("Eliminado");
   };
 
@@ -3038,8 +3033,9 @@ export default function App(){
   const [envios,setEnviosLocal]=useState([]);
   const [zc,setZc]=useState(ZONAS_INIT);
   const [lc,setLc]=useState(LOGISTICAS_INIT);
+  const [cpExtra,setCpExtra]=useState({});
 
-  // Cargar lc y zc desde Firebase al iniciar
+  // Cargar lc, zc y cpExtra desde Firebase al iniciar
   useEffect(()=>{
     const unsubLc=onSnapshot(doc(db,"config","logisticas"),snap=>{
       if(snap.exists()){const data=snap.data();setLc(p=>({...LOGISTICAS_INIT,...p,...data}));}
@@ -3047,7 +3043,25 @@ export default function App(){
     const unsubZc=onSnapshot(doc(db,"config","zonas"),snap=>{
       if(snap.exists()){const data=snap.data();setZc(p=>({...ZONAS_INIT,...p,...data}));}
     });
-    return()=>{unsubLc();unsubZc();};
+    const unsubCp=onSnapshot(doc(db,"config","cp_extra"),snap=>{
+      let data={};
+      if(snap.exists()){data=snap.data();}
+      else{
+        try{
+          const local=JSON.parse(localStorage.getItem("envhub_cp_extra")||"{}");
+          if(Object.keys(local).length>0){
+            setDoc(doc(db,"config","cp_extra"),local).then(()=>{
+              localStorage.removeItem("envhub_cp_extra");
+              console.log("Localidades migradas de localStorage a Firebase");
+            }).catch(console.error);
+            data=local;
+          }
+        }catch(e){}
+      }
+      Object.entries(data).forEach(([k,v])=>{CP_P[k]=v;});
+      setCpExtra(data);
+    });
+    return()=>{unsubLc();unsubZc();unsubCp();};
   },[]);
 
   const setLcPersist=useCallback((updater)=>{
@@ -3178,7 +3192,7 @@ export default function App(){
         {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZcPersist} lc={lc} setLc={setLcPersist}/>}
         {tab==="informe"     &&<TabInforme     envios={envios} zc={zc} lc={lc}/>}
         {tab==="liquidacion" &&<TabLiquidacion envios={envios} setEnvios={setEnvios} lc={lc}/>}
-        {tab==="localidades" &&<TabLocalidades/>}
+        {tab==="localidades" &&<TabLocalidades cpExtra={cpExtra} setCpExtra={setCpExtra}/>}
         {tab==="usuarios"   &&esAdmin&&<TabUsuarios lc={lc} setLc={setLcPersist}/>}
       </div>
     </div>
