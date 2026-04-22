@@ -149,6 +149,9 @@ function parsearExcel(file) {
           }
         }
         if(envios.length===0) throw new Error("No se encontraron envios validos.");
+        // Marcar todos los envios del lote con el mismo timestamp de importacion
+        const lote=new Date().toISOString();
+        envios.forEach(e=>{e.loteImportacion=lote;});
         resolve(envios);
       } catch(err) { reject(err); }
     };
