@@ -68,8 +68,7 @@ const parsearEtiquetasPDF=async(file)=>{
   for(let i=1;i<=pdf.numPages;i++){
     const page=await pdf.getPage(i);
     const tc=await page.getTextContent();
-    const txt=tc.items.map(x=>x.str).join("
-");
+    const txt=tc.items.map(x=>x.str).join("\n");
     if(!txt.includes("FLEX")||!txt.includes("Destinatario:"))continue;
     const nroM=txt.match(/Envio:\s*(\d+)\s+(\d+)/i);
     if(!nroM)continue;
