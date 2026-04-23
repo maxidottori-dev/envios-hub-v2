@@ -965,11 +965,13 @@ function TabImprimir({envios,zc,lc}){
       const esFlex=e.origen==="ML";
       const nroRef=esFlex?(e.nroSeguimiento||e.id.slice(-10)):"#"+(e.nroOrdenTN||e.id.slice(-8));
       const dir=[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · ");
-      const tipoBadge=e.tipoEntrega?`<span style="background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":"#dcfce7"};color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":"#15803d"};border-radius:3px;padding:0 4px;font-size:8px;font-weight:700;margin-right:4px;">${e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</span>`:"";
+      const tipoCell=e.tipoEntrega?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;font-size:8px;font-weight:700;color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":"#15803d"};background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":"#dcfce7"};">${e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</td>`:`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;color:#aaa;">—</td>`;
+      const bultosCell=`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:30px;text-align:center;font-weight:${e.bultos>1?"700":"400"};">${e.bultos||1}</td>`;
       const cobrar=e.cobranza?"$"+Number(e.cobranza).toLocaleString("es-AR"):"—";
-      return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}"><td style="text-align:center;width:20px;border-bottom:0.5px solid #ddd;padding:3px 4px;color:#888;">${i+1}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:45px;text-align:center;">${esFlex?'<span style="background:#1a3008;color:#84cc16;border-radius:3px;padding:1px 4px;font-size:8px;font-weight:700;">FLEX</span>':'<span style="background:#0c1a40;color:#38bdf8;border-radius:3px;padding:1px 4px;font-size:8px;font-weight:700;">TN</span>'}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-weight:500;">${tipoBadge}${dir}${e.referencia?" — "+e.referencia:""}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-family:monospace;font-size:10px;color:#444;width:110px;">${nroRef}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:45px;">${zml}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:32px;text-align:center;">${e.turno||"—"}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:42px;text-align:center;">${e.fecha?fmtCorta(e.fecha):"—"}</td>${hayCobro?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:72px;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:18px;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td></tr>`;
+      const loteCell=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}):"—";
+      return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}"><td style="text-align:center;width:20px;border-bottom:0.5px solid #ddd;padding:3px 4px;color:#888;">${i+1}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:55px;text-align:center;font-size:8px;font-weight:700;color:#16a34a;">${loteCell}</td>${tipoCell}<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-weight:500;">${dir}${e.referencia?" — "+e.referencia:""}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-family:monospace;font-size:10px;color:#444;width:110px;">${nroRef}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:45px;">${zml}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:32px;text-align:center;">${e.turno||"—"}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:42px;text-align:center;">${e.fecha?fmtCorta(e.fecha):"—"}</td>${hayCobro?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:72px;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:28px;text-align:center;font-weight:700;">${e.bultos||1}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:18px;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td></tr>`;
     }).join("");
-    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Envios ${fecha}</title><style>@page{size:A4 landscape;margin:8mm 10mm;}body{font-family:Arial,sans-serif;font-size:11px;margin:0;color:#111;}table{width:100%;border-collapse:collapse;}th{background:#e8e8e8;padding:3px 4px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;color:#555;border-bottom:1.5px solid #333;}@media print{button{display:none!important;}}</style></head><body><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;"><span style="font-weight:700;font-size:13px;">Hoja de salida — ${trans==="TODOS"?"Todas las logisticas":trans} · ${fecha} · ${turno==="TODOS"?"Todos los turnos":turno} · ${origenLabel}</span><span style="font-size:10px;color:#888;">Impreso: ${ts} · ${lista.length} envios</span></div><table><thead><tr><th style="width:20px;">#</th><th style="width:65px;text-align:center;">Lote</th><th>Direccion · Localidad · Partido · CP · Referencia</th><th style="width:100px;">Nro envio / orden</th><th style="width:45px;">Zona</th><th style="width:32px;">Turno</th><th style="width:42px;">Fecha</th>${hayCobro?"<th style='width:72px;text-align:right;'>Cobrar</th>":""}<th style="width:18px;text-align:center;">Chk</th></tr></thead><tbody>${rows}</tbody></table><div style="border-top:1.5px solid #333;margin-top:4px;padding-top:3px;font-size:9px;color:#555;display:flex;gap:16px;"><span>Total: <strong>${lista.length} envios</strong></span>${cobTotal?`<span>Cobranzas: <strong style="color:#b45309;">$${cobTotal.toLocaleString("es-AR")}</strong></span>`:""}</div><script>window.onload=function(){window.print();}<\/script></body></html>`;
+    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Envios ${fecha}</title><style>@page{size:A4 landscape;margin:8mm 10mm;}body{font-family:Arial,sans-serif;font-size:11px;margin:0;color:#111;}table{width:100%;border-collapse:collapse;}th{background:#e8e8e8;padding:3px 4px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;color:#555;border-bottom:1.5px solid #333;}@media print{button{display:none!important;}}</style></head><body><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;"><span style="font-weight:700;font-size:13px;">Hoja de salida — ${trans==="TODOS"?"Todas las logisticas":trans} · ${fecha} · ${turno==="TODOS"?"Todos los turnos":turno} · ${origenLabel}</span><span style="font-size:10px;color:#888;">Impreso: ${ts} · ${lista.length} envios</span></div><table><thead><tr><th style="width:20px;">#</th><th style="width:55px;text-align:center;">Lote</th><th style="width:38px;text-align:center;">Tipo</th><th>Direccion · Localidad · Partido · CP · Referencia</th><th style="width:100px;">Nro envio / orden</th><th style="width:45px;">Zona</th><th style="width:32px;">Turno</th><th style="width:42px;">Fecha</th>${hayCobro?"<th style='width:72px;text-align:right;'>Cobrar</th>":""}<th style="width:28px;text-align:center;">Blts</th><th style="width:18px;text-align:center;">Chk</th></tr></thead><tbody>${rows}</tbody></table><div style="border-top:1.5px solid #333;margin-top:4px;padding-top:3px;font-size:9px;color:#555;display:flex;gap:16px;"><span>Total: <strong>${lista.length} envios</strong></span>${cobTotal?`<span>Cobranzas: <strong style="color:#b45309;">$${cobTotal.toLocaleString("es-AR")}</strong></span>`:""}</div><script>window.onload=function(){window.print();}<\/script></body></html>`;
     const w=window.open("","_blank");if(!w){alert("Permite ventanas emergentes.");return;}w.document.write(html);w.document.close();
   };
 
@@ -994,9 +996,18 @@ function TabImprimir({envios,zc,lc}){
           <button onClick={()=>{
             const filas=lista.map((e,i)=>{
               const esFlex=e.origen==="ML";
-              return{"#":i+1,Direccion:e.direccion,Localidad:e.localidad||"",Partido:e.partido,CP:e.cp||"",
-                NroEnvio:esFlex?(e.nroSeguimiento||""):"",NroOrden:esFlex?"":"#"+(e.nroOrdenTN||""),
-                Zona:getZonaML(e.partido)||"",Turno:e.turno||"",Fecha:e.fecha||"",
+              const lote=esFlex&&e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}):"";
+              return{"#":i+1,
+                Lote:lote,
+                Tipo:e.tipoEntrega==="COMERCIAL"?"COM":e.tipoEntrega==="RESIDENCIAL"?"RES":"",
+                Direccion:[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · "),
+                Referencia:e.referencia||"",
+                NroEnvio:esFlex?(e.nroSeguimiento||""):"",
+                NroOrden:esFlex?"":"#"+(e.nroOrdenTN||""),
+                Zona:getZonaML(e.partido)||"",
+                Turno:e.turno||"",
+                Fecha:e.fecha||"",
+                Bultos:e.bultos||1,
                 Cobrar:e.cobranza||""};
             });
             exportarXLSX(filas,"imprimir_"+fechaHoy());
@@ -1014,13 +1025,15 @@ function TabImprimir({envios,zc,lc}){
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.78rem"}}>
             <thead><tr style={{background:"#12172a",borderBottom:"1px solid #252d40"}}>
               <th style={{...thSt,width:"28px",textAlign:"center"}}>#</th>
-              <th style={{...thSt,width:"70px",textAlign:"center"}}>Lote</th>
+              <th style={{...thSt,width:"60px",textAlign:"center"}}>Lote</th>
+              <th style={{...thSt,width:"42px",textAlign:"center"}}>Tipo</th>
               <th style={thSt}>Direccion · Localidad · Partido · CP · Referencia</th>
               <th style={{...thSt,width:"110px"}}>Nro envio / orden</th>
               <th style={{...thSt,width:"50px"}}>Zona</th>
               <th style={{...thSt,width:"45px"}}>Turno</th>
               <th style={{...thSt,width:"55px"}}>Fecha</th>
               {hayCobro&&<th style={{...thSt,width:"80px",textAlign:"right"}}>Cobrar</th>}
+              <th style={{...thSt,textAlign:"center",width:"35px"}}>Blts</th>
               <th style={{...thSt,textAlign:"center",width:"28px"}}>Chk</th>
             </tr></thead>
             <tbody>{lista.map((e,i)=>{
@@ -1037,8 +1050,12 @@ function TabImprimir({envios,zc,lc}){
                     ?<span style={{background:"#0d1c04",color:"#84cc16",padding:"1px 5px",borderRadius:"4px",fontSize:"0.68rem",fontWeight:700,whiteSpace:"nowrap"}}>{new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})}</span>
                     :<span style={{color:"#374151"}}>—</span>}
                 </td>
+                <td style={{...tdSt,textAlign:"center"}}>
+                  {e.tipoEntrega
+                    ?<span style={{padding:"1px 6px",borderRadius:"3px",fontSize:"0.65rem",fontWeight:700,background:e.tipoEntrega==="COMERCIAL"?"#0c1a40":"#0a1a0a",color:e.tipoEntrega==="COMERCIAL"?"#38bdf8":"#86efac"}}>{e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</span>
+                    :<span style={{color:"#374151"}}>—</span>}
+                </td>
                 <td style={{...tdSt,whiteSpace:"normal",lineHeight:1.3}}>
-                  {e.tipoEntrega&&<span style={{display:"inline-block",marginRight:"5px",padding:"0 5px",borderRadius:"3px",fontSize:"0.65rem",fontWeight:700,background:e.tipoEntrega==="COMERCIAL"?"#0c1a40":"#0a1a0a",color:e.tipoEntrega==="COMERCIAL"?"#38bdf8":"#86efac",border:"1px solid "+(e.tipoEntrega==="COMERCIAL"?"#1e4060":"#1a3a1a"),verticalAlign:"middle"}}>{e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</span>}
                   {dir}{e.referencia?<span style={{color:"#6b7280",fontSize:"0.72rem"}}> — {e.referencia}</span>:null}
                 </td>
                 <td style={{...tdSt,fontFamily:"monospace",fontSize:"0.72rem",color:esFlex?"#9ca3af":"#7dd3fc"}}>{nroRef}</td>
@@ -1046,6 +1063,7 @@ function TabImprimir({envios,zc,lc}){
                 <td style={{...tdSt,textAlign:"center"}}>{e.turno||"—"}</td>
                 <td style={{...tdSt,color:"#9ca3af"}}>{e.fecha?fmtCorta(e.fecha):"—"}</td>
                 {hayCobro&&<td style={{...tdSt,textAlign:"right"}}>{e.cobranza?<span style={{color:"#fbbf24",fontWeight:700}}>{fmt(e.cobranza)}</span>:<span style={{color:"#374151"}}>—</span>}</td>}
+                <td style={{...tdSt,textAlign:"center",fontWeight:(e.bultos||1)>1?700:400}}>{e.bultos||1}</td>
                 <td style={{...tdSt,textAlign:"center"}}><div style={{width:"13px",height:"13px",border:"1px solid #374151",borderRadius:"2px",margin:"auto"}}/></td>
               </tr>);})}</tbody>
           </table>
