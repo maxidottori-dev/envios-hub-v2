@@ -509,6 +509,43 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc}){
 }
 
 
+
+// ════════════════════════════════════════════════════════════════════
+// MODAL OPCIONES PDF FLEX
+// ════════════════════════════════════════════════════════════════════
+function ModalOpcionesPDF({onConfirm, onCancel}){
+  const [cargarEnvios, setCargarEnvios] = React.useState(true);
+  const [procesarArmado, setProcesarArmado] = React.useState(true);
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:"#12172a",border:"1px solid #6366f1",borderRadius:"16px",padding:"28px 32px",minWidth:"320px",boxShadow:"0 8px 40px #0008"}}>
+        <div style={{color:"#e5e7eb",fontWeight:800,fontSize:"1rem",marginBottom:"6px"}}>¿Qué querés hacer con este PDF?</div>
+        <div style={{color:"#6b7280",fontSize:"0.75rem",marginBottom:"20px"}}>Podés elegir una o ambas opciones</div>
+        <div style={{display:"flex",flexDirection:"column",gap:"12px",marginBottom:"24px"}}>
+          <label style={{display:"flex",alignItems:"center",gap:"12px",cursor:"pointer",padding:"12px 16px",background:cargarEnvios?"#1a2640":"#0f1420",border:"1px solid "+(cargarEnvios?"#6366f1":"#252d40"),borderRadius:"10px",transition:"all 0.15s"}}>
+            <input type="checkbox" checked={cargarEnvios} onChange={e=>setCargarEnvios(e.target.checked)} style={{width:"16px",height:"16px",accentColor:"#6366f1"}}/>
+            <div>
+              <div style={{color:"#e5e7eb",fontWeight:700,fontSize:"0.85rem"}}>Cargar / actualizar envíos</div>
+              <div style={{color:"#6b7280",fontSize:"0.72rem",marginTop:"2px"}}>Crea o actualiza los envíos en EnviosHub</div>
+            </div>
+          </label>
+          <label style={{display:"flex",alignItems:"center",gap:"12px",cursor:"pointer",padding:"12px 16px",background:procesarArmado?"#0d1c04":"#0f1420",border:"1px solid "+(procesarArmado?"#84cc16":"#252d40"),borderRadius:"10px",transition:"all 0.15s"}}>
+            <input type="checkbox" checked={procesarArmado} onChange={e=>setProcesarArmado(e.target.checked)} style={{width:"16px",height:"16px",accentColor:"#84cc16"}}/>
+            <div>
+              <div style={{color:"#e5e7eb",fontWeight:700,fontSize:"0.85rem"}}>Procesar armado</div>
+              <div style={{color:"#6b7280",fontSize:"0.72rem",marginTop:"2px"}}>Anota el PDF con numeración y resaltado (ML Armado)</div>
+            </div>
+          </label>
+        </div>
+        <div style={{display:"flex",gap:"10px",justifyContent:"flex-end"}}>
+          <button onClick={onCancel} style={{background:"#1a1f2e",border:"1px solid #252d40",color:"#9ca3af",padding:"8px 20px",borderRadius:"8px",cursor:"pointer",fontSize:"0.82rem"}}>Cancelar</button>
+          <button onClick={()=>onConfirm({cargarEnvios,procesarArmado})} disabled={!cargarEnvios&&!procesarArmado} style={{background:(!cargarEnvios&&!procesarArmado)?"#252d40":"linear-gradient(135deg,#6366f1,#8b5cf6)",color:"#fff",border:"none",padding:"8px 24px",borderRadius:"8px",cursor:(!cargarEnvios&&!procesarArmado)?"not-allowed":"pointer",fontWeight:700,fontSize:"0.82rem"}}>Continuar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PanelEdit({envio,onSave,onClose,lc}){
   const [e,setE]=useState({...envio});
   const set=(k,v)=>setE(p=>({...p,[k]:v}));
@@ -3170,6 +3207,7 @@ export default function App(){
   const [sesion,setSesion]=useState(()=>getSession());
   const [pantalla,setPantalla]=useState("dashboard");
   const [borrador,setBorrador]=useState([]);
+  const [modalPDF,setModalPDF]=useState(null); // archivo pendiente mientras modal abierto
   const [envios,setEnviosLocal]=useState([]);
   const [zc,setZc]=useState(ZONAS_INIT);
   const [lc,setLc]=useState(LOGISTICAS_INIT);
@@ -3316,77 +3354,90 @@ export default function App(){
           <label style={{cursor:"pointer"}}>
             <input type="file" accept=".pdf" style={{display:"none"}} onChange={async ev=>{
               const f=ev.target.files[0];if(!f){return;}ev.target.value="";
+              setModalPDF(f); // Abrir modal de opciones
+            }}/>
+            <span style={{display:"inline-block",padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#0a1a0a",border:"1px solid #84cc16",color:"#84cc16",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>{loading?"...":"📦 Etiquetas PDF"}</span>
+          </label>
+          {/* Modal opciones PDF FLEX */}
+          {modalPDF&&<ModalOpcionesPDF
+            onCancel={()=>setModalPDF(null)}
+            onConfirm={async({cargarEnvios,procesarArmado})=>{
+              const f=modalPDF;setModalPDF(null);
               setLoading(true);
               try{
-                const etiquetas=await parsearEtiquetasPDF(f);
-                if(!etiquetas.length){mostrarToast("No se encontraron etiquetas FLEX en el PDF");setLoading(false);return;}
+                const etiquetas=cargarEnvios?await parsearEtiquetasPDF(f):[];
                 const hoy=fechaHoy();
                 const loteTs=new Date().toISOString();
                 const nuevos=[];
-                // Primero actualizar los que ya existen en Firebase
-                for(const et of etiquetas){
-                  const existe=envios.find(e=>e.nroSeguimiento===et.nroSeguimiento);
-                  if(existe){
-                    const ref=doc(db,"envios",existe.id);
-                    const upd={};
-                    if(et.destinatario)upd.destinatario=et.destinatario;
-                    if(et.referencia)upd.referencia=et.referencia;
-                    if(et.tipoEntrega)upd.tipoEntrega=et.tipoEntrega;
-                    if(et.localidad&&!existe.localidad)upd.localidad=et.localidad;
-                    if(et.fecha&&!existe.fecha)upd.fecha=et.fecha;
-                    if(Object.keys(upd).length)await setDoc(ref,upd,{merge:true});
-                  } else {
-                    // Nuevo: armar objeto y acumular para el popup de asignación
-                    nuevos.push({
-                      id:et.nroSeguimiento,
-                      nroSeguimiento:et.nroSeguimiento,
-                      linkML:"https://www.mercadolibre.com.ar/ventas/"+et.nroSeguimiento+"/detalle",
-                      origen:"ML",
-                      direccion:et.direccion||"",
-                      localidad:et.localidad||"",
-                      partido:cpAPartido(et.cp)||"",
-                      cp:et.cp||"",
-                      ciudad:"",
-                      fecha:et.fecha||hoy,
-                      fechaVenta:hoy,
-                      turno:"",
-                      trans:"",
-                      bultos:null,
-                      cobranza:null,
-                      cambio:null,
-                      retiro:null,
-                      observaciones:"",
-                      importe:0,
-                      destinatario:et.destinatario||"",
-                      referencia:et.referencia||"",
-                      tipoEntrega:et.tipoEntrega||"",
-                      preparado:false,
-                      loteImportacion:loteTs,
-                    });
+                if(cargarEnvios&&etiquetas.length){
+                  for(const et of etiquetas){
+                    const existe=envios.find(e=>e.nroSeguimiento===et.nroSeguimiento);
+                    if(existe){
+                      const ref=doc(db,"envios",existe.id);
+                      const upd={};
+                      if(et.destinatario)upd.destinatario=et.destinatario;
+                      if(et.referencia)upd.referencia=et.referencia;
+                      if(et.tipoEntrega)upd.tipoEntrega=et.tipoEntrega;
+                      if(et.localidad&&!existe.localidad)upd.localidad=et.localidad;
+                      if(et.fecha&&!existe.fecha)upd.fecha=et.fecha;
+                      if(Object.keys(upd).length)await setDoc(ref,upd,{merge:true});
+                    } else {
+                      nuevos.push({
+                        id:et.nroSeguimiento,
+                        nroSeguimiento:et.nroSeguimiento,
+                        linkML:"https://www.mercadolibre.com.ar/ventas/"+et.nroSeguimiento+"/detalle",
+                        origen:"ML",
+                        direccion:et.direccion||"",
+                        localidad:et.localidad||"",
+                        partido:cpAPartido(et.cp)||"",
+                        cp:et.cp||"",
+                        ciudad:"",
+                        fecha:et.fecha||hoy,
+                        fechaVenta:hoy,
+                        turno:"",
+                        trans:"",
+                        bultos:null,
+                        cobranza:null,
+                        cambio:null,
+                        retiro:null,
+                        observaciones:"",
+                        importe:0,
+                        destinatario:et.destinatario||"",
+                        referencia:et.referencia||"",
+                        tipoEntrega:et.tipoEntrega||"",
+                        preparado:false,
+                        loteImportacion:loteTs,
+                      });
+                    }
                   }
                 }
-                // Procesar con ML Armado (FLEX) — independiente de si hay nuevos o no
-                try {
-                  await procesarConMLArmado(f, "Flex", null);
-                  mostrarToast(nuevos.length
-                    ? `PDF procesado · ${nuevos.length} envio(s) nuevo(s)`
-                    : "PDF procesado con ML Armado");
-                } catch(mlErr) {
-                  // Si ML Armado falla (ej. dormido) no bloquear el flujo principal
-                  mostrarToast(nuevos.length
-                    ? `${nuevos.length} envio(s) nuevo(s) — ML Armado no disponible`
-                    : "Etiquetas actualizadas — ML Armado no disponible");
+                // ML Armado — solo si el usuario lo eligió
+                if(procesarArmado){
+                  try{
+                    await procesarConMLArmado(f,"Flex",null);
+                  }catch(mlErr){
+                    mostrarToast("ML Armado no disponible — intentá de nuevo en unos segundos");
+                  }
                 }
+                // Toast resumen
+                const partes=[];
+                if(cargarEnvios){
+                  if(nuevos.length)partes.push(nuevos.length+" envio(s) nuevo(s)");
+                  else if(etiquetas.length)partes.push("Envios actualizados");
+                  else if(!etiquetas.length)partes.push("Sin etiquetas FLEX detectadas");
+                }
+                if(procesarArmado)partes.push("PDF procesado");
+                if(partes.length)mostrarToast(partes.join(" · "));
+                // Abrir popup solo si hay nuevos envíos
                 if(nuevos.length){
                   setBorrador(nuevos);
                   setFileName(f.name);
                   setPantalla("asignacion");
                 }
-              }catch(err){mostrarToast("Error al procesar PDF: "+err.message);}
+              }catch(err){mostrarToast("Error: "+err.message);}
               setLoading(false);
-            }}/>
-            <span style={{display:"inline-block",padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#0a1a0a",border:"1px solid #84cc16",color:"#84cc16",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>{loading?"...":"📦 Etiquetas PDF"}</span>
-          </label>
+            }}
+          />}
           <label style={{cursor:"pointer"}}>
             <input type="file" accept=".pdf" style={{display:"none"}} onChange={async ev=>{
               const f=ev.target.files[0];if(!f){return;}ev.target.value="";
