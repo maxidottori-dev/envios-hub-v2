@@ -514,8 +514,8 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc}){
 // MODAL OPCIONES PDF FLEX
 // ════════════════════════════════════════════════════════════════════
 function ModalOpcionesPDF({onConfirm, onCancel}){
-  const [cargarEnvios, setCargarEnvios] = React.useState(true);
-  const [procesarArmado, setProcesarArmado] = React.useState(true);
+  const [cargarEnvios, setCargarEnvios] = useState(true);
+  const [procesarArmado, setProcesarArmado] = useState(true);
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{background:"#12172a",border:"1px solid #6366f1",borderRadius:"16px",padding:"28px 32px",minWidth:"320px",boxShadow:"0 8px 40px #0008"}}>
