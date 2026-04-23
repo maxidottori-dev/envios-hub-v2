@@ -459,21 +459,6 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc}){
   );
 }
 
-// ════════════════════════════════════════════════════════════════════
-// QR MODAL
-// ════════════════════════════════════════════════════════════════════
-function QRModal({nro,onClose}){
-  return(
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"#12172a",border:"1px solid #6366f1",borderRadius:"16px",padding:"24px 28px",textAlign:"center",boxShadow:"0 8px 40px #0008"}}>
-        <div style={{color:"#9ca3af",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:"6px"}}>Codigo QR</div>
-        <div style={{color:"#e5e7eb",fontWeight:700,fontFamily:"monospace",fontSize:"0.82rem",marginBottom:"14px"}}>{nro}</div>
-        <img src={"https://api.qrserver.com/v1/create-qr-code/?size=260x260&data="+nro} alt="QR" style={{borderRadius:"8px",display:"block",margin:"0 auto"}}/>
-        <button onClick={onClose} style={{marginTop:"16px",background:"#1a1f2e",border:"1px solid #252d40",color:"#9ca3af",padding:"7px 22px",borderRadius:"8px",cursor:"pointer",fontSize:"0.8rem"}}>Cerrar</button>
-      </div>
-    </div>
-  );
-}
 
 function PanelEdit({envio,onSave,onClose,lc}){
   const [e,setE]=useState({...envio});
@@ -646,7 +631,6 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
   const [filOrigen,setFilOrigen]=useState("TODOS");
   const [busqueda,setBusqueda]=useState("");
   const [editId,setEditId]=useState(null);
-  const [qrId,setQrId]=useState(null);
   const [seleccionados,setSeleccionados]=useState(new Set());
   const [modoSel,setModoSel]=useState(false);
   const tmap=buildTarifaMap(zc);
@@ -819,8 +803,6 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
                   <div style={{display:"flex",gap:"3px",alignItems:"center"}}>
                     {esTN&&e.linkTN&&<a href={e.linkTN} target="_blank" rel="noreferrer" onClick={ev=>ev.stopPropagation()} title="Ver en Tienda Nube" style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:"26px",height:"26px",borderRadius:"6px",background:"#0d1c2e",border:"1px solid #38bdf8",textDecoration:"none",flexShrink:0,fontSize:"0.7rem"}}>TN</a>}
                     {e.linkML&&<a href={e.linkML} target="_blank" rel="noreferrer" onClick={ev=>ev.stopPropagation()} title="Ver en ML" style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:"26px",height:"26px",borderRadius:"6px",background:"#0f1420",border:"1px solid #252d40",textDecoration:"none",flexShrink:0}}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>}
-                    {e.nroSeguimiento&&<button onClick={ev=>{ev.stopPropagation();setQrId(qrId===e.id?null:e.id);}} title="Ver QR" style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:"26px",height:"26px",borderRadius:"6px",background:qrId===e.id?"#1a1040":"#0f1420",border:"1px solid "+(qrId===e.id?"#a78bfa":"#252d40"),flexShrink:0,cursor:"pointer",fontSize:"0.75rem"}}>▦</button>}
-                    {qrId===e.id&&<QRModal nro={e.nroSeguimiento} onClose={()=>setQrId(null)}/>}
                     {!modoSel&&esAdmin&&<button onClick={ev=>{ev.stopPropagation();eliminar(e.id);}} style={{...S.btnSm(false),padding:"1px 6px",fontSize:"0.68rem",color:"#f87171"}}>x</button>}
                   </div>
                   {imp>0&&<span style={{color:"#10b981",fontWeight:700,fontSize:"0.82rem"}}>{fmt(imp)}</span>}
@@ -897,8 +879,9 @@ function TabImprimir({envios,zc,lc}){
       const esFlex=e.origen==="ML";
       const nroRef=esFlex?(e.nroSeguimiento||e.id.slice(-10)):"#"+(e.nroOrdenTN||e.id.slice(-8));
       const dir=[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · ");
+      const tipoBadge=e.tipoEntrega?`<span style="background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":"#dcfce7"};color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":"#15803d"};border-radius:3px;padding:0 4px;font-size:8px;font-weight:700;margin-right:4px;">${e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</span>`:"";
       const cobrar=e.cobranza?"$"+Number(e.cobranza).toLocaleString("es-AR"):"—";
-      return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}"><td style="text-align:center;width:20px;border-bottom:0.5px solid #ddd;padding:3px 4px;color:#888;">${i+1}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:45px;text-align:center;">${esFlex?'<span style="background:#1a3008;color:#84cc16;border-radius:3px;padding:1px 4px;font-size:8px;font-weight:700;">FLEX</span>':'<span style="background:#0c1a40;color:#38bdf8;border-radius:3px;padding:1px 4px;font-size:8px;font-weight:700;">TN</span>'}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-weight:500;">${dir}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-family:monospace;font-size:10px;color:#444;width:110px;">${nroRef}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:45px;">${zml}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:32px;text-align:center;">${e.turno||"—"}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:42px;text-align:center;">${e.fecha?fmtCorta(e.fecha):"—"}</td>${hayCobro?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:72px;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:18px;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td></tr>`;
+      return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}"><td style="text-align:center;width:20px;border-bottom:0.5px solid #ddd;padding:3px 4px;color:#888;">${i+1}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:45px;text-align:center;">${esFlex?'<span style="background:#1a3008;color:#84cc16;border-radius:3px;padding:1px 4px;font-size:8px;font-weight:700;">FLEX</span>':'<span style="background:#0c1a40;color:#38bdf8;border-radius:3px;padding:1px 4px;font-size:8px;font-weight:700;">TN</span>'}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-weight:500;">${tipoBadge}${dir}${e.referencia?" — "+e.referencia:""}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-family:monospace;font-size:10px;color:#444;width:110px;">${nroRef}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:45px;">${zml}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:32px;text-align:center;">${e.turno||"—"}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:42px;text-align:center;">${e.fecha?fmtCorta(e.fecha):"—"}</td>${hayCobro?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:72px;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:18px;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td></tr>`;
     }).join("");
     const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Envios ${fecha}</title><style>@page{size:A4 landscape;margin:8mm 10mm;}body{font-family:Arial,sans-serif;font-size:11px;margin:0;color:#111;}table{width:100%;border-collapse:collapse;}th{background:#e8e8e8;padding:3px 4px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;color:#555;border-bottom:1.5px solid #333;}@media print{button{display:none!important;}}</style></head><body><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;"><span style="font-weight:700;font-size:13px;">Hoja de salida — ${trans==="TODOS"?"Todas las logisticas":trans} · ${fecha} · ${turno==="TODOS"?"Todos los turnos":turno} · ${origenLabel}</span><span style="font-size:10px;color:#888;">Impreso: ${ts} · ${lista.length} envios</span></div><table><thead><tr><th style="width:20px;">#</th><th style="width:65px;text-align:center;">Lote</th><th>Direccion · Localidad · Partido · CP · Referencia</th><th style="width:100px;">Nro envio / orden</th><th style="width:45px;">Zona</th><th style="width:32px;">Turno</th><th style="width:42px;">Fecha</th>${hayCobro?"<th style='width:72px;text-align:right;'>Cobrar</th>":""}<th style="width:18px;text-align:center;">Chk</th></tr></thead><tbody>${rows}</tbody></table><div style="border-top:1.5px solid #333;margin-top:4px;padding-top:3px;font-size:9px;color:#555;display:flex;gap:16px;"><span>Total: <strong>${lista.length} envios</strong></span>${cobTotal?`<span>Cobranzas: <strong style="color:#b45309;">$${cobTotal.toLocaleString("es-AR")}</strong></span>`:""}</div><script>window.onload=function(){window.print();}<\/script></body></html>`;
     const w=window.open("","_blank");if(!w){alert("Permite ventanas emergentes.");return;}w.document.write(html);w.document.close();
@@ -959,6 +942,7 @@ function TabImprimir({envios,zc,lc}){
               const esFlex=e.origen==="ML";
               const nroRef=esFlex?(e.nroSeguimiento||"..."+e.id.slice(-8)):"#"+(e.nroOrdenTN||e.id.slice(-8));
               const dir=[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · ");
+      const tipoBadge=e.tipoEntrega?`<span style="background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":"#dcfce7"};color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":"#15803d"};border-radius:3px;padding:0 4px;font-size:8px;font-weight:700;margin-right:4px;">${e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</span>`:"";
               return(
               <tr key={e.id} style={{borderBottom:"1px solid #1a1f2e",background:i%2===0?"transparent":"#0d1119"}}>
                 <td style={{...tdSt,textAlign:"center",color:"#4b5563"}}>{i+1}</td>
@@ -967,7 +951,10 @@ function TabImprimir({envios,zc,lc}){
                     ?<span style={{background:"#0d1c04",color:"#84cc16",padding:"1px 5px",borderRadius:"4px",fontSize:"0.68rem",fontWeight:700,whiteSpace:"nowrap"}}>{new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})}</span>
                     :<span style={{color:"#374151"}}>—</span>}
                 </td>
-                <td style={{...tdSt,whiteSpace:"normal",lineHeight:1.3}}>{dir}{e.referencia?<span style={{color:"#6b7280",fontSize:"0.72rem"}}> — {e.referencia}</span>:null}</td>
+                <td style={{...tdSt,whiteSpace:"normal",lineHeight:1.3}}>
+                  {e.tipoEntrega&&<span style={{display:"inline-block",marginRight:"5px",padding:"0 5px",borderRadius:"3px",fontSize:"0.65rem",fontWeight:700,background:e.tipoEntrega==="COMERCIAL"?"#0c1a40":"#0a1a0a",color:e.tipoEntrega==="COMERCIAL"?"#38bdf8":"#86efac",border:"1px solid "+(e.tipoEntrega==="COMERCIAL"?"#1e4060":"#1a3a1a"),verticalAlign:"middle"}}>{e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</span>}
+                  {dir}{e.referencia?<span style={{color:"#6b7280",fontSize:"0.72rem"}}> — {e.referencia}</span>:null}
+                </td>
                 <td style={{...tdSt,fontFamily:"monospace",fontSize:"0.72rem",color:esFlex?"#9ca3af":"#7dd3fc"}}>{nroRef}</td>
                 <td style={tdSt}>{zml}</td>
                 <td style={{...tdSt,textAlign:"center"}}>{e.turno||"—"}</td>
