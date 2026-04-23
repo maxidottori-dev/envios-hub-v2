@@ -51,6 +51,55 @@ const cargarPDFLib=()=>new Promise(resolve=>{
   document.head.appendChild(s);
 });
 
+
+// ════════════════════════════════════════════════════════════════════
+// ML ARMADO — helper para procesar PDF y descargar resultado
+// ════════════════════════════════════════════════════════════════════
+const ML_ARMADO_URL = "https://ml-armado.onrender.com";
+
+async function procesarConMLArmado(file, envioType, onProgress) {
+  // 1. Obtener estado actual (para continuar numeracion del dia)
+  let startNumber = 1;
+  try {
+    const stateRes = await fetch(ML_ARMADO_URL + "/api/state");
+    if (stateRes.ok) {
+      const state = await stateRes.json();
+      startNumber = envioType === "Flex"
+        ? (state.flex_next || 1)
+        : (state.colecta_next || 1);
+    }
+  } catch(e) { /* Si no responde usar 1 */ }
+
+  if (onProgress) onProgress("Procesando con ML Armado...");
+
+  // 2. Enviar PDF a ML Armado
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("start_number", String(startNumber));
+  formData.append("header_offset", "20");
+  formData.append("font_size_num", "30");
+  formData.append("font_size_lbl", "25");
+  // Keywords se toman del estado guardado en Firebase, no hace falta enviarlas
+
+  const res = await fetch(ML_ARMADO_URL + "/api/process", {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) throw new Error("ML Armado error: " + res.status);
+  const data = await res.json();
+
+  // 3. Descargar el PDF anotado
+  const dlUrl = ML_ARMADO_URL + "/api/download/" + data.filename;
+  const a = document.createElement("a");
+  a.href = dlUrl;
+  a.download = data.filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+
+  return data;
+}
+
 const MESES_ES={"ENE":"01","FEB":"02","MAR":"03","ABR":"04","MAY":"05","JUN":"06","JUL":"07","AGO":"08","SEP":"09","OCT":"10","NOV":"11","DIC":"12"};
 const parsarFechaFlex=(txt)=>{
   const m=txt.match(/FLEX\s+(\d{1,2})\s+([A-Z]{3})/i);
@@ -3316,18 +3365,41 @@ export default function App(){
                     });
                   }
                 }
+                // Procesar con ML Armado (FLEX) — independiente de si hay nuevos o no
+                try {
+                  await procesarConMLArmado(f, "Flex", null);
+                  mostrarToast(nuevos.length
+                    ? `PDF procesado · ${nuevos.length} envio(s) nuevo(s)`
+                    : "PDF procesado con ML Armado");
+                } catch(mlErr) {
+                  // Si ML Armado falla (ej. dormido) no bloquear el flujo principal
+                  mostrarToast(nuevos.length
+                    ? `${nuevos.length} envio(s) nuevo(s) — ML Armado no disponible`
+                    : "Etiquetas actualizadas — ML Armado no disponible");
+                }
                 if(nuevos.length){
-                  // Abrir popup de asignación igual que el Excel
                   setBorrador(nuevos);
                   setFileName(f.name);
                   setPantalla("asignacion");
-                } else {
-                  mostrarToast("Etiquetas actualizadas — no hay envios nuevos");
                 }
               }catch(err){mostrarToast("Error al procesar PDF: "+err.message);}
               setLoading(false);
             }}/>
             <span style={{display:"inline-block",padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#0a1a0a",border:"1px solid #84cc16",color:"#84cc16",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>{loading?"...":"📦 Etiquetas PDF"}</span>
+          </label>
+          <label style={{cursor:"pointer"}}>
+            <input type="file" accept=".pdf" style={{display:"none"}} onChange={async ev=>{
+              const f=ev.target.files[0];if(!f){return;}ev.target.value="";
+              setLoading(true);
+              try{
+                await procesarConMLArmado(f,"Colecta",null);
+                mostrarToast("PDF Colecta procesado");
+              }catch(err){
+                mostrarToast("Error: "+(err.message||"ML Armado no disponible"));
+              }
+              setLoading(false);
+            }}/>
+            <span style={{display:"inline-block",padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#1a0d2e",border:"1px solid #a78bfa",color:"#a78bfa",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>{loading?"...":"📋 Colecta"}</span>
           </label>
           <label style={{cursor:"pointer"}}>
             <input type="file" accept=".xlsx,.xls" style={{display:"none"}} onChange={e=>{if(e.target.files[0]){cargarArchivo(e.target.files[0]);e.target.value="";}}}/>
