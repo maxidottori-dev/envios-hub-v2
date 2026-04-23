@@ -114,8 +114,9 @@ const ZONA_ML_COLOR = {CABA:"#84cc16",NOE:"#f59e0b",SUR:"#ef4444",PL:"#10b981",L
 const ZONA_ML_BG    = {CABA:"#0d1c04",NOE:"#1c1400",SUR:"#1c0404",PL:"#021a0e",LOMAS:"#1c0514",GBA2:"#130d2a"};
 function getZonaML(p) { return ZONA_ML[p] || ""; }
 
-function fechaHoy()    { return new Date().toISOString().split("T")[0]; }
-function fechaAyer()   { const d=new Date();d.setDate(d.getDate()-1);return d.toISOString().split("T")[0]; }
+function fechaLocal()  { const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().split("T")[0]; }
+function fechaHoy()    { return fechaLocal(); }
+function fechaAyer()   { const d=new Date();d.setDate(d.getDate()-1);return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().split("T")[0]; }
 function fechaManana() { const d=new Date();d.setDate(d.getDate()+1);return d.toISOString().split("T")[0]; }
 function fechaInicioSemana() { const d=new Date();d.setDate(d.getDate()-((d.getDay()||7)-1));return d.toISOString().split("T")[0]; }
 function fmtCorta(ds) { if(!ds)return"";const[,m,d]=ds.split("-");return d+"/"+m; }
@@ -579,9 +580,9 @@ function PanelEdit({envio,onSave,onClose,lc}){
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.35rem 1rem",marginBottom:"8px",fontSize:"0.78rem"}}>
             {e.destinatario&&<div style={{gridColumn:"1/-1"}}><span style={{color:"#6b7280"}}>Destinatario: </span><span style={{color:"#e5e7eb",fontWeight:600}}>{e.destinatario}</span></div>}
             {e.tipoEntrega&&<div><span style={{background:e.tipoEntrega==="COMERCIAL"?"#0c1a40":"#0a1a0a",color:e.tipoEntrega==="COMERCIAL"?"#38bdf8":"#86efac",border:"1px solid "+(e.tipoEntrega==="COMERCIAL"?"#38bdf8":"#86efac"),borderRadius:"4px",padding:"1px 8px",fontSize:"0.7rem",fontWeight:700}}>{e.tipoEntrega}</span></div>}
-            {e.nroSeguimiento&&<div style={{display:"flex",alignItems:"center",gap:"6px"}}><button onClick={()=>set("_showQR",!e._showQR)} style={{...S.btnSm(e._showQR,"#6366f1"),padding:"2px 10px",fontSize:"0.7rem"}}>📷 Ver QR</button></div>}
+
           </div>
-          {e._showQR&&e.nroSeguimiento&&<QRModal nro={e.nroSeguimiento} onClose={()=>set("_showQR",false)}/>}
+
           <div>
             <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Referencia / instrucciones</div>
             <textarea value={e.referencia||""} onChange={ev=>set("referencia",ev.target.value)} placeholder="Indicaciones de entrega..." style={{...S.input,display:"block",width:"100%",height:"52px",resize:"vertical",fontSize:"0.78rem"}}/>
@@ -645,6 +646,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
   const [filOrigen,setFilOrigen]=useState("TODOS");
   const [busqueda,setBusqueda]=useState("");
   const [editId,setEditId]=useState(null);
+  const [qrId,setQrId]=useState(null);
   const [seleccionados,setSeleccionados]=useState(new Set());
   const [modoSel,setModoSel]=useState(false);
   const tmap=buildTarifaMap(zc);
@@ -801,13 +803,13 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
                     <span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.82rem",flexShrink:0}}>#{e.nroOrdenTN}</span>
                     {e.clienteNombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.clienteNombre}</span>}
                   </div>}
-                  <div style={{color:esTN&&e.clienteNombre?"#9ca3af":"#e5e7eb",fontSize:"0.8rem",lineHeight:1.35,textDecoration:getEstado(e)==="cancelado"?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}</div>
+                  <div style={{color:esTN&&e.clienteNombre?"#9ca3af":"#e5e7eb",fontSize:"0.8rem",lineHeight:1.35,textDecoration:getEstado(e)==="cancelado"?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}{e.referencia?" — "+e.referencia:""}</div>
                   <div style={{color:"#9ca3af",fontSize:"0.74rem",marginTop:"2px",display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center"}}>
                     {!esTN&&<span style={{fontFamily:"monospace",color:"#9ca3af"}}>...{e.id.slice(-10)}</span>}
                     {e.nroSeguimiento&&<span style={{background:"#0f1420",padding:"0 5px",borderRadius:"4px",border:"1px solid #252d40",color:"#9ca3af"}}>📦 {e.nroSeguimiento}</span>}
                     {e.tipoEntrega&&<span style={{background:e.tipoEntrega==="COMERCIAL"?"#0c1a40":"#0a1a0a",color:e.tipoEntrega==="COMERCIAL"?"#38bdf8":"#86efac",border:"1px solid "+(e.tipoEntrega==="COMERCIAL"?"#1e4060":"#1a3a1a"),borderRadius:"4px",padding:"0 5px",fontSize:"0.68rem",fontWeight:700}}>{e.tipoEntrega}</span>}
                     {e.destinatario&&<span style={{color:"#cbd5e1",fontWeight:500,fontSize:"0.74rem"}}>· {e.destinatario}</span>}
-                    <span style={{color:"#9ca3af"}}>· {e.localidad?e.localidad+" · ":""}{e.partido}</span>
+                    <span style={{color:"#9ca3af"}}>· {e.localidad?e.localidad+" · ":""}{e.partido}{e.cp?" · "+e.cp:""}</span>
                     {e.fechaVenta&&<span style={{color:"#6b7280"}}>· venta {fmtCorta(e.fechaVenta)}</span>}
                     {e.formaPago&&esTN&&<span style={{color:e.formaPago==="Efectivo"?"#fbbf24":"#9ca3af",fontWeight:e.formaPago==="Efectivo"?700:400}}>· {e.formaPago}</span>}
                     {e.observaciones&&<span style={{color:"#6b7280",fontStyle:"italic"}}>· "{e.observaciones.slice(0,30)}{e.observaciones.length>30?"...":""}"</span>}
@@ -817,6 +819,8 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
                   <div style={{display:"flex",gap:"3px",alignItems:"center"}}>
                     {esTN&&e.linkTN&&<a href={e.linkTN} target="_blank" rel="noreferrer" onClick={ev=>ev.stopPropagation()} title="Ver en Tienda Nube" style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:"26px",height:"26px",borderRadius:"6px",background:"#0d1c2e",border:"1px solid #38bdf8",textDecoration:"none",flexShrink:0,fontSize:"0.7rem"}}>TN</a>}
                     {e.linkML&&<a href={e.linkML} target="_blank" rel="noreferrer" onClick={ev=>ev.stopPropagation()} title="Ver en ML" style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:"26px",height:"26px",borderRadius:"6px",background:"#0f1420",border:"1px solid #252d40",textDecoration:"none",flexShrink:0}}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>}
+                    {e.nroSeguimiento&&<button onClick={ev=>{ev.stopPropagation();setQrId(qrId===e.id?null:e.id);}} title="Ver QR" style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:"26px",height:"26px",borderRadius:"6px",background:qrId===e.id?"#1a1040":"#0f1420",border:"1px solid "+(qrId===e.id?"#a78bfa":"#252d40"),flexShrink:0,cursor:"pointer",fontSize:"0.75rem"}}>▦</button>}
+                    {qrId===e.id&&<QRModal nro={e.nroSeguimiento} onClose={()=>setQrId(null)}/>}
                     {!modoSel&&esAdmin&&<button onClick={ev=>{ev.stopPropagation();eliminar(e.id);}} style={{...S.btnSm(false),padding:"1px 6px",fontSize:"0.68rem",color:"#f87171"}}>x</button>}
                   </div>
                   {imp>0&&<span style={{color:"#10b981",fontWeight:700,fontSize:"0.82rem"}}>{fmt(imp)}</span>}
@@ -896,7 +900,7 @@ function TabImprimir({envios,zc,lc}){
       const cobrar=e.cobranza?"$"+Number(e.cobranza).toLocaleString("es-AR"):"—";
       return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}"><td style="text-align:center;width:20px;border-bottom:0.5px solid #ddd;padding:3px 4px;color:#888;">${i+1}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:45px;text-align:center;">${esFlex?'<span style="background:#1a3008;color:#84cc16;border-radius:3px;padding:1px 4px;font-size:8px;font-weight:700;">FLEX</span>':'<span style="background:#0c1a40;color:#38bdf8;border-radius:3px;padding:1px 4px;font-size:8px;font-weight:700;">TN</span>'}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-weight:500;">${dir}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-family:monospace;font-size:10px;color:#444;width:110px;">${nroRef}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:45px;">${zml}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:32px;text-align:center;">${e.turno||"—"}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:42px;text-align:center;">${e.fecha?fmtCorta(e.fecha):"—"}</td>${hayCobro?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:72px;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:18px;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td></tr>`;
     }).join("");
-    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Envios ${fecha}</title><style>@page{size:A4 landscape;margin:8mm 10mm;}body{font-family:Arial,sans-serif;font-size:11px;margin:0;color:#111;}table{width:100%;border-collapse:collapse;}th{background:#e8e8e8;padding:3px 4px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;color:#555;border-bottom:1.5px solid #333;}@media print{button{display:none!important;}}</style></head><body><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;"><span style="font-weight:700;font-size:13px;">Hoja de salida — ${trans==="TODOS"?"Todas las logisticas":trans} · ${fecha} · ${turno==="TODOS"?"Todos los turnos":turno} · ${origenLabel}</span><span style="font-size:10px;color:#888;">Impreso: ${ts} · ${lista.length} envios</span></div><table><thead><tr><th style="width:20px;">#</th><th style="width:45px;text-align:center;">Tanda</th><th>Direccion · Localidad · Partido · CP</th><th style="width:100px;">Nro envio / orden</th><th style="width:45px;">Zona</th><th style="width:32px;">Turno</th><th style="width:42px;">Fecha</th>${hayCobro?"<th style='width:72px;text-align:right;'>Cobrar</th>":""}<th style="width:18px;text-align:center;">Chk</th></tr></thead><tbody>${rows}</tbody></table><div style="border-top:1.5px solid #333;margin-top:4px;padding-top:3px;font-size:9px;color:#555;display:flex;gap:16px;"><span>Total: <strong>${lista.length} envios</strong></span>${cobTotal?`<span>Cobranzas: <strong style="color:#b45309;">$${cobTotal.toLocaleString("es-AR")}</strong></span>`:""}</div><script>window.onload=function(){window.print();}<\/script></body></html>`;
+    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Envios ${fecha}</title><style>@page{size:A4 landscape;margin:8mm 10mm;}body{font-family:Arial,sans-serif;font-size:11px;margin:0;color:#111;}table{width:100%;border-collapse:collapse;}th{background:#e8e8e8;padding:3px 4px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;color:#555;border-bottom:1.5px solid #333;}@media print{button{display:none!important;}}</style></head><body><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;"><span style="font-weight:700;font-size:13px;">Hoja de salida — ${trans==="TODOS"?"Todas las logisticas":trans} · ${fecha} · ${turno==="TODOS"?"Todos los turnos":turno} · ${origenLabel}</span><span style="font-size:10px;color:#888;">Impreso: ${ts} · ${lista.length} envios</span></div><table><thead><tr><th style="width:20px;">#</th><th style="width:65px;text-align:center;">Lote</th><th>Direccion · Localidad · Partido · CP · Referencia</th><th style="width:100px;">Nro envio / orden</th><th style="width:45px;">Zona</th><th style="width:32px;">Turno</th><th style="width:42px;">Fecha</th>${hayCobro?"<th style='width:72px;text-align:right;'>Cobrar</th>":""}<th style="width:18px;text-align:center;">Chk</th></tr></thead><tbody>${rows}</tbody></table><div style="border-top:1.5px solid #333;margin-top:4px;padding-top:3px;font-size:9px;color:#555;display:flex;gap:16px;"><span>Total: <strong>${lista.length} envios</strong></span>${cobTotal?`<span>Cobranzas: <strong style="color:#b45309;">$${cobTotal.toLocaleString("es-AR")}</strong></span>`:""}</div><script>window.onload=function(){window.print();}<\/script></body></html>`;
     const w=window.open("","_blank");if(!w){alert("Permite ventanas emergentes.");return;}w.document.write(html);w.document.close();
   };
 
@@ -941,8 +945,8 @@ function TabImprimir({envios,zc,lc}){
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.78rem"}}>
             <thead><tr style={{background:"#12172a",borderBottom:"1px solid #252d40"}}>
               <th style={{...thSt,width:"28px",textAlign:"center"}}>#</th>
-              <th style={{...thSt,width:"52px",textAlign:"center"}}>Tanda</th>
-              <th style={thSt}>Direccion · Localidad · Partido · CP</th>
+              <th style={{...thSt,width:"70px",textAlign:"center"}}>Lote</th>
+              <th style={thSt}>Direccion · Localidad · Partido · CP · Referencia</th>
               <th style={{...thSt,width:"110px"}}>Nro envio / orden</th>
               <th style={{...thSt,width:"50px"}}>Zona</th>
               <th style={{...thSt,width:"45px"}}>Turno</th>
@@ -963,7 +967,7 @@ function TabImprimir({envios,zc,lc}){
                     ?<span style={{background:"#0d1c04",color:"#84cc16",padding:"1px 5px",borderRadius:"4px",fontSize:"0.68rem",fontWeight:700,whiteSpace:"nowrap"}}>{new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})}</span>
                     :<span style={{color:"#374151"}}>—</span>}
                 </td>
-                <td style={{...tdSt,whiteSpace:"normal",lineHeight:1.3}}>{dir}</td>
+                <td style={{...tdSt,whiteSpace:"normal",lineHeight:1.3}}>{dir}{e.referencia?<span style={{color:"#6b7280",fontSize:"0.72rem"}}> — {e.referencia}</span>:null}</td>
                 <td style={{...tdSt,fontFamily:"monospace",fontSize:"0.72rem",color:esFlex?"#9ca3af":"#7dd3fc"}}>{nroRef}</td>
                 <td style={tdSt}>{zml}</td>
                 <td style={{...tdSt,textAlign:"center"}}>{e.turno||"—"}</td>
