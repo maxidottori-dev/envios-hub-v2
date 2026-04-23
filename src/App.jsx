@@ -3284,12 +3284,13 @@ export default function App(){
               try{
                 const etiquetas=await parsearEtiquetasPDF(f);
                 if(!etiquetas.length){mostrarToast("No se encontraron etiquetas FLEX en el PDF");setLoading(false);return;}
-                let creados=0,actualizados=0,saltados=0;
                 const hoy=fechaHoy();
+                const loteTs=new Date().toISOString();
+                const nuevos=[];
+                // Primero actualizar los que ya existen en Firebase
                 for(const et of etiquetas){
                   const existe=envios.find(e=>e.nroSeguimiento===et.nroSeguimiento);
                   if(existe){
-                    // Ya existe → actualizar solo campos de etiqueta
                     const ref=doc(db,"envios",existe.id);
                     const upd={};
                     if(et.destinatario)upd.destinatario=et.destinatario;
@@ -3297,20 +3298,17 @@ export default function App(){
                     if(et.tipoEntrega)upd.tipoEntrega=et.tipoEntrega;
                     if(et.localidad&&!existe.localidad)upd.localidad=et.localidad;
                     if(et.fecha&&!existe.fecha)upd.fecha=et.fecha;
-                    if(Object.keys(upd).length){await setDoc(ref,upd,{merge:true});actualizados++;}
-                    else saltados++;
+                    if(Object.keys(upd).length)await setDoc(ref,upd,{merge:true});
                   } else {
-                    // No existe → crear envío completo
-                    const id=et.nroSeguimiento;
-                    const ref=doc(db,"envios",id);
-                    const nuevoEnvio={
-                      id,
+                    // Nuevo: armar objeto y acumular para el popup de asignación
+                    nuevos.push({
+                      id:et.nroSeguimiento,
                       nroSeguimiento:et.nroSeguimiento,
                       linkML:"https://www.mercadolibre.com.ar/ventas/"+et.nroSeguimiento+"/detalle",
                       origen:"ML",
                       direccion:et.direccion||"",
                       localidad:et.localidad||"",
-                      partido:"",
+                      partido:cpAPartido(et.cp)||"",
                       cp:et.cp||"",
                       ciudad:"",
                       fecha:et.fecha||hoy,
@@ -3327,16 +3325,18 @@ export default function App(){
                       referencia:et.referencia||"",
                       tipoEntrega:et.tipoEntrega||"",
                       preparado:false,
-                    };
-                    await setDoc(ref,nuevoEnvio);
-                    creados++;
+                      loteImportacion:loteTs,
+                    });
                   }
                 }
-                const partes=[];
-                if(creados)partes.push(`${creados} creado(s)`);
-                if(actualizados)partes.push(`${actualizados} actualizado(s)`);
-                if(saltados)partes.push(`${saltados} sin cambios`);
-                mostrarToast(partes.join(" · ")||"Sin novedades");
+                if(nuevos.length){
+                  // Abrir popup de asignación igual que el Excel
+                  setBorrador(nuevos);
+                  setFileName(f.name);
+                  setPantalla("asignacion");
+                } else {
+                  mostrarToast("Etiquetas actualizadas — no hay envios nuevos");
+                }
               }catch(err){mostrarToast("Error al procesar PDF: "+err.message);}
               setLoading(false);
             }}/>
