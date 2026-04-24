@@ -848,7 +848,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
         {porTrans.map(({l,n,v})=><div key={l} onClick={()=>filtrarPorLogistica(l)} style={{...S.card,padding:"0.75rem 1rem",borderLeft:"3px solid "+lc[l].color,cursor:"pointer",opacity:filTrans===l?1:0.75,outline:filTrans===l?"2px solid "+lc[l].color:"none"}}><div style={{color:lc[l].color,fontWeight:800,fontSize:"1.8rem",lineHeight:1}}>{n}</div><div style={{color:"#6b7280",fontSize:"0.62rem",marginTop:"2px"}}>{l}</div><div style={{color:"#10b981",fontSize:"0.72rem",fontWeight:600,marginTop:"2px"}}>{fmt(v)}</div></div>)}
       </div>
 
-      <div style={{display:"grid",gap:"4px",paddingBottom:"80px"}}>
+      <div style={{display:"grid",gap:"4px",paddingBottom:"80px",width:"100%",overflow:"hidden",boxSizing:"border-box"}}>
         {filtradosOrdenados.length===0&&<div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📭</div><p>Sin envios</p></div>}
         {filtradosOrdenados.map((e,i)=>{
           const zi=getZonaLogistica(zc,e.trans,e.partido);
@@ -860,7 +860,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
           const estC=ESTADO_C[estKey]||ESTADO_C.sin_asignar;
           const esTN=e.origen==="Tienda Nube";
           return(
-            <div key={e.id}>
+            <div key={e.id} style={{width:"100%",minWidth:0,overflow:"hidden"}}>
               <div style={{...S.card,padding:"0.55rem 0.75rem",display:"flex",alignItems:"flex-start",gap:"0.5rem",opacity:getEstado(e)==="cancelado"?0.45:1,borderColor:isEdit||isSel?"#6366f1":e.alertaDireccion?"#f59e0b":"#252d40",background:isSel?"#12172a":"#1a1f2e",minWidth:0,overflow:"hidden"}}>
                 {modoSel?<div style={{paddingTop:"2px"}}><Chk checked={isSel} onChange={()=>toggleSel(e.id)}/></div>:<span style={{color:"#374151",fontSize:"0.65rem",minWidth:"20px",textAlign:"right",paddingTop:"3px"}}>{i+1}</span>}
                 <div style={{flex:1,cursor:"pointer",minWidth:0}} onClick={()=>{if(modoSel)toggleSel(e.id);else setEditId(isEdit?null:e.id);}}>
@@ -887,7 +887,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
                     <span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.82rem",flexShrink:0}}>#{e.nroOrdenTN}</span>
                     {e.clienteNombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.clienteNombre}</span>}
                   </div>}
-                  <div style={{color:esTN&&e.clienteNombre?"#9ca3af":"#e5e7eb",fontSize:"0.8rem",lineHeight:1.35,textDecoration:getEstado(e)==="cancelado"?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%"}}>{e.direccion}{e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20))?" — "+e.referencia:""}</div>
+                  <div style={{color:esTN&&e.clienteNombre?"#9ca3af":"#e5e7eb",fontSize:"0.8rem",lineHeight:1.35,textDecoration:getEstado(e)==="cancelado"?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",width:"100%",display:"block"}}>{e.direccion}{e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20))?" — "+e.referencia:""}</div>
                   <div style={{color:"#9ca3af",fontSize:"0.74rem",marginTop:"2px",display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center"}}>
                     {!esTN&&<span style={{fontFamily:"monospace",color:"#9ca3af"}}>...{e.id.slice(-10)}</span>}
                     {e.nroSeguimiento&&<span style={{background:"#0f1420",padding:"0 5px",borderRadius:"4px",border:"1px solid #252d40",color:"#9ca3af"}}>📦 {e.nroSeguimiento}</span>}
