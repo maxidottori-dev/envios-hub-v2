@@ -779,7 +779,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
   }
 
   return(
-    <div>
+    <div style={{width:"100%",overflow:"hidden",boxSizing:"border-box"}}>
       <div style={{...S.card,padding:"0.6rem 1rem",marginBottom:"0.7rem",display:"flex",flexDirection:"column",gap:"6px"}}>
         {/* Fila 1: Fecha + Estado + Origen */}
         <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}}>
@@ -950,11 +950,10 @@ function TabImprimir({envios,zc,lc}){
     if(filOrigen==="NO_FLEX"&&e.origen==="ML")return false;
     return e.estado!=="cancelado";
   }).sort((a,b)=>{
-    // Primero por loteImportacion ASC (primer lote arriba, último abajo)
-    const la=a.loteImportacion||"";
-    const lb=b.loteImportacion||"";
+    // Sin lote va al final ("9" > cualquier ISO timestamp "2026...")
+    const la=a.loteImportacion||"9";
+    const lb=b.loteImportacion||"9";
     if(la!==lb)return la.localeCompare(lb);
-    // Mismo lote: FLEX por nroSeguimiento, NO FLEX por nroOrdenTN
     const na=parseInt(a.nroOrdenTN||a.nroSeguimiento||a.id)||0;
     const nb=parseInt(b.nroOrdenTN||b.nroSeguimiento||b.id)||0;
     return na-nb;
@@ -2283,7 +2282,7 @@ function VistaLogistica({envios,sesion,lc}){
     if(busqueda){const srch=busqueda.toLowerCase();return e.direccion.toLowerCase().includes(srch)||e.partido.toLowerCase().includes(srch)||(e.clienteNombre||"").toLowerCase().includes(srch)||(e.nroOrdenTN||"").includes(srch);}
     return true;
   }).sort((a,b)=>{
-    const la=a.loteImportacion||"";const lb=b.loteImportacion||"";
+    const la=a.loteImportacion||"9";const lb=b.loteImportacion||"9";
     if(la!==lb)return la.localeCompare(lb);
     const fa=a.fecha||a.fechaVenta||"";const fb=b.fecha||b.fechaVenta||"";
     if(fa!==fb)return fa.localeCompare(fb);
@@ -2316,7 +2315,7 @@ function VistaLogistica({envios,sesion,lc}){
         <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar..." style={{...S.input,width:"160px",padding:"0.3rem 0.65rem",fontSize:"0.78rem"}}/>
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:"0.5rem",flexWrap:"wrap"}}>
           <button onClick={()=>{
-            const filas=filtrados.sort((a,b)=>(a.loteImportacion||"").localeCompare(b.loteImportacion||"")).map((e,i)=>{
+            const filas=filtrados.sort((a,b)=>(a.loteImportacion||"9").localeCompare(b.loteImportacion||"9")).map((e,i)=>{
               const esFlex=e.origen==="ML";
               const lote=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}):"";
               const nroRef=esFlex?(e.nroSeguimiento||""):("#"+(e.nroOrdenTN||""));
@@ -2401,7 +2400,7 @@ function VistaLogistica({envios,sesion,lc}){
                   <span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.82rem"}}>#{e.nroOrdenTN}</span>
                   {e.clienteNombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem"}}>{e.clienteNombre}</span>}
                 </div>}
-                <div style={{color:esTN&&e.clienteNombre?"#9ca3af":"#e5e7eb",fontSize:"0.82rem",fontWeight:500}}>{e.direccion}{e.referencia?<span style={{color:"#6b7280",fontWeight:400}}> — {e.referencia}</span>:null}</div>
+                <div style={{color:esTN&&e.clienteNombre?"#9ca3af":"#e5e7eb",fontSize:"0.82rem",fontWeight:500}}>{e.direccion}{e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20))?<span style={{color:"#6b7280",fontWeight:400}}> — {e.referencia}</span>:null}</div>
                 <div style={{color:"#6b7280",fontSize:"0.72rem",marginTop:"1px"}}>{e.localidad?e.localidad+" · ":""}{e.partido}{e.cp?" · CP "+e.cp:""}</div>
                 {e.telefono&&<div style={{color:"#6b7280",fontSize:"0.72rem"}}>📞 {e.telefono}</div>}
                 {/* Info expandida */}
@@ -3055,7 +3054,7 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
         </div>
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:"0.5rem",flexWrap:"wrap"}}>
           <button onClick={()=>{
-            const filas=filtrados.sort((a,b)=>(a.loteImportacion||"").localeCompare(b.loteImportacion||"")).map((e,i)=>{
+            const filas=filtrados.sort((a,b)=>(a.loteImportacion||"9").localeCompare(b.loteImportacion||"9")).map((e,i)=>{
               const esFlex=e.origen==="ML";
               const lote=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}):"";
               const nroRef=esFlex?(e.nroSeguimiento||""):("#"+(e.nroOrdenTN||""));
