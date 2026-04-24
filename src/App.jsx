@@ -818,6 +818,20 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
             {["TODOS",...TURNOS].map(t =><button key={t} onClick={()=>setFilTurno(t)} style={S.btnSm(filTurno===t,"#8b5cf6")}>{t}</button>)}
           </div>
           <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="🔍 Buscar..." style={{...S.input,width:"190px",marginLeft:"auto"}}/>
+          <button onClick={()=>{
+            const tmap2=buildTarifaMap(zc);
+            const filas=filtradosOrdenados.map((e,i)=>({
+              "#":i+1,Origen:e.origen,Estado:getEstado(e),
+              NroOrdenTN:e.nroOrdenTN||"",Cliente:e.clienteNombre||"",
+              Direccion:e.direccion,Localidad:e.localidad||"",Partido:e.partido,CP:e.cp||"",
+              Logistica:e.trans||"",Zona:getZonaML(e.partido)||"",Turno:e.turno||"",
+              Fecha:e.fecha||"",FechaVenta:e.fechaVenta||"",Bultos:e.bultos||1,
+              Importe:calcImp(e,tmap2,lc,zc),Cobranza:e.cobranza||"",
+              Cambio:e.cambio||"",Retiro:e.retiro||"",Nota:e.nota||"",
+              EstadoLiq:e.estadoLiq||"normal",NotaLiq:e.notaLiq||"",
+            }));
+            exportarXLSX(filas,"envios_"+fechaHoy());
+          }} style={{...S.btnSm(false),color:"#10b981",border:"1px solid #10b981",padding:"4px 10px",fontSize:"0.72rem"}}>⬇ Excel</button>
         </div>
         {/* Fila 4: Acciones */}
         <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap",borderTop:"1px solid #252d40",paddingTop:"5px"}}>
@@ -847,7 +861,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
           const esTN=e.origen==="Tienda Nube";
           return(
             <div key={e.id}>
-              <div style={{...S.card,padding:"0.55rem 0.75rem",display:"flex",alignItems:"flex-start",gap:"0.5rem",opacity:getEstado(e)==="cancelado"?0.45:1,borderColor:isEdit||isSel?"#6366f1":e.alertaDireccion?"#f59e0b":"#252d40",background:isSel?"#12172a":"#1a1f2e"}}>
+              <div style={{...S.card,padding:"0.55rem 0.75rem",display:"flex",alignItems:"flex-start",gap:"0.5rem",opacity:getEstado(e)==="cancelado"?0.45:1,borderColor:isEdit||isSel?"#6366f1":e.alertaDireccion?"#f59e0b":"#252d40",background:isSel?"#12172a":"#1a1f2e",minWidth:0,overflow:"hidden"}}>
                 {modoSel?<div style={{paddingTop:"2px"}}><Chk checked={isSel} onChange={()=>toggleSel(e.id)}/></div>:<span style={{color:"#374151",fontSize:"0.65rem",minWidth:"20px",textAlign:"right",paddingTop:"3px"}}>{i+1}</span>}
                 <div style={{flex:1,cursor:"pointer",minWidth:0}} onClick={()=>{if(modoSel)toggleSel(e.id);else setEditId(isEdit?null:e.id);}}>
                   <div style={{display:"flex",gap:"3px",flexWrap:"wrap",alignItems:"center",marginBottom:"3px"}}>
@@ -873,7 +887,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
                     <span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.82rem",flexShrink:0}}>#{e.nroOrdenTN}</span>
                     {e.clienteNombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.clienteNombre}</span>}
                   </div>}
-                  <div style={{color:esTN&&e.clienteNombre?"#9ca3af":"#e5e7eb",fontSize:"0.8rem",lineHeight:1.35,textDecoration:getEstado(e)==="cancelado"?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}{e.referencia?" — "+e.referencia:""}</div>
+                  <div style={{color:esTN&&e.clienteNombre?"#9ca3af":"#e5e7eb",fontSize:"0.8rem",lineHeight:1.35,textDecoration:getEstado(e)==="cancelado"?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%"}}>{e.direccion}{e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20))?" — "+e.referencia:""}</div>
                   <div style={{color:"#9ca3af",fontSize:"0.74rem",marginTop:"2px",display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center"}}>
                     {!esTN&&<span style={{fontFamily:"monospace",color:"#9ca3af"}}>...{e.id.slice(-10)}</span>}
                     {e.nroSeguimiento&&<span style={{background:"#0f1420",padding:"0 5px",borderRadius:"4px",border:"1px solid #252d40",color:"#9ca3af"}}>📦 {e.nroSeguimiento}</span>}
@@ -900,23 +914,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
           );
         })}
       </div>
-      {/* Boton exportar */}
-      {filtradosOrdenados.length>0&&!modoSel&&<div style={{display:"flex",justifyContent:"flex-end",marginTop:"8px"}}>
-        <button onClick={()=>{
-          const tmap2=buildTarifaMap(zc);
-          const filas=filtradosOrdenados.map((e,i)=>({
-            "#":i+1,Origen:e.origen,Estado:getEstado(e),
-            NroOrdenTN:e.nroOrdenTN||"",Cliente:e.clienteNombre||"",
-            Direccion:e.direccion,Localidad:e.localidad||"",Partido:e.partido,CP:e.cp||"",
-            Logistica:e.trans||"",Zona:getZonaML(e.partido)||"",Turno:e.turno||"",
-            Fecha:e.fecha||"",FechaVenta:e.fechaVenta||"",Bultos:e.bultos||1,
-            Importe:calcImp(e,tmap2,lc,zc),Cobranza:e.cobranza||"",
-            Cambio:e.cambio||"",Retiro:e.retiro||"",Nota:e.nota||"",
-            EstadoLiq:e.estadoLiq||"normal",NotaLiq:e.notaLiq||"",
-          }));
-          exportarXLSX(filas,"envios_"+fechaHoy());
-        }} style={{...S.btnSm(false),color:"#10b981",border:"1px solid #10b981",padding:"4px 14px",fontSize:"0.75rem"}}>⬇ Exportar Excel</button>
-      </div>}
+
       {modoSel&&seleccionados.size>0&&(
         <div style={{position:"fixed",bottom:"20px",left:"50%",transform:"translateX(-50%)",background:"#1a1f2e",border:"1px solid #6366f1",borderRadius:"12px",padding:"0.7rem 1.25rem",display:"flex",gap:"0.6rem",alignItems:"center",zIndex:50,boxShadow:"0 4px 20px rgba(0,0,0,0.5)",flexWrap:"wrap",maxWidth:"95vw"}}>
           <span style={{color:"#e5e7eb",fontWeight:700,fontSize:"0.9rem"}}>{seleccionados.size} selec.</span>
@@ -942,7 +940,7 @@ function TabImprimir({envios,zc,lc}){
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const tmap=buildTarifaMap(zc);
   const getImp=e=>calcImp(e,tmap,lc,zc);
-  const lista=envios.filter(e=>{
+  const lista=[...envios].filter(e=>{
     const f=e.fecha||e.fechaVenta||"";
     if(fecha&&f!==fecha)return false;
     if(trans!=="TODOS"&&e.trans!==trans)return false;
@@ -951,6 +949,15 @@ function TabImprimir({envios,zc,lc}){
     if(filOrigen==="FLEX"&&e.origen!=="ML")return false;
     if(filOrigen==="NO_FLEX"&&e.origen==="ML")return false;
     return e.estado!=="cancelado";
+  }).sort((a,b)=>{
+    // Primero por loteImportacion ASC (primer lote arriba, último abajo)
+    const la=a.loteImportacion||"";
+    const lb=b.loteImportacion||"";
+    if(la!==lb)return la.localeCompare(lb);
+    // Mismo lote: FLEX por nroSeguimiento, NO FLEX por nroOrdenTN
+    const na=parseInt(a.nroOrdenTN||a.nroSeguimiento||a.id)||0;
+    const nb=parseInt(b.nroOrdenTN||b.nroSeguimiento||b.id)||0;
+    return na-nb;
   });
   const totalImp=lista.reduce((s,e)=>s+getImp(e),0);
   const cobTotal=lista.filter(e=>e.cobranza).reduce((s,e)=>s+(e.cobranza||0),0);
@@ -968,11 +975,13 @@ function TabImprimir({envios,zc,lc}){
       const esFlex=e.origen==="ML";
       const nroRef=esFlex?(e.nroSeguimiento||e.id.slice(-10)):"#"+(e.nroOrdenTN||e.id.slice(-8));
       const dir=[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · ");
+      // Solo mostrar referencia si no está ya incluida en la dirección
+      const refExtra=(e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20)))?" — "+e.referencia:"";
       const tipoCell=e.tipoEntrega?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;font-size:8px;font-weight:700;color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":"#15803d"};background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":"#dcfce7"};">${e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</td>`:`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;color:#aaa;">—</td>`;
       const bultosCell=`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:30px;text-align:center;font-weight:${e.bultos>1?"700":"400"};">${e.bultos||1}</td>`;
       const cobrar=e.cobranza?"$"+Number(e.cobranza).toLocaleString("es-AR"):"—";
       const loteCell=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}):"—";
-      return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}"><td style="text-align:center;width:20px;border-bottom:0.5px solid #ddd;padding:3px 4px;color:#888;">${i+1}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:55px;text-align:center;font-size:8px;font-weight:700;color:#16a34a;">${loteCell}</td>${tipoCell}<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-weight:500;">${dir}${e.referencia?" — "+e.referencia:""}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-family:monospace;font-size:10px;color:#444;width:110px;">${nroRef}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:45px;">${zml}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:32px;text-align:center;">${e.turno||"—"}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:42px;text-align:center;">${e.fecha?fmtCorta(e.fecha):"—"}</td>${hayCobro?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:72px;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:28px;text-align:center;font-weight:700;">${e.bultos||1}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:18px;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td></tr>`;
+      return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}"><td style="text-align:center;width:20px;border-bottom:0.5px solid #ddd;padding:3px 4px;color:#888;">${i+1}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:55px;text-align:center;font-size:8px;font-weight:700;color:#16a34a;">${loteCell}</td>${tipoCell}<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-weight:500;">${dir}${refExtra}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-family:monospace;font-size:10px;color:#444;width:110px;">${nroRef}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:45px;">${zml}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:32px;text-align:center;">${e.turno||"—"}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:42px;text-align:center;">${e.fecha?fmtCorta(e.fecha):"—"}</td>${hayCobro?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:72px;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:28px;text-align:center;font-weight:700;">${e.bultos||1}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:18px;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td></tr>`;
     }).join("");
     const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Envios ${fecha}</title><style>@page{size:A4 ${pdfOrient};margin:8mm 10mm;}body{font-family:Arial,sans-serif;font-size:${fs}px;margin:0;color:#111;}table{width:100%;border-collapse:collapse;}th{background:#e8e8e8;padding:3px 4px;text-align:left;font-size:${fs-2}px;font-weight:700;text-transform:uppercase;color:#555;border-bottom:1.5px solid #333;}td{font-size:${fs}px;}@media print{button{display:none!important;}}</style></head><body><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;"><span style="font-weight:700;font-size:13px;">Hoja de salida — ${trans==="TODOS"?"Todas las logisticas":trans} · ${fecha} · ${turno==="TODOS"?"Todos los turnos":turno} · ${origenLabel}</span><span style="font-size:10px;color:#888;">Impreso: ${ts} · ${lista.length} envios</span></div><table><thead><tr><th style="width:20px;">#</th><th style="width:55px;text-align:center;">Lote</th><th style="width:38px;text-align:center;">Tipo</th><th>Direccion · Localidad · Partido · CP · Referencia</th><th style="width:100px;">Nro envio / orden</th><th style="width:45px;">Zona</th><th style="width:32px;">Turno</th><th style="width:42px;">Fecha</th>${hayCobro?"<th style='width:72px;text-align:right;'>Cobrar</th>":""}<th style="width:28px;text-align:center;">Blts</th><th style="width:18px;text-align:center;">Chk</th></tr></thead><tbody>${rows}</tbody></table><div style="border-top:1.5px solid #333;margin-top:4px;padding-top:3px;font-size:9px;color:#555;display:flex;gap:16px;"><span>Total: <strong>${lista.length} envios</strong></span>${cobTotal?`<span>Cobranzas: <strong style="color:#b45309;">$${cobTotal.toLocaleString("es-AR")}</strong></span>`:""}</div><script>window.onload=function(){window.print();}<\/script></body></html>`;
     const w=window.open("","_blank");if(!w){alert("Permite ventanas emergentes.");return;}w.document.write(html);w.document.close();
@@ -1065,7 +1074,7 @@ function TabImprimir({envios,zc,lc}){
                     :<span style={{color:"#374151"}}>—</span>}
                 </td>
                 <td style={{...tdSt,whiteSpace:"normal",lineHeight:1.3}}>
-                  {dir}{e.referencia?<span style={{color:"#6b7280",fontSize:"0.72rem"}}> — {e.referencia}</span>:null}
+                  {dir}{e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20))?<span style={{color:"#6b7280",fontSize:"0.72rem"}}> — {e.referencia}</span>:null}
                 </td>
                 <td style={{...tdSt,fontFamily:"monospace",fontSize:"0.72rem",color:esFlex?"#9ca3af":"#7dd3fc"}}>{nroRef}</td>
                 <td style={tdSt}>{zml}</td>
@@ -2274,6 +2283,8 @@ function VistaLogistica({envios,sesion,lc}){
     if(busqueda){const srch=busqueda.toLowerCase();return e.direccion.toLowerCase().includes(srch)||e.partido.toLowerCase().includes(srch)||(e.clienteNombre||"").toLowerCase().includes(srch)||(e.nroOrdenTN||"").includes(srch);}
     return true;
   }).sort((a,b)=>{
+    const la=a.loteImportacion||"";const lb=b.loteImportacion||"";
+    if(la!==lb)return la.localeCompare(lb);
     const fa=a.fecha||a.fechaVenta||"";const fb=b.fecha||b.fechaVenta||"";
     if(fa!==fb)return fa.localeCompare(fb);
     const ta=TURNOS.indexOf(a.turno);const tb=TURNOS.indexOf(b.turno);
@@ -2305,12 +2316,22 @@ function VistaLogistica({envios,sesion,lc}){
         <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar..." style={{...S.input,width:"160px",padding:"0.3rem 0.65rem",fontSize:"0.78rem"}}/>
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:"0.5rem",flexWrap:"wrap"}}>
           <button onClick={()=>{
-            const filas=filtrados.map((e,i)=>{
+            const filas=filtrados.sort((a,b)=>(a.loteImportacion||"").localeCompare(b.loteImportacion||"")).map((e,i)=>{
               const esFlex=e.origen==="ML";
-              const lote=esFlex&&e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}):"";
-              return{"#":i+1,Lote:lote,Tipo:e.tipoEntrega==="COMERCIAL"?"COM":e.tipoEntrega==="RESIDENCIAL"?"RES":"",
+              const lote=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}):"";
+              const nroRef=esFlex?(e.nroSeguimiento||""):("#"+(e.nroOrdenTN||""));
+              const zona=getZonaML(e.partido)||"";
+              return{"#":i+1,
+                Lote:lote,
+                Tipo:e.tipoEntrega==="COMERCIAL"?"COM":e.tipoEntrega==="RESIDENCIAL"?"RES":"",
                 Direccion:[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · "),
-                Referencia:e.referencia||"",Turno:e.turno||"",Fecha:e.fecha||"",Bultos:e.bultos||1,
+                Referencia:(e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20)))?e.referencia:"",
+                NroEnvio:esFlex?nroRef:"",
+                NroOrden:esFlex?"":nroRef,
+                Zona:zona,
+                Turno:e.turno||"",
+                Fecha:e.fecha||"",
+                Bultos:e.bultos||1,
                 Cobrar:e.cobranza||""};
             });
             exportarXLSX(filas,"envios_"+logNombre+"_"+fechaHoy());
@@ -2326,7 +2347,7 @@ function VistaLogistica({envios,sesion,lc}){
               const lote=esFlex&&e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}):"—";
               const tipo=e.tipoEntrega==="COMERCIAL"?"COM":e.tipoEntrega==="RESIDENCIAL"?"RES":"—";
               const cobrar=e.cobranza?"$"+Number(e.cobranza).toLocaleString("es-AR"):"—";
-              return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}"><td style="text-align:center;padding:3px 4px;color:#888;border-bottom:0.5px solid #ddd;">${i+1}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;color:#16a34a;font-size:9px;font-weight:700;">${lote}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;font-size:9px;font-weight:700;background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":e.tipoEntrega?"#dcfce7":"transparent"};color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":e.tipoEntrega?"#15803d":"#aaa"};">${tipo}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;font-weight:500;">${dir}${e.referencia?" — "+e.referencia:""}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;font-family:monospace;font-size:9px;color:#444;">${nroRef}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;">${e.turno||"—"}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;">${e.fecha?fmtCorta(e.fecha):"—"}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;font-weight:${(e.bultos||1)>1?700:400};">${e.bultos||1}</td>${hayCobro?`<td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}<td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td></tr>`;
+              return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}"><td style="text-align:center;padding:3px 4px;color:#888;border-bottom:0.5px solid #ddd;">${i+1}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;color:#16a34a;font-size:9px;font-weight:700;">${lote}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;font-size:9px;font-weight:700;background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":e.tipoEntrega?"#dcfce7":"transparent"};color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":e.tipoEntrega?"#15803d":"#aaa"};">${tipo}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;font-weight:500;">${dir}${(e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20)))?" — "+e.referencia:""}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;font-family:monospace;font-size:9px;color:#444;">${nroRef}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;">${e.turno||"—"}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;">${e.fecha?fmtCorta(e.fecha):"—"}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;font-weight:${(e.bultos||1)>1?700:400};">${e.bultos||1}</td>${hayCobro?`<td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}<td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td></tr>`;
             }).join("");
             const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Envios ${logNombre}</title><style>@page{size:A4 landscape;margin:8mm 10mm;}body{font-family:Arial,sans-serif;font-size:11px;margin:0;color:#111;}table{width:100%;border-collapse:collapse;}th{background:#e8e8e8;padding:3px 4px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;color:#555;border-bottom:1.5px solid #333;}@media print{button{display:none!important;}}</style></head><body><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;"><span style="font-weight:700;font-size:13px;">Envios — ${logNombre} · ${ts}</span><span style="font-size:10px;color:#888;">${filtrados.length} envios</span></div><table><thead><tr><th style="width:20px;">#</th><th style="width:55px;">Lote</th><th style="width:38px;text-align:center;">Tipo</th><th>Direccion · Localidad · Partido · CP · Referencia</th><th style="width:100px;">Nro envio</th><th style="width:32px;text-align:center;">Turno</th><th style="width:42px;text-align:center;">Fecha</th><th style="width:28px;text-align:center;">Blts</th>${hayCobro?"<th style='width:72px;text-align:right;'>Cobrar</th>":""}<th style="width:18px;text-align:center;">Chk</th></tr></thead><tbody>${rows}</tbody></table><div style="border-top:1.5px solid #333;margin-top:4px;padding-top:3px;font-size:9px;color:#555;">${filtrados.length} envios</div><script>window.onload=function(){window.print();}<\/script></body></html>`;
             const w=window.open("","_blank");if(!w){alert("Permite ventanas emergentes.");return;}w.document.write(html);w.document.close();
@@ -3034,12 +3055,22 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
         </div>
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:"0.5rem",flexWrap:"wrap"}}>
           <button onClick={()=>{
-            const filas=filtrados.map((e,i)=>{
+            const filas=filtrados.sort((a,b)=>(a.loteImportacion||"").localeCompare(b.loteImportacion||"")).map((e,i)=>{
               const esFlex=e.origen==="ML";
-              const lote=esFlex&&e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}):"";
-              return{"#":i+1,Lote:lote,Tipo:e.tipoEntrega==="COMERCIAL"?"COM":e.tipoEntrega==="RESIDENCIAL"?"RES":"",
+              const lote=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}):"";
+              const nroRef=esFlex?(e.nroSeguimiento||""):("#"+(e.nroOrdenTN||""));
+              const zona=getZonaML(e.partido)||"";
+              return{"#":i+1,
+                Lote:lote,
+                Tipo:e.tipoEntrega==="COMERCIAL"?"COM":e.tipoEntrega==="RESIDENCIAL"?"RES":"",
                 Direccion:[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · "),
-                Referencia:e.referencia||"",Turno:e.turno||"",Fecha:e.fecha||"",Bultos:e.bultos||1,
+                Referencia:(e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20)))?e.referencia:"",
+                NroEnvio:esFlex?nroRef:"",
+                NroOrden:esFlex?"":nroRef,
+                Zona:zona,
+                Turno:e.turno||"",
+                Fecha:e.fecha||"",
+                Bultos:e.bultos||1,
                 Cobrar:e.cobranza||""};
             });
             exportarXLSX(filas,"envios_"+logNombre+"_"+fechaHoy());
@@ -3055,7 +3086,7 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
               const lote=esFlex&&e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}):"—";
               const tipo=e.tipoEntrega==="COMERCIAL"?"COM":e.tipoEntrega==="RESIDENCIAL"?"RES":"—";
               const cobrar=e.cobranza?"$"+Number(e.cobranza).toLocaleString("es-AR"):"—";
-              return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}"><td style="text-align:center;padding:3px 4px;color:#888;border-bottom:0.5px solid #ddd;">${i+1}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;color:#16a34a;font-size:9px;font-weight:700;">${lote}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;font-size:9px;font-weight:700;background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":e.tipoEntrega?"#dcfce7":"transparent"};color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":e.tipoEntrega?"#15803d":"#aaa"};">${tipo}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;font-weight:500;">${dir}${e.referencia?" — "+e.referencia:""}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;font-family:monospace;font-size:9px;color:#444;">${nroRef}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;">${e.turno||"—"}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;">${e.fecha?fmtCorta(e.fecha):"—"}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;font-weight:${(e.bultos||1)>1?700:400};">${e.bultos||1}</td>${hayCobro?`<td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}<td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td></tr>`;
+              return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}"><td style="text-align:center;padding:3px 4px;color:#888;border-bottom:0.5px solid #ddd;">${i+1}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;color:#16a34a;font-size:9px;font-weight:700;">${lote}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;font-size:9px;font-weight:700;background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":e.tipoEntrega?"#dcfce7":"transparent"};color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":e.tipoEntrega?"#15803d":"#aaa"};">${tipo}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;font-weight:500;">${dir}${(e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20)))?" — "+e.referencia:""}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;font-family:monospace;font-size:9px;color:#444;">${nroRef}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;">${e.turno||"—"}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;">${e.fecha?fmtCorta(e.fecha):"—"}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;font-weight:${(e.bultos||1)>1?700:400};">${e.bultos||1}</td>${hayCobro?`<td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}<td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td></tr>`;
             }).join("");
             const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Envios ${logNombre}</title><style>@page{size:A4 landscape;margin:8mm 10mm;}body{font-family:Arial,sans-serif;font-size:11px;margin:0;color:#111;}table{width:100%;border-collapse:collapse;}th{background:#e8e8e8;padding:3px 4px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;color:#555;border-bottom:1.5px solid #333;}@media print{button{display:none!important;}}</style></head><body><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;"><span style="font-weight:700;font-size:13px;">Envios — ${logNombre} · ${ts}</span><span style="font-size:10px;color:#888;">${filtrados.length} envios</span></div><table><thead><tr><th style="width:20px;">#</th><th style="width:55px;">Lote</th><th style="width:38px;text-align:center;">Tipo</th><th>Direccion · Localidad · Partido · CP · Referencia</th><th style="width:100px;">Nro envio</th><th style="width:32px;text-align:center;">Turno</th><th style="width:42px;text-align:center;">Fecha</th><th style="width:28px;text-align:center;">Blts</th>${hayCobro?"<th style='width:72px;text-align:right;'>Cobrar</th>":""}<th style="width:18px;text-align:center;">Chk</th></tr></thead><tbody>${rows}</tbody></table><div style="border-top:1.5px solid #333;margin-top:4px;padding-top:3px;font-size:9px;color:#555;">${filtrados.length} envios</div><script>window.onload=function(){window.print();}<\/script></body></html>`;
             const w=window.open("","_blank");if(!w){alert("Permite ventanas emergentes.");return;}w.document.write(html);w.document.close();
@@ -3380,7 +3411,15 @@ export default function App(){
     setLoading(false);
   },[envios]);
 
-  const confirmarAsignacion=async(asignados)=>{for(const e of asignados){await guardarEnvio(e);}setPantalla("dashboard");setTab("envios");mostrarToast(asignados.length+" envios guardados");};
+  const confirmarAsignacion=async(asignados)=>{
+    const ts=new Date().toISOString();
+    for(const e of asignados){
+      // Agregar timestamp de asignación si no tiene (NO FLEX no lo trae)
+      if(!e.loteImportacion)e.loteImportacion=ts;
+      await guardarEnvio(e);
+    }
+    setPantalla("dashboard");setTab("envios");mostrarToast(asignados.length+" envios guardados");
+  };
   const reasignarSel=items=>{setBorrador(items);setPantalla("asignacion");};
 
   // Auth gates
