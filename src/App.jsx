@@ -950,7 +950,11 @@ function TabImprimir({envios,zc,lc}){
     if(filOrigen==="NO_FLEX"&&e.origen==="ML")return false;
     return e.estado!=="cancelado";
   }).sort((a,b)=>{
-    // Sin lote va al final ("9" > cualquier ISO timestamp "2026...")
+    // NO FLEX primero, FLEX después
+    const orA=a.origen==="ML"?1:0;
+    const orB=b.origen==="ML"?1:0;
+    if(orA!==orB)return orA-orB;
+    // Dentro de cada grupo: por lote ASC, sin lote al final
     const la=a.loteImportacion||"9";
     const lb=b.loteImportacion||"9";
     if(la!==lb)return la.localeCompare(lb);
@@ -964,28 +968,94 @@ function TabImprimir({envios,zc,lc}){
 
   const [pdfOrient,setPdfOrient]=useState("landscape");
   const [pdfFontSize,setPdfFontSize]=useState(11);
+  const [pdfVersion,setPdfVersion]=useState("completa"); // "completa" | "simple"
   const generarPDF=()=>{
     const ahora=new Date();
     const ts=ahora.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+" "+ahora.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
     const origenLabel=filOrigen==="FLEX"?"Solo FLEX":filOrigen==="NO_FLEX"?"NO FLEX":"Todos";
     const fs=pdfFontSize;
+    const esSimple=pdfVersion==="simple";
+
     const rows=lista.map((e,i)=>{
-      const zml=getZonaML(e.partido)||"-";
       const esFlex=e.origen==="ML";
-      const nroRef=esFlex?(e.nroSeguimiento||e.id.slice(-10)):"#"+(e.nroOrdenTN||e.id.slice(-8));
       const dir=[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · ");
-      // Solo mostrar referencia si no está ya incluida en la dirección
+      const dirCorta=(e.direccion||"").split("/")[0].split("-")[0].split(",")[0].trim();
+      const nroRef=esFlex?(e.nroSeguimiento||e.id.slice(-10)):("#"+(e.nroOrdenTN||e.id.slice(-8)));
+      const zml=esFlex?(getZonaML(e.partido)||""):(e.partido||"");
       const refExtra=(e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20)))?" — "+e.referencia:"";
-      const tipoCell=e.tipoEntrega?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;font-size:8px;font-weight:700;color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":"#15803d"};background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":"#dcfce7"};">${e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</td>`:`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;color:#aaa;">—</td>`;
-      const bultosCell=`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:30px;text-align:center;font-weight:${e.bultos>1?"700":"400"};">${e.bultos||1}</td>`;
       const cobrar=e.cobranza?"$"+Number(e.cobranza).toLocaleString("es-AR"):"—";
       const loteCell=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}):"—";
-      return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}"><td style="text-align:center;width:20px;border-bottom:0.5px solid #ddd;padding:3px 4px;color:#888;">${i+1}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:55px;text-align:center;font-size:8px;font-weight:700;color:#16a34a;">${loteCell}</td>${tipoCell}<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-weight:500;">${dir}${refExtra}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-family:monospace;font-size:10px;color:#444;width:110px;">${nroRef}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:45px;">${zml}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:32px;text-align:center;">${e.turno||"—"}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:42px;text-align:center;">${e.fecha?fmtCorta(e.fecha):"—"}</td>${hayCobro?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:72px;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:28px;text-align:center;font-weight:700;">${e.bultos||1}</td><td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:18px;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td></tr>`;
+      const tipoCell=e.tipoEntrega?`<span style="background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":"#dcfce7"};color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":"#15803d"};border-radius:3px;padding:0 4px;font-size:${fs-2}px;font-weight:700;">${e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</span>`:"—";
+      const origenBadge=esFlex?`<span style="background:#1a3008;color:#84cc16;border-radius:3px;padding:0 4px;font-size:${fs-3}px;font-weight:700;">FLEX</span>`:`<span style="background:#0c1a40;color:#38bdf8;border-radius:3px;padding:0 4px;font-size:${fs-3}px;font-weight:700;">TN</span>`;
+
+      if(esSimple){
+        return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"};border-bottom:0.5px solid #e5e7eb;">
+          <td style="padding:3px 4px;text-align:center;color:#888;width:20px;">${i+1}</td>
+          <td style="padding:3px 4px;width:50px;color:#16a34a;font-weight:700;font-size:${fs-1}px;">${loteCell}</td>
+          <td style="padding:3px 4px;font-family:monospace;font-size:${fs-1}px;color:#444;width:100px;">${nroRef}</td>
+          <td style="padding:3px 4px;text-align:center;width:35px;">${tipoCell}</td>
+          <td style="padding:3px 4px;text-align:center;width:25px;font-weight:${(e.bultos||1)>1?700:400};">${e.bultos||1}</td>
+          <td style="padding:3px 4px;text-align:center;width:18px;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td>
+          <td style="padding:3px 4px;font-weight:600;">${dirCorta}</td>
+          <td style="padding:3px 4px;color:#555;">${e.localidad||""}</td>
+          <td style="padding:3px 4px;color:#555;">${e.partido||""}</td>
+          <td style="padding:3px 4px;width:50px;">${zml}</td>
+          <td style="padding:3px 4px;width:30px;text-align:center;">${e.turno||"—"}</td>
+          <td style="padding:3px 4px;width:40px;text-align:center;">${e.fecha?fmtCorta(e.fecha):"—"}</td>
+          ${hayCobro?`<td style="padding:3px 4px;width:70px;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}
+        </tr>`;
+      } else {
+        const tipoBadge=e.tipoEntrega?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;font-size:${fs-2}px;font-weight:700;color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":"#15803d"};background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":"#dcfce7"};">${e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</td>`:`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;color:#aaa;">—</td>`;
+        const bultosCell=`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:28px;text-align:center;font-weight:${(e.bultos||1)>1?700:400};">${e.bultos||1}</td>`;
+        return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}">
+          <td style="text-align:center;width:20px;border-bottom:0.5px solid #ddd;padding:3px 4px;color:#888;">${i+1}</td>
+          <td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:55px;text-align:center;font-size:${fs-2}px;font-weight:700;color:#16a34a;">${loteCell}</td>
+          ${tipoBadge}
+          <td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-weight:500;">${dir}${refExtra}</td>
+          <td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-family:monospace;font-size:${fs-1}px;color:#444;width:110px;">${nroRef}</td>
+          <td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:45px;">${zml}</td>
+          <td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:32px;text-align:center;">${e.turno||"—"}</td>
+          <td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:42px;text-align:center;">${e.fecha?fmtCorta(e.fecha):"—"}</td>
+          ${hayCobro?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:72px;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}
+          ${bultosCell}
+          <td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:18px;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td>
+        </tr>`;
+      }
     }).join("");
-    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Envios ${fecha}</title><style>@page{size:A4 ${pdfOrient};margin:8mm 10mm;}body{font-family:Arial,sans-serif;font-size:${fs}px;margin:0;color:#111;}table{width:100%;border-collapse:collapse;}th{background:#e8e8e8;padding:3px 4px;text-align:left;font-size:${fs-2}px;font-weight:700;text-transform:uppercase;color:#555;border-bottom:1.5px solid #333;}td{font-size:${fs}px;}@media print{button{display:none!important;}}</style></head><body><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;"><span style="font-weight:700;font-size:13px;">Hoja de salida — ${trans==="TODOS"?"Todas las logisticas":trans} · ${fecha} · ${turno==="TODOS"?"Todos los turnos":turno} · ${origenLabel}</span><span style="font-size:10px;color:#888;">Impreso: ${ts} · ${lista.length} envios</span></div><table><thead><tr><th style="width:20px;">#</th><th style="width:55px;text-align:center;">Lote</th><th style="width:38px;text-align:center;">Tipo</th><th>Direccion · Localidad · Partido · CP · Referencia</th><th style="width:100px;">Nro envio / orden</th><th style="width:45px;">Zona</th><th style="width:32px;">Turno</th><th style="width:42px;">Fecha</th>${hayCobro?"<th style='width:72px;text-align:right;'>Cobrar</th>":""}<th style="width:28px;text-align:center;">Blts</th><th style="width:18px;text-align:center;">Chk</th></tr></thead><tbody>${rows}</tbody></table><div style="border-top:1.5px solid #333;margin-top:4px;padding-top:3px;font-size:9px;color:#555;display:flex;gap:16px;"><span>Total: <strong>${lista.length} envios</strong></span>${cobTotal?`<span>Cobranzas: <strong style="color:#b45309;">$${cobTotal.toLocaleString("es-AR")}</strong></span>`:""}</div><script>window.onload=function(){window.print();}<\/script></body></html>`;
+
+    const thPDF="background:#e8e8e8;padding:3px 4px;text-align:left;font-size:"+(fs-2)+"px;font-weight:700;text-transform:uppercase;color:#555;border-bottom:1.5px solid #333;";
+    const headerRow=esSimple
+      ?`<tr><th style="${thPDF}width:20px;">#</th><th style="${thPDF}width:50px;">Lote</th><th style="${thPDF}width:100px;">Nro envio</th><th style="${thPDF}width:35px;text-align:center;">Tipo</th><th style="${thPDF}width:25px;text-align:center;">Blts</th><th style="${thPDF}width:18px;text-align:center;">Chk</th><th style="${thPDF}">Direccion</th><th style="${thPDF}">Ciudad</th><th style="${thPDF}">Partido</th><th style="${thPDF}width:50px;">Zona</th><th style="${thPDF}width:30px;text-align:center;">Turno</th><th style="${thPDF}width:40px;text-align:center;">Fecha</th>${hayCobro?`<th style="${thPDF}width:70px;text-align:right;">Cobrar</th>`:""}</tr>`
+      :`<tr><th style="${thPDF}width:20px;">#</th><th style="${thPDF}width:55px;text-align:center;">Lote</th><th style="${thPDF}width:38px;text-align:center;">Tipo</th><th style="${thPDF}">Direccion · Localidad · Partido · CP · Referencia</th><th style="${thPDF}width:100px;">Nro envio / orden</th><th style="${thPDF}width:45px;">Zona</th><th style="${thPDF}width:32px;text-align:center;">Turno</th><th style="${thPDF}width:42px;text-align:center;">Fecha</th>${hayCobro?`<th style="${thPDF}width:72px;text-align:right;">Cobrar</th>`:""}<th style="${thPDF}width:28px;text-align:center;">Blts</th><th style="${thPDF}width:18px;text-align:center;">Chk</th></tr>`;
+
+    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Envios ${fecha||"hoy"}</title><style>
+      @page{size:A4 ${pdfOrient};margin:8mm 10mm;}
+      body{font-family:Arial,sans-serif;font-size:${fs}px;margin:0;color:#111;}
+      table{width:100%;border-collapse:collapse;}
+      th{${thPDF}}
+      td{font-size:${fs}px;}
+      thead{display:table-header-group;}
+      .page-header{margin-bottom:4px;}
+      @media print{button{display:none!important;}.page-header{page-break-inside:avoid;}}
+    </style></head><body>
+    <div class="page-header" style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+      <span style="font-weight:700;font-size:${fs+2}px;">${trans!=="TODOS"?trans:origenLabel} · ${ts}</span>
+      <span style="font-size:${fs-1}px;color:#888;">${lista.length} envios · Total: $${totalImp.toLocaleString("es-AR")}${cobTotal?" · A cobrar: $"+cobTotal.toLocaleString("es-AR"):""}</span>
+    </div>
+    <table>
+      <thead>${headerRow}</thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div style="border-top:1.5px solid #333;margin-top:4px;padding-top:3px;font-size:${fs-2}px;color:#555;">${lista.length} envios</div>
+    <script>
+      window.onload=function(){
+        // Numerar páginas
+        window.print();
+      };
+    <\/script>
+    </body></html>`;
     const w=window.open("","_blank");if(!w){alert("Permite ventanas emergentes.");return;}w.document.write(html);w.document.close();
   };
-
   return(
     <div>
       <div style={{...S.card,padding:"0.75rem 1rem",marginBottom:"0.9rem",display:"flex",gap:"0.5rem",flexWrap:"wrap",alignItems:"center"}}>
@@ -1024,7 +1094,8 @@ function TabImprimir({envios,zc,lc}){
             exportarXLSX(filas,"imprimir_"+fechaHoy());
           }} style={{...S.btn(false),border:"1px solid #10b981",color:"#10b981",padding:"0.4rem 0.9rem",fontSize:"0.78rem"}}>⬇ Excel</button>
           <div style={{display:"flex",gap:"4px",alignItems:"center"}}>
-            <button onClick={()=>setPdfOrient(pdfOrient==="landscape"?"portrait":"landscape")} style={{...S.btnSm(false),padding:"4px 10px",fontSize:"0.72rem",color:"#9ca3af"}} title="Cambiar orientación">{pdfOrient==="landscape"?"↔ Horizontal":"↕ Vertical"}</button>
+            <button onClick={()=>setPdfVersion(pdfVersion==="completa"?"simple":"completa")} style={{...S.btnSm(pdfVersion==="simple","#f59e0b"),padding:"4px 10px",fontSize:"0.72rem"}} title="Cambiar versión">{pdfVersion==="simple"?"📋 Simple":"📄 Completa"}</button>
+          <button onClick={()=>setPdfOrient(pdfOrient==="landscape"?"portrait":"landscape")} style={{...S.btnSm(false),padding:"4px 10px",fontSize:"0.72rem",color:"#9ca3af"}} title="Cambiar orientación">{pdfOrient==="landscape"?"↔ Horizontal":"↕ Vertical"}</button>
             <select value={pdfFontSize} onChange={e=>setPdfFontSize(Number(e.target.value))} style={{...S.input,padding:"3px 6px",fontSize:"0.72rem",width:"70px"}} title="Tamaño de letra">
               {[9,10,11,12,13,14].map(n=><option key={n} value={n}>{n}px</option>)}
             </select>
