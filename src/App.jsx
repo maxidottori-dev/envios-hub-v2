@@ -1005,20 +1005,19 @@ function TabImprimir({envios,zc,lc}){
           ${hayCobro?`<td style="padding:3px 4px;width:70px;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}
         </tr>`;
       } else {
-        const tipoBadge=e.tipoEntrega?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;font-size:${fs-2}px;font-weight:700;color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":"#15803d"};background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":"#dcfce7"};">${e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</td>`:`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;color:#aaa;">—</td>`;
-        const bultosCell=`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:28px;text-align:center;font-weight:${(e.bultos||1)>1?700:400};">${e.bultos||1}</td>`;
+        const td=(w,extra,val)=>`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;${w?"width:"+w+"px;":""}${extra||""}">${val}</td>`;
         return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}">
-          <td style="text-align:center;width:20px;border-bottom:0.5px solid #ddd;padding:3px 4px;color:#888;">${i+1}</td>
-          <td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:55px;text-align:center;font-size:${fs-2}px;font-weight:700;color:#16a34a;">${loteCell}</td>
-          ${tipoBadge}
-          <td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-weight:500;">${dir}${refExtra}</td>
-          <td style="border-bottom:0.5px solid #ddd;padding:3px 4px;font-family:monospace;font-size:${fs-1}px;color:#444;width:110px;">${nroRef}</td>
-          <td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:45px;">${zml}</td>
-          <td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:32px;text-align:center;">${e.turno||"—"}</td>
-          <td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:42px;text-align:center;">${e.fecha?fmtCorta(e.fecha):"—"}</td>
-          ${hayCobro?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:72px;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}
-          ${bultosCell}
+          ${td(20,"text-align:center;color:#888;",i+1)}
+          ${td(55,"text-align:center;font-size:"+(fs-2)+"px;font-weight:700;color:#16a34a;",loteCell)}
+          ${td(110,"font-family:monospace;font-size:"+(fs-1)+"px;color:#444;",nroRef)}
+          ${e.tipoEntrega?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;font-size:${fs-2}px;font-weight:700;color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":"#15803d"};background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":"#dcfce7"};">${e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</td>`:`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;color:#aaa;">—</td>`}
+          ${td(28,"text-align:center;font-weight:"+(((e.bultos||1)>1)?700:400)+";",e.bultos||1)}
           <td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:18px;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td>
+          ${td("","font-weight:500;",dir+refExtra)}
+          ${td(45,"",zml)}
+          ${td(32,"text-align:center;",e.turno||"—")}
+          ${td(42,"text-align:center;",e.fecha?fmtCorta(e.fecha):"—")}
+          ${hayCobro?td(72,"text-align:right;font-weight:"+(e.cobranza?600:400)+";color:"+(e.cobranza?"#b45309":"#aaa")+";",cobrar):""}
         </tr>`;
       }
     }).join("");
@@ -1026,7 +1025,7 @@ function TabImprimir({envios,zc,lc}){
     const thPDF="background:#e8e8e8;padding:3px 4px;text-align:left;font-size:"+(fs-2)+"px;font-weight:700;text-transform:uppercase;color:#555;border-bottom:1.5px solid #333;";
     const headerRow=esSimple
       ?`<tr><th style="${thPDF}width:20px;">#</th><th style="${thPDF}width:50px;">Lote</th><th style="${thPDF}width:100px;">Nro envio</th><th style="${thPDF}width:35px;text-align:center;">Tipo</th><th style="${thPDF}width:25px;text-align:center;">Blts</th><th style="${thPDF}width:18px;text-align:center;">Chk</th><th style="${thPDF}">Direccion</th><th style="${thPDF}">Ciudad</th><th style="${thPDF}">Partido</th><th style="${thPDF}width:50px;">Zona</th><th style="${thPDF}width:30px;text-align:center;">Turno</th><th style="${thPDF}width:40px;text-align:center;">Fecha</th>${hayCobro?`<th style="${thPDF}width:70px;text-align:right;">Cobrar</th>`:""}</tr>`
-      :`<tr><th style="${thPDF}width:20px;">#</th><th style="${thPDF}width:55px;text-align:center;">Lote</th><th style="${thPDF}width:38px;text-align:center;">Tipo</th><th style="${thPDF}">Direccion · Localidad · Partido · CP · Referencia</th><th style="${thPDF}width:100px;">Nro envio / orden</th><th style="${thPDF}width:45px;">Zona</th><th style="${thPDF}width:32px;text-align:center;">Turno</th><th style="${thPDF}width:42px;text-align:center;">Fecha</th>${hayCobro?`<th style="${thPDF}width:72px;text-align:right;">Cobrar</th>`:""}<th style="${thPDF}width:28px;text-align:center;">Blts</th><th style="${thPDF}width:18px;text-align:center;">Chk</th></tr>`;
+      :`<tr><th style="${thPDF}width:20px;">#</th><th style="${thPDF}width:55px;text-align:center;">Lote</th><th style="${thPDF}width:100px;">Nro envio / orden</th><th style="${thPDF}width:38px;text-align:center;">Tipo</th><th style="${thPDF}width:28px;text-align:center;">Blts</th><th style="${thPDF}width:18px;text-align:center;">Chk</th><th style="${thPDF}">Direccion · Localidad · Partido · CP · Referencia</th><th style="${thPDF}width:45px;">Zona</th><th style="${thPDF}width:32px;text-align:center;">Turno</th><th style="${thPDF}width:42px;text-align:center;">Fecha</th>${hayCobro?`<th style="${thPDF}width:72px;text-align:right;">Cobrar</th>`:""}</tr>`;
 
     const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Envios ${fecha||"hoy"}</title><style>
       @page{size:A4 ${pdfOrient};margin:8mm 10mm;}
