@@ -431,6 +431,26 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc}){
   const grupoKeys=modo==="zona"?[...ZONAS_ML_LIST,"Otra"].filter(k =>grupos[k]):Object.keys(grupos).sort();
   const totalAsig=borrador.filter(e=>getA(e.id).trans).length;
   const confirmar=()=>onConfirmar(borrador.map(e=>({...e,...getA(e.id),estado:getA(e.id).trans?"asignado":"sin_asignar"})));
+  const imprimirLote=()=>{
+    const asignados=borrador.filter(e=>getA(e.id).trans).map(e=>({...e,...getA(e.id)}));
+    if(!asignados.length){alert("No hay envios asignados para imprimir.");return;}
+    const porLog={};
+    asignados.forEach(e=>{if(!porLog[e.trans])porLog[e.trans]=[];porLog[e.trans].push(e);});
+    const ts=new Date().toLocaleString("es-AR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+    const thSt="background:#e8e8e8;padding:3px 5px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;color:#555;border-bottom:1.5px solid #333;";
+    let body="";
+    Object.entries(porLog).forEach(([log,envs])=>{
+      const color=lc[log]?.color||"#6366f1";
+      const rows=envs.map((e,i)=>{
+        const dir=e.direccion+(e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20))?" — "+e.referencia:"");
+        const loc=(e.localidad&&!/referencia/i.test(e.localidad))?e.localidad:"";
+        return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}"><td style="text-align:center;padding:3px 5px;color:#888;border-bottom:0.5px solid #ddd;">${i+1}</td><td style="padding:3px 5px;font-weight:500;border-bottom:0.5px solid #ddd;">${dir}</td><td style="padding:3px 5px;color:#555;border-bottom:0.5px solid #ddd;">${loc}</td><td style="padding:3px 5px;color:#555;border-bottom:0.5px solid #ddd;">${e.partido||""}</td><td style="padding:3px 5px;color:#555;border-bottom:0.5px solid #ddd;">${e.cp||""}</td><td style="padding:3px 5px;font-family:monospace;font-size:9px;color:#444;border-bottom:0.5px solid #ddd;">${e.id}</td><td style="padding:3px 5px;text-align:center;border-bottom:0.5px solid #ddd;">${e.turno||"—"}</td><td style="padding:3px 5px;text-align:center;border-bottom:0.5px solid #ddd;">${e.fecha?fmtCorta(e.fecha):"—"}</td><td style="padding:3px 5px;text-align:center;border-bottom:0.5px solid #ddd;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td></tr>`;
+      }).join("");
+      body+=`<div style="margin-bottom:18px;"><div style="background:${color}22;border-left:4px solid ${color};padding:5px 10px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:baseline;"><span style="font-weight:800;font-size:13px;color:${color};">${log}</span><span style="font-size:10px;color:#888;">${envs.length} envios</span></div><table style="width:100%;border-collapse:collapse;"><thead><tr><th style="${thSt}width:20px;">#</th><th style="${thSt}">Direccion</th><th style="${thSt}width:90px;">Localidad</th><th style="${thSt}width:90px;">Partido</th><th style="${thSt}width:45px;">CP</th><th style="${thSt}width:110px;">Nro envio</th><th style="${thSt}width:38px;">Turno</th><th style="${thSt}width:50px;">Fecha</th><th style="${thSt}width:18px;">Chk</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    });
+    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Lote FLEX ${ts}</title><style>@page{size:A4 portrait;margin:8mm 10mm;}body{font-family:Arial,sans-serif;font-size:11px;margin:0;color:#111;}@media print{button{display:none!important;}}</style></head><body><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;border-bottom:2px solid #333;padding-bottom:4px;"><span style="font-weight:800;font-size:13px;">Lote FLEX — ${ts}</span><span style="font-size:10px;color:#888;">${asignados.length} envios · ${Object.keys(porLog).length} logisticas</span></div>${body}<script>window.onload=function(){window.print();}<\/script></body></html>`;
+    const w=window.open("","_blank");w.document.write(html);w.document.close();
+  };
   return(
     <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif"}}>
       <style>{`*{box-sizing:border-box;}select option{background:#1a1f2e;}`}</style>
@@ -443,6 +463,7 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc}){
         </div>
         <div style={{marginLeft:"auto",display:"flex",gap:"0.5rem",alignItems:"center",flexWrap:"wrap"}}>
           <span style={{color:totalAsig===borrador.length?"#10b981":"#f59e0b",fontSize:"0.82rem",fontWeight:700}}>{totalAsig}/{borrador.length}</span>
+          <button onClick={imprimirLote} disabled={totalAsig===0} style={{...S.btn(false),color:totalAsig>0?"#84cc16":"#4b5563",borderColor:totalAsig>0?"#84cc16":"#252d40",opacity:totalAsig>0?1:0.5}}>Imprimir lote</button>
           <button onClick={onCancelar} style={S.btn(false)}>Cancelar</button>
           <button onClick={confirmar} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)"}}>Confirmar</button>
         </div>
@@ -500,6 +521,7 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc}){
           );
         })}
         <div style={{display:"flex",justifyContent:"flex-end",gap:"0.75rem",marginTop:"1rem",paddingBottom:"2rem"}}>
+          <button onClick={imprimirLote} disabled={totalAsig===0} style={{...S.btn(false),color:totalAsig>0?"#84cc16":"#4b5563",borderColor:totalAsig>0?"#84cc16":"#252d40",opacity:totalAsig>0?1:0.5}}>Imprimir lote</button>
           <button onClick={onCancelar} style={S.btn(false)}>Cancelar</button>
           <button onClick={confirmar} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.55rem 1.4rem"}}>Confirmar ({totalAsig}/{borrador.length})</button>
         </div>
@@ -815,7 +837,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
           <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
           <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"38px"}}>Turno</span>
           <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
-            {["TODOS",...TURNOS].map(t =><button key={t} onClick={()=>setFilTurno(t)} style={S.btnSm(filTurno===t,"#8b5cf6")}>{t}</button>)}<button onClick={()=>setFilTurno("SIN_TURNO")} style={S.btnSm(filTurno==="SIN_TURNO","#6b7280")}>Sin turno</button>}
+            {["TODOS",...TURNOS].map(t =><button key={t} onClick={()=>setFilTurno(t)} style={S.btnSm(filTurno===t,"#8b5cf6")}>{t}</button>)}<button onClick={()=>setFilTurno("SIN_TURNO")} style={S.btnSm(filTurno==="SIN_TURNO","#6b7280")}>Sin turno</button>
           </div>
           <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="🔍 Buscar..." style={{...S.input,width:"190px",marginLeft:"auto"}}/>
           <button onClick={()=>{
