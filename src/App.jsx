@@ -3504,7 +3504,7 @@ export default function App(){
     if(esChofer)return<VistaChofer envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>;
     return<VistaLogistica envios={envios} sesion={sesion} lc={lc}/>;
   }
-  if(sesion.rol==="expedicion"||sesion.rol==="admin")return<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>;
+  if(sesion.rol==="expedicion")return<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>;
 
   if(pantalla==="asignacion"){return<PantallaAsignacion borrador={borrador} fileName={fileName} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc}/>;}
   if(pantalla==="asignacion-tn"){return<PantallaAsignacionTN borrador={borrador} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc}/>;}
@@ -3521,7 +3521,7 @@ export default function App(){
     {id:"informe",l:"Informe"},
     {id:"liquidacion",l:"Liquidacion"},
     {id:"localidades",l:"Localidades"},
-    ...(esAdmin?[{id:"usuarios",l:"Usuarios"}]:[]),
+    ...(esAdmin?[{id:"expedicion",l:"Expedicion"},{id:"usuarios",l:"Usuarios"}]:[]),
   ];
 
   return(
@@ -3670,6 +3670,7 @@ export default function App(){
         {tab==="liquidacion" &&<TabLiquidacion envios={envios} setEnvios={setEnvios} lc={lc}/>}
         {tab==="localidades" &&<TabLocalidades cpExtra={cpExtra} setCpExtra={setCpExtra}/>}
         {tab==="usuarios"   &&esAdmin&&<TabUsuarios lc={lc} setLc={setLcPersist}/>}
+        {tab==="expedicion" &&esAdmin&&<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>}
       </div>
     </div>
   );
