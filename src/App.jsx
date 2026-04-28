@@ -1184,7 +1184,7 @@ function TabImprimir({envios,zc,lc}){
 
 function TabManual({setEnvios,onSuccess,lc,enviosExistentes}){
   const hoy=fechaHoy();
-  const vacio={id:"",nroSeguimiento:"",linkML:"",direccion:"",ciudad:"",cp:"",origen:"Manual",trans:"",fecha:hoy,turno:"",estado:"sin_asignar",cobranza:null,cambio:null,retiro:null,observaciones:"",bultos:null,partido:"",importe:0,fechaVenta:hoy,clienteNombre:"",telefono:""};
+  const vacio={id:"",nroSeguimiento:"",linkML:"",direccion:"",ciudad:"",cp:"",origen:"Manual",trans:"",fecha:hoy,turno:"",estado:"sin_asignar",cobranza:null,cambio:null,retiro:null,observaciones:"",bultos:null,partido:"",importe:0,fechaVenta:hoy,clienteNombre:"",telefono:"",esCC:false,importeCC:0};
   const [f,setF]=useState(vacio);
   const [err,setErr]=useState("");
   const [dupWarn,setDupWarn]=useState("");
@@ -1230,6 +1230,7 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes}){
         <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.55rem",background:"#0f1420"}}><div style={{display:"flex",alignItems:"center",gap:"0.75rem"}}><button onClick={()=>set("cobranza",f.cobranza!==null?null:0)} style={S.btnSm(f.cobranza!==null,"#f59e0b")}>Cobranza</button>{f.cobranza!==null?<input type="number" placeholder="Monto" value={f.cobranza||""} onChange={e=>set("cobranza",parseFloat(e.target.value)||0)} style={{...S.input,width:"150px",padding:"4px 10px"}}/>:<span style={{color:"#374151",fontSize:"0.78rem"}}>Sin cobranza</span>}</div></div>
         <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.55rem",background:"#0f1420"}}><button onClick={()=>set("cambio",f.cambio!==null?null:"")} style={S.btnSm(f.cambio!==null,"#ec4899")}>Cambio</button>{f.cambio!==null?<textarea value={f.cambio||""} onChange={e=>set("cambio",e.target.value)} placeholder="Que retirar para el cambio..." style={{...S.input,display:"block",width:"100%",marginTop:"6px",height:"44px",resize:"vertical"}}/>:<span style={{color:"#374151",fontSize:"0.78rem",marginLeft:"8px"}}>Sin cambio</span>}</div>
         <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.9rem",background:"#0f1420"}}><button onClick={()=>set("retiro",f.retiro!==null?null:"")} style={S.btnSm(f.retiro!==null,"#f97316")}>Retiro</button>{f.retiro!==null?<textarea value={f.retiro||""} onChange={e=>set("retiro",e.target.value)} placeholder="Que tiene que retirar..." style={{...S.input,display:"block",width:"100%",marginTop:"6px",height:"44px",resize:"vertical"}}/>:<span style={{color:"#374151",fontSize:"0.78rem",marginLeft:"8px"}}>Sin retiro</span>}</div>
+        <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.9rem",background:f.esCC?"#130d2a":"#0f1420",border:f.esCC?"1px solid #a78bfa":"1px solid #1e2535"}}><div style={{display:"flex",alignItems:"center",gap:"0.75rem"}}><button onClick={()=>set("esCC",!f.esCC)} style={S.btnSm(f.esCC,"#a78bfa")}>Cta. Corriente</button>{f.esCC?<><span style={{color:"#6b7280",fontSize:"0.78rem"}}>Importe:</span><input type="number" placeholder="Monto" value={f.importeCC||""} onChange={e=>set("importeCC",parseFloat(e.target.value)||0)} style={{...S.input,width:"150px",padding:"4px 10px"}}/><span style={{color:"#a78bfa",fontSize:"0.72rem"}}>El cliente te debe este monto</span></>:<span style={{color:"#374151",fontSize:"0.78rem"}}>Marcar como Cuenta Corriente</span>}</div></div>
         <div style={{display:"flex",justifyContent:"flex-end",gap:"0.5rem"}}><button onClick={()=>{setF(vacio);setErr("");setDupWarn("");}} style={S.btn(false)}>Limpiar</button><button onClick={guardar} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.5rem 1.2rem"}}>Agregar envio</button></div>
       </div>
     </div>
@@ -2024,6 +2025,341 @@ function TabLiquidacion({ envios, setEnvios, lc }) {
 // TAB LOCALIDADES — ver, editar y agregar CP → Partido
 // ════════════════════════════════════════════════════════════════════
 const CP_P_INIT = {"1601":"La Plata","1607":"San Isidro","1608":"Tigre","1609":"San Isidro","1610":"Tigre","1611":"Tigre","1612":"Malvinas Argentinas","1613":"Malvinas Argentinas","1614":"Malvinas Argentinas","1615":"Malvinas Argentinas","1616":"Malvinas Argentinas","1617":"Tigre","1618":"Tigre","1619":"Escobar","1620":"Escobar","1621":"Tigre","1622":"Escobar","1623":"Escobar","1624":"Tigre","1625":"Escobar","1626":"Escobar","1627":"Escobar","1628":"Escobar","1629":"Pilar","1630":"Pilar","1631":"Pilar","1632":"Pilar","1633":"Pilar","1634":"Pilar","1635":"Pilar","1636":"Vicente Lopez","1637":"Vicente Lopez","1638":"Vicente Lopez","1640":"San Isidro","1641":"San Isidro","1642":"San Isidro","1643":"San Isidro","1644":"San Fernando","1645":"San Fernando","1646":"San Fernando","1647":"Zarate","1648":"Tigre","1649":"San Fernando","1650":"San Martin","1651":"San Martin","1653":"San Martin","1655":"San Martin","1657":"San Martin","1659":"San Miguel","1660":"Jose C Paz","1661":"San Miguel","1662":"San Miguel","1663":"San Miguel","1664":"Pilar","1665":"Jose C Paz","1666":"Jose C Paz","1667":"Pilar","1669":"Pilar","1670":"Tigre","1671":"Tigre","1672":"San Martin","1674":"Tres de Febrero","1675":"Tres de Febrero","1676":"Tres de Febrero","1678":"Tres de Febrero","1682":"Tres de Febrero","1683":"Tres de Febrero","1684":"Moron","1685":"Moron","1686":"Hurlingham","1687":"Tres de Febrero","1688":"Hurlingham","1689":"La Matanza Norte","1692":"Tres de Febrero","1702":"Tres de Febrero","1703":"Tres de Febrero","1704":"La Matanza Norte","1706":"Moron","1707":"Moron","1708":"Moron","1712":"Moron","1713":"Ituzaingo","1714":"Ituzaingo","1715":"Ituzaingo","1716":"Merlo","1718":"Merlo","1721":"Merlo","1722":"Merlo","1723":"Merlo","1724":"Merlo","1727":"Marcos Paz","1736":"Moreno","1738":"Moreno","1740":"Moreno","1742":"Moreno","1743":"Moreno","1744":"Moreno","1745":"Moreno","1746":"Moreno","1748":"Gral. Rodriguez","1749":"Gral. Rodriguez","1751":"La Matanza Norte","1752":"La Matanza Norte","1753":"La Matanza Norte","1754":"La Matanza Norte","1755":"La Matanza Norte","1757":"La Matanza Sur","1758":"La Matanza Sur","1759":"La Matanza Sur","1761":"La Matanza Norte","1763":"La Matanza Sur","1764":"La Matanza Sur","1765":"La Matanza Sur","1766":"La Matanza Norte","1768":"La Matanza Norte","1770":"La Matanza Norte","1771":"La Matanza Norte","1772":"La Matanza Norte","1774":"La Matanza Norte","1778":"La Matanza Norte","1785":"La Matanza Norte","1786":"La Matanza Sur","1801":"Ezeiza","1802":"Ezeiza","1803":"Ezeiza","1804":"Ezeiza","1805":"Esteban Echeverria","1806":"Ezeiza","1807":"Ezeiza","1808":"Canuelas","1812":"Canuelas","1813":"Ezeiza","1814":"Canuelas","1815":"Canuelas","1816":"Canuelas","1821":"Lomas de Zamora","1822":"Lanus","1823":"Lanus","1824":"Lanus","1825":"Lanus","1826":"Lanus","1827":"Lomas de Zamora","1828":"Lomas de Zamora","1829":"Lomas de Zamora","1831":"Lomas de Zamora","1832":"Lomas de Zamora","1833":"Lomas de Zamora","1834":"Lomas de Zamora","1835":"Lomas de Zamora","1836":"Lomas de Zamora","1837":"Berazategui","1838":"Esteban Echeverria","1839":"Esteban Echeverria","1840":"Quilmes","1841":"Esteban Echeverria","1842":"Esteban Echeverria","1843":"Almirante Brown","1844":"Almirante Brown","1845":"Almirante Brown","1846":"Almirante Brown","1847":"Almirante Brown","1848":"Almirante Brown","1849":"Almirante Brown","1851":"Almirante Brown","1852":"Almirante Brown","1853":"Florencio Varela","1854":"Almirante Brown","1855":"Almirante Brown","1856":"Almirante Brown","1858":"Presidente Peron","1859":"Florencio Varela","1860":"Berazategui","1861":"Berazategui","1862":"Presidente Peron","1863":"Florencio Varela","1864":"San Vicente","1865":"San Vicente","1867":"Florencio Varela","1868":"Avellaneda","1869":"Avellaneda","1870":"Avellaneda","1871":"Avellaneda","1872":"Avellaneda","1873":"Avellaneda","1874":"Avellaneda","1875":"Avellaneda","1876":"Quilmes","1877":"Quilmes","1878":"Quilmes","1879":"Quilmes","1880":"Berazategui","1881":"Quilmes","1882":"Quilmes","1883":"Quilmes","1884":"Berazategui","1885":"Berazategui","1886":"Berazategui","1887":"Florencio Varela","1888":"Florencio Varela","1889":"Florencio Varela","1890":"Berazategui","1891":"Florencio Varela","1893":"Berazategui","1894":"La Plata","1895":"La Plata","1896":"La Plata","1897":"La Plata","1900":"La Plata","1901":"La Plata","1902":"La Plata","1903":"La Plata","1904":"La Plata","1905":"La Plata","1906":"La Plata","1907":"La Plata","1908":"La Plata","1909":"La Plata","1910":"La Plata","1912":"La Plata","1914":"La Plata","1923":"Berisso","1924":"Berisso","1925":"Ensenada","1926":"Ensenada","1927":"Ensenada","1929":"Berisso","1931":"Ensenada","1984":"San Vicente","2800":"Zarate","2801":"Zarate","2802":"Zarate","2804":"Campana","2805":"Campana","2806":"Zarate","2808":"Zarate","2812":"Campana","2814":"Ex.de la Cruz","2816":"Campana","6700":"Lujan","6701":"Lujan","6702":"Lujan","6703":"Ex.de la Cruz","6706":"Lujan","6708":"Lujan","6712":"Lujan"};
+
+
+// ════════════════════════════════════════════════════════════════════
+// TAB CUENTAS CORRIENTES
+// ════════════════════════════════════════════════════════════════════
+function TabCtasCtes({envios,lc}){
+  const [pagos,setPagos]=useState([]);
+  const [loadingPagos,setLoadingPagos]=useState(true);
+  const [vistaCliente,setVistaCliente]=useState(null);
+  const [filtro,setFiltro]=useState("todos");
+  const [busqueda,setBusqueda]=useState("");
+  const [modalPago,setModalPago]=useState(null);
+  const [limites,setLimites]=useState({});
+  const [loadingLim,setLoadingLim]=useState(true);
+
+  useEffect(()=>{
+    const unsub=onSnapshot(collection(db,"pagosCC"),snap=>{
+      setPagos(snap.docs.map(d=>({...d.data(),_id:d.id})));
+      setLoadingPagos(false);
+    });
+    return()=>unsub();
+  },[]);
+
+  useEffect(()=>{
+    const unsub=onSnapshot(doc(db,"config","ctasCtes"),snap=>{
+      if(snap.exists())setLimites(snap.data().limites||{});
+      setLoadingLim(false);
+    });
+    return()=>unsub();
+  },[]);
+
+  const setLimiteCliente=(key,dias)=>{
+    const next={...limites,[key]:parseInt(dias)||15};
+    setLimites(next);
+    setDoc(doc(db,"config","ctasCtes"),{limites:next},{merge:true}).catch(console.error);
+  };
+
+  // Derivar clienteKey normalizado
+  const getClienteKey=(e)=>{
+    const nombre=(e.clienteNombre||"").toLowerCase().trim().replace(/\s+/g,"_");
+    return nombre||"sin_nombre_"+e.id;
+  };
+  const getClienteNombre=(e)=>e.clienteNombre||"Sin nombre ("+e.id.slice(-6)+")";
+
+  // Calcular deuda de cada envio
+  const getDeudaEnvio=(e)=>{
+    if(e.pagoEstado==="cuenta_corriente"&&e.importeOrden>0)return{monto:e.importeOrden,tipo:"TN CC",logistica:e.trans||""};
+    if(e.cobranza>0)return{monto:e.cobranza,tipo:"Efectivo",logistica:e.trans||""};
+    if(e.esCC&&e.importeCC>0)return{monto:e.importeCC,tipo:"Manual CC",logistica:e.trans||""};
+    return null;
+  };
+
+  // Agrupar envios con deuda por cliente
+  const clientesMap={};
+  envios.forEach(e=>{
+    const deuda=getDeudaEnvio(e);
+    if(!deuda)return;
+    const key=getClienteKey(e);
+    if(!clientesMap[key])clientesMap[key]={key,nombre:getClienteNombre(e),envios:[],deudaTotal:0,logisticas:new Set(),fechaMin:e.fecha||""};
+    clientesMap[key].envios.push({...e,_deuda:deuda});
+    clientesMap[key].deudaTotal+=deuda.monto;
+    if(deuda.logistica)clientesMap[key].logisticas.add(deuda.logistica);
+    if(e.fecha&&e.fecha<clientesMap[key].fechaMin)clientesMap[key].fechaMin=e.fecha;
+  });
+
+  // Calcular pagos por cliente
+  const pagosPorCliente={};
+  pagos.forEach(p=>{
+    if(!pagosPorCliente[p.clienteKey])pagosPorCliente[p.clienteKey]=0;
+    pagosPorCliente[p.clienteKey]+=p.monto||0;
+  });
+
+  // Calcular antiguedad en dias
+  const diasDeuda=(fechaMin)=>{
+    if(!fechaMin)return 0;
+    const hoy=new Date();hoy.setHours(0,0,0,0);
+    const f=new Date(fechaMin+"T00:00:00");
+    return Math.max(0,Math.round((hoy-f)/(1000*60*60*24)));
+  };
+
+  // Lista de clientes con saldo
+  const clientes=Object.values(clientesMap).map(c=>{
+    const cobrado=pagosPorCliente[c.key]||0;
+    const saldo=Math.max(0,c.deudaTotal-cobrado);
+    const dias=diasDeuda(c.fechaMin);
+    const limite=limites[c.key]||15;
+    return{...c,cobrado,saldo,dias,limite,logisticas:[...c.logisticas]};
+  }).sort((a,b)=>b.saldo-a.saldo);
+
+  const fmt=(n)=>"$"+Math.round(n).toLocaleString("es-AR");
+  const hoy=new Date();hoy.setHours(0,0,0,0);
+
+  // Filtros
+  const clientesFiltrados=clientes.filter(c=>{
+    if(filtro==="deuda"&&c.saldo===0)return false;
+    if(filtro==="vencidos"&&c.dias<c.limite)return false;
+    if(filtro==="saldados"&&c.saldo>0)return false;
+    if(busqueda&&!c.nombre.toLowerCase().includes(busqueda.toLowerCase()))return false;
+    return true;
+  });
+
+  // Metricas globales
+  const deudaTotal=clientes.reduce((s,c)=>s+c.saldo,0);
+  const vencidosTotal=clientes.filter(c=>c.dias>=c.limite&&c.saldo>0).reduce((s,c)=>s+c.saldo,0);
+  const cobradoMes=(()=>{
+    const inicio=new Date();inicio.setDate(1);inicio.setHours(0,0,0,0);
+    return pagos.filter(p=>{const f=p.creadoEn?.toDate?.();return f&&f>=inicio;}).reduce((s,p)=>s+(p.monto||0),0);
+  })();
+  const clientesActivos=clientes.filter(c=>c.saldo>0).length;
+
+  if(loadingPagos||loadingLim)return<div style={{padding:"2rem",color:"#6b7280",textAlign:"center"}}>Cargando cuentas corrientes...</div>;
+
+  // Vista detalle de cliente
+  if(vistaCliente){
+    const c=clientes.find(cl=>cl.key===vistaCliente);
+    if(!c)return null;
+    const pagosCli=pagos.filter(p=>p.clienteKey===c.key).sort((a,b)=>b.creadoEn?.toDate?.()-(a.creadoEn?.toDate?.())||0);
+    return(
+      <div style={{maxWidth:"820px"}}>
+        <button onClick={()=>setVistaCliente(null)} style={{...S.btn(false),marginBottom:"1rem",fontSize:"0.78rem"}}>← Volver</button>
+        <div style={{...S.card,padding:"1rem 1.25rem",marginBottom:"1rem"}}>
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:"0.5rem",marginBottom:"0.75rem"}}>
+            <div>
+              <div style={{fontWeight:800,fontSize:"1rem",color:"#e5e7eb"}}>{c.nombre}</div>
+              <div style={{fontSize:"0.72rem",color:"#6b7280",marginTop:"2px"}}>
+                {c.logisticas.length>0&&<span>Logisticas: {c.logisticas.join(", ")} · </span>}
+                Limite alerta: <input type="number" min="1" max="90" value={c.limite} onChange={ev=>setLimiteCliente(c.key,ev.target.value)} style={{...S.input,width:"48px",padding:"1px 6px",fontSize:"0.72rem",height:"20px",display:"inline-block"}}/> días
+              </div>
+            </div>
+            <div style={{display:"flex",gap:"0.5rem",flexWrap:"wrap"}}>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:"0.62rem",color:"#6b7280",textTransform:"uppercase",fontWeight:700}}>Deuda total</div>
+                <div style={{fontSize:"1.1rem",fontWeight:800,color:"#f59e0b"}}>{fmt(c.deudaTotal)}</div>
+              </div>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:"0.62rem",color:"#6b7280",textTransform:"uppercase",fontWeight:700}}>Cobrado</div>
+                <div style={{fontSize:"1.1rem",fontWeight:800,color:"#10b981"}}>{fmt(c.cobrado)}</div>
+              </div>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:"0.62rem",color:"#6b7280",textTransform:"uppercase",fontWeight:700}}>Saldo</div>
+                <div style={{fontSize:"1.1rem",fontWeight:800,color:c.saldo>0?"#ef4444":"#10b981"}}>{fmt(c.saldo)}</div>
+              </div>
+            </div>
+          </div>
+          <button onClick={()=>setModalPago({clienteKey:c.key,clienteNombre:c.nombre,saldoPendiente:c.saldo})} disabled={c.saldo===0} style={{...S.btn(true),background:"linear-gradient(135deg,#10b981,#059669)",padding:"0.4rem 1rem",fontSize:"0.8rem",opacity:c.saldo===0?0.4:1}}>Registrar pago</button>
+        </div>
+
+        <div style={{...S.card,marginBottom:"1rem",overflow:"hidden"}}>
+          <div style={{padding:"0.6rem 1rem",background:"#12172a",borderBottom:"1px solid #1e2535",fontSize:"0.72rem",fontWeight:700,color:"#6b7280",textTransform:"uppercase"}}>Pedidos con deuda</div>
+          {c.envios.map((e,i)=>{
+            const pagEnvio=pagos.filter(p=>p.envioIds?.includes(e.id)).reduce((s,p)=>s+(p.monto||0),0);
+            const saldoEnvio=Math.max(0,(e._deuda.monto||0)-pagEnvio);
+            return(
+              <div key={e.id} style={{padding:"0.65rem 1rem",borderBottom:i<c.envios.length-1?"1px solid #1a1f2e":"none",display:"flex",gap:"0.75rem",alignItems:"center",flexWrap:"wrap"}}>
+                <div style={{flex:1,minWidth:"200px"}}>
+                  <div style={{fontSize:"0.82rem",color:"#d1d5db",fontWeight:500}}>{e.direccion?.slice(0,60)}</div>
+                  <div style={{fontSize:"0.68rem",color:"#4b5563",marginTop:"2px"}}>
+                    ID {e.id.slice(-8)} · {e.fecha?fmtCorta(e.fecha):"sin fecha"}
+                    {e.trans&&<span style={{marginLeft:"6px",padding:"1px 6px",background:lc[e.trans]?.color+"22",color:lc[e.trans]?.color,borderRadius:"4px",fontSize:"0.65rem",fontWeight:700}}>{e.trans}</span>}
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:"0.75rem",alignItems:"center",flexWrap:"wrap"}}>
+                  <span style={{fontSize:"0.7rem",padding:"2px 8px",background:e._deuda.tipo==="Efectivo"?"#1c0f00":"#130d2a",color:e._deuda.tipo==="Efectivo"?"#f59e0b":"#a78bfa",borderRadius:"4px",border:"1px solid "+(e._deuda.tipo==="Efectivo"?"#78350f":"#6d28d9")}}>{e._deuda.tipo}</span>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:"0.62rem",color:"#6b7280"}}>Importe</div>
+                    <div style={{fontWeight:700,color:"#f59e0b"}}>{fmt(e._deuda.monto)}</div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:"0.62rem",color:"#6b7280"}}>Saldo</div>
+                    <div style={{fontWeight:700,color:saldoEnvio>0?"#ef4444":"#10b981"}}>{fmt(saldoEnvio)}</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {pagosCli.length>0&&(
+          <div style={{...S.card,overflow:"hidden"}}>
+            <div style={{padding:"0.6rem 1rem",background:"#12172a",borderBottom:"1px solid #1e2535",fontSize:"0.72rem",fontWeight:700,color:"#6b7280",textTransform:"uppercase"}}>Historial de pagos</div>
+            {pagosCli.map((p,i)=>(
+              <div key={p._id} style={{padding:"0.55rem 1rem",borderBottom:i<pagosCli.length-1?"1px solid #1a1f2e":"none",display:"flex",justifyContent:"space-between",alignItems:"center",gap:"0.5rem",flexWrap:"wrap"}}>
+                <div>
+                  <div style={{fontSize:"0.82rem",color:"#10b981",fontWeight:700}}>{fmt(p.monto)}</div>
+                  {p.nota&&<div style={{fontSize:"0.7rem",color:"#6b7280",marginTop:"1px"}}>{p.nota}</div>}
+                </div>
+                <div style={{fontSize:"0.72rem",color:"#4b5563"}}>{p.creadoEn?.toDate?.()?.toLocaleDateString("es-AR")||"—"}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return(
+    <div>
+      {/* Alerta vencidos */}
+      {clientes.filter(c=>c.dias>=c.limite&&c.saldo>0).length>0&&(
+        <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"1rem",background:"#1c0a0a",border:"1px solid #7f1d1d",color:"#fca5a5",display:"flex",alignItems:"center",gap:"0.75rem"}}>
+          <span style={{fontSize:"1rem"}}>⚠</span>
+          <span style={{fontSize:"0.82rem"}}><strong>{clientes.filter(c=>c.dias>=c.limite&&c.saldo>0).length} clientes</strong> con deuda vencida según su límite configurado</span>
+        </div>
+      )}
+
+      {/* Metricas */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:"10px",marginBottom:"1rem"}}>
+        {[
+          {l:"Clientes activos",v:clientesActivos,c:"#e5e7eb"},
+          {l:"Deuda total",v:fmt(deudaTotal),c:"#f59e0b"},
+          {l:"Vencidas",v:fmt(vencidosTotal),c:"#ef4444"},
+          {l:"Cobrado este mes",v:fmt(cobradoMes),c:"#10b981"},
+        ].map(m=>(
+          <div key={m.l} style={{background:"#12172a",borderRadius:"10px",padding:"0.75rem 1rem",border:"1px solid #1e2535"}}>
+            <div style={{fontSize:"0.62rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>{m.l}</div>
+            <div style={{fontSize:"1.25rem",fontWeight:800,color:m.c}}>{m.v}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filtros */}
+      <div style={{display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center",marginBottom:"0.85rem"}}>
+        {[{k:"todos",l:"Todos"},{k:"deuda",l:"Con deuda"},{k:"vencidos",l:"Vencidos"},{k:"saldados",l:"Saldados"}].map(f=>(
+          <button key={f.k} onClick={()=>setFiltro(f.k)} style={S.btnSm(filtro===f.k,"#6366f1")}>{f.l}</button>
+        ))}
+        <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar cliente..." style={{...S.input,width:"200px",marginLeft:"auto"}}/>
+      </div>
+
+      {/* Tabla */}
+      <div style={{...S.card,overflow:"hidden"}}>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead>
+            <tr style={{background:"#12172a"}}>
+              {["Cliente","Logisticas","Deuda total","Cobrado","Saldo","Antigüedad",""].map(h=>(
+                <th key={h} style={{padding:"8px 10px",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",color:"#6b7280",textAlign:h==="Deuda total"||h==="Cobrado"||h==="Saldo"?"right":"left",borderBottom:"1px solid #1e2535"}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {clientesFiltrados.length===0&&(
+              <tr><td colSpan={7} style={{padding:"2rem",textAlign:"center",color:"#4b5563"}}>Sin resultados</td></tr>
+            )}
+            {clientesFiltrados.map((c,i)=>{
+              const vencido=c.saldo>0&&c.dias>=c.limite;
+              const cercano=c.saldo>0&&c.dias>=(c.limite*0.7)&&c.dias<c.limite;
+              return(
+                <tr key={c.key} style={{background:vencido?"#1c0a0a":i%2===0?"transparent":"#0d1119",borderBottom:"1px solid #1a1f2e"}}>
+                  <td style={{padding:"10px 10px"}}>
+                    <div style={{fontWeight:600,fontSize:"0.82rem",color:"#e5e7eb"}}>{c.nombre}</div>
+                    <div style={{fontSize:"0.68rem",color:"#4b5563",marginTop:"1px"}}>{c.envios.length} pedido{c.envios.length!==1?"s":""}</div>
+                  </td>
+                  <td style={{padding:"10px 10px"}}>
+                    <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
+                      {c.logisticas.map(l=><span key={l} style={{fontSize:"0.65rem",padding:"1px 6px",background:lc[l]?.color+"22",color:lc[l]?.color,borderRadius:"4px",fontWeight:700}}>{l}</span>)}
+                    </div>
+                  </td>
+                  <td style={{padding:"10px 10px",textAlign:"right",fontWeight:700,color:"#f59e0b"}}>{fmt(c.deudaTotal)}</td>
+                  <td style={{padding:"10px 10px",textAlign:"right",color:"#10b981"}}>{fmt(c.cobrado)}</td>
+                  <td style={{padding:"10px 10px",textAlign:"right",fontWeight:800,color:c.saldo===0?"#10b981":vencido?"#ef4444":"#f59e0b"}}>{fmt(c.saldo)}</td>
+                  <td style={{padding:"10px 10px"}}>
+                    <span style={{fontSize:"0.72rem",padding:"2px 8px",borderRadius:"20px",fontWeight:700,
+                      background:vencido?"#7f1d1d":cercano?"#78350f":"#1a1f2e",
+                      color:vencido?"#fca5a5":cercano?"#fbbf24":"#6b7280"}}>
+                      {c.saldo===0?"—":c.dias+" días"}
+                    </span>
+                  </td>
+                  <td style={{padding:"10px 10px"}}>
+                    <div style={{display:"flex",gap:"4px"}}>
+                      <button onClick={()=>setVistaCliente(c.key)} style={{...S.btnSm(false,"#6366f1"),fontSize:"0.68rem"}}>Ver</button>
+                      {c.saldo>0&&<button onClick={()=>setModalPago({clienteKey:c.key,clienteNombre:c.nombre,saldoPendiente:c.saldo})} style={{...S.btnSm(false,"#10b981"),fontSize:"0.68rem"}}>Cobrar</button>}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Modal registro de pago */}
+      {modalPago&&<ModalRegistrarPago {...modalPago} onClose={()=>setModalPago(null)} envios={envios.filter(e=>{const deuda=getDeudaEnvio(e);return deuda&&getClienteKey(e)===modalPago.clienteKey;})} pagos={pagos.filter(p=>p.clienteKey===modalPago.clienteKey)} getDeudaEnvio={getDeudaEnvio}/>}
+    </div>
+  );
+}
+
+function ModalRegistrarPago({clienteKey,clienteNombre,saldoPendiente,onClose,envios,pagos,getDeudaEnvio}){
+  const [monto,setMonto]=useState("");
+  const [nota,setNota]=useState("");
+  const [guardando,setGuardando]=useState(false);
+  const fmt=(n)=>"$"+Math.round(n).toLocaleString("es-AR");
+
+  const guardar=async()=>{
+    const m=parseFloat(monto);
+    if(!m||m<=0){alert("Ingresa un monto válido.");return;}
+    setGuardando(true);
+    try{
+      await addDoc(collection(db,"pagosCC"),{
+        clienteKey,clienteNombre,monto:m,nota:nota.trim(),
+        envioIds:envios.map(e=>e.id),
+        creadoEn:serverTimestamp(),
+      });
+      onClose();
+    }catch(err){console.error(err);alert("Error al guardar el pago.");}
+    setGuardando(false);
+  };
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
+      <div style={{background:"#12172a",border:"1px solid #10b981",borderRadius:"16px",padding:"1.5rem",minWidth:"360px",maxWidth:"480px",width:"100%"}}>
+        <div style={{fontWeight:800,fontSize:"0.95rem",color:"#e5e7eb",marginBottom:"4px"}}>Registrar pago</div>
+        <div style={{fontSize:"0.75rem",color:"#6b7280",marginBottom:"1.25rem"}}>{clienteNombre} · Saldo pendiente: <strong style={{color:"#f59e0b"}}>{fmt(saldoPendiente)}</strong></div>
+
+        <div style={{marginBottom:"0.75rem"}}>
+          <label style={{display:"block",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",color:"#6b7280",marginBottom:"4px"}}>Monto cobrado</label>
+          <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+            <input type="number" value={monto} onChange={e=>setMonto(e.target.value)} placeholder="0" style={{...S.input,flex:1}}/>
+            <button onClick={()=>setMonto(String(saldoPendiente))} style={{...S.btnSm(false,"#10b981"),whiteSpace:"nowrap",fontSize:"0.7rem"}}>Total ({fmt(saldoPendiente)})</button>
+          </div>
+        </div>
+
+        <div style={{marginBottom:"1rem"}}>
+          <label style={{display:"block",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",color:"#6b7280",marginBottom:"4px"}}>Nota (opcional)</label>
+          <input value={nota} onChange={e=>setNota(e.target.value)} placeholder="ej. Transferencia, efectivo..." style={{...S.input,width:"100%"}}/>
+        </div>
+
+        <div style={{display:"flex",justifyContent:"flex-end",gap:"0.5rem"}}>
+          <button onClick={onClose} style={S.btn(false)}>Cancelar</button>
+          <button onClick={guardar} disabled={guardando||!monto} style={{...S.btn(true),background:"linear-gradient(135deg,#10b981,#059669)",opacity:guardando||!monto?0.5:1}}>
+            {guardando?"Guardando...":"Guardar pago"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function TabLocalidades({cpExtra,setCpExtra}) {
   const tabla={...CP_P_INIT,...cpExtra};
@@ -3542,6 +3878,7 @@ export default function App(){
     ...(esAdmin?[{id:"tarifas",l:"Tarifas / Log."}]:[]),
     {id:"informe",l:"Informe"},
     {id:"liquidacion",l:"Liquidacion"},
+    {id:"ctasctes",l:"Ctas. Ctes."},
     {id:"localidades",l:"Localidades"},
     ...(esAdmin?[{id:"expedicion",l:"Expedicion"},{id:"usuarios",l:"Usuarios"}]:[]),
   ];
@@ -3690,6 +4027,7 @@ export default function App(){
         {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZcPersist} lc={lc} setLc={setLcPersist}/>}
         {tab==="informe"     &&<TabInforme     envios={envios} zc={zc} lc={lc}/>}
         {tab==="liquidacion" &&<TabLiquidacion envios={envios} setEnvios={setEnvios} lc={lc}/>}
+        {tab==="ctasctes"   &&<TabCtasCtes   envios={envios} lc={lc}/>}
         {tab==="localidades" &&<TabLocalidades cpExtra={cpExtra} setCpExtra={setCpExtra}/>}
         {tab==="usuarios"   &&esAdmin&&<TabUsuarios lc={lc} setLc={setLcPersist}/>}
         {tab==="expedicion" &&esAdmin&&<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>}
