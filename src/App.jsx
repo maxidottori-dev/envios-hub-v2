@@ -741,7 +741,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
     if(filEstado==="no_cancelado"&&est==="cancelado")return false;
     else if(filEstado!=="TODOS"&&filEstado!=="no_cancelado"&&est!==filEstado)return false;
     if(filZona!=="TODAS"&&getZonaML(e.partido)!==filZona)return false;
-    if(filTurno!=="TODOS"&&e.turno!==filTurno)return false;
+    if(filTurno==="SIN_TURNO"){if(e.turno)return false;}else if(filTurno!=="TODOS"&&e.turno!==filTurno)return false;
     if(filOrigen!=="TODOS"){
       const origenVal=e.origen==="Tienda Nube"?"TN":e.origen==="ML"?"FLEX":"Manual";
       if(origenVal!==filOrigen)return false;
@@ -815,7 +815,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
           <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
           <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"38px"}}>Turno</span>
           <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
-            {["TODOS",...TURNOS].map(t =><button key={t} onClick={()=>setFilTurno(t)} style={S.btnSm(filTurno===t,"#8b5cf6")}>{t}</button>)}
+            {["TODOS",...TURNOS].map(t =><button key={t} onClick={()=>setFilTurno(t)} style={S.btnSm(filTurno===t,"#8b5cf6")}>{t}</button>)}<button onClick={()=>setFilTurno("SIN_TURNO")} style={S.btnSm(filTurno==="SIN_TURNO","#6b7280")}>Sin turno</button>}
           </div>
           <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="🔍 Buscar..." style={{...S.input,width:"190px",marginLeft:"auto"}}/>
           <button onClick={()=>{
@@ -997,7 +997,7 @@ function TabImprimir({envios,zc,lc}){
           <td style="padding:3px 4px;text-align:center;width:25px;font-weight:${(e.bultos||1)>1?700:400};">${e.bultos||1}</td>
           <td style="padding:3px 4px;text-align:center;width:18px;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td>
           <td style="padding:3px 4px;font-weight:600;">${dirCorta}</td>
-          <td style="padding:3px 4px;color:#555;">${e.localidad||""}</td>
+          <td style="padding:3px 4px;color:#555;">${(e.localidad&&!/referencia/i.test(e.localidad))?e.localidad:""}</td>
           <td style="padding:3px 4px;color:#555;">${e.partido||""}</td>
           <td style="padding:3px 4px;width:50px;">${zml}</td>
           <td style="padding:3px 4px;width:30px;text-align:center;">${e.turno||"—"}</td>
@@ -1162,7 +1162,7 @@ function TabImprimir({envios,zc,lc}){
 
 function TabManual({setEnvios,onSuccess,lc,enviosExistentes}){
   const hoy=fechaHoy();
-  const vacio={id:"",nroSeguimiento:"",linkML:"",direccion:"",ciudad:"",cp:"",origen:"Manual",trans:"",fecha:hoy,turno:"",estado:"sin_asignar",cobranza:null,cambio:null,retiro:null,observaciones:"",bultos:null,partido:"",importe:0,fechaVenta:hoy};
+  const vacio={id:"",nroSeguimiento:"",linkML:"",direccion:"",ciudad:"",cp:"",origen:"Manual",trans:"",fecha:hoy,turno:"",estado:"sin_asignar",cobranza:null,cambio:null,retiro:null,observaciones:"",bultos:null,partido:"",importe:0,fechaVenta:hoy,clienteNombre:"",telefono:""};
   const [f,setF]=useState(vacio);
   const [err,setErr]=useState("");
   const [dupWarn,setDupWarn]=useState("");
@@ -1188,6 +1188,8 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes}){
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.7rem",marginBottom:"0.7rem"}}>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. venta / referencia</label><input value={f.id} onChange={e=>set("id",e.target.value)} style={{...S.input,width:"100%"}} placeholder="ej. 2000012345"/></div>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. seguimiento</label><input value={f.nroSeguimiento} onChange={e=>set("nroSeguimiento",e.target.value)} style={{...S.input,width:"100%",borderColor:dupWarn?"#f59e0b":"#252d40"}} placeholder="ej. 46669555629"/></div>
+          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nombre cliente</label><input value={f.clienteNombre} onChange={e=>set("clienteNombre",e.target.value)} style={{...S.input,width:"100%"}} placeholder="Nombre completo"/></div>
+          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Teléfono</label><input value={f.telefono} onChange={e=>set("telefono",e.target.value)} style={{...S.input,width:"100%"}} placeholder="ej. 1165432100"/></div>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Origen</label><div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["ML","Tienda Nube","Particular","Otro"].map(o =><button key={o} onClick={()=>set("origen",o)} style={S.btnSm(f.origen===o,"#6366f1")}>{o}</button>)}</div></div>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Bultos</label><input type="number" min="1" value={f.bultos||""} onChange={ev=>{const v=parseInt(ev.target.value);set("bultos",v>0?v:"");}} placeholder="1" style={{...S.input,width:"120px",padding:"4px 10px"}}/></div>
         </div>
@@ -1585,7 +1587,7 @@ function TabMapa({ envios, lc }) {
     if (desde && f < desde) return false;
     if (hasta && f > hasta) return false;
     if (filTrans !== "TODOS" && e.trans !== filTrans) return false;
-    if (filTurno !== "TODOS" && e.turno !== filTurno) return false;
+    if(filTurno==="SIN_TURNO"){if(e.turno)return false;}else if(filTurno!=="TODOS"&&e.turno!==filTurno)return false;
     return getEstado(e) !== "cancelado";
   });
 
@@ -1665,7 +1667,7 @@ function TabMapa({ envios, lc }) {
         <span style={{ color: "#374151", fontSize: "0.6rem" }}>|</span>
         {["TODOS", ...logActivas].map(t => <button key={t} onClick={() => setFilTrans(t)} style={S.btnSm(filTrans === t, lc[t]?.color || "#6366f1")}>{t}</button>)}
         <span style={{ color: "#374151", fontSize: "0.6rem" }}>|</span>
-        {["TODOS", ...TURNOS].map(t => <button key={t} onClick={() => setFilTurno(t)} style={S.btnSm(filTurno === t, "#8b5cf6")}>{t}</button>)}
+        {["TODOS", ...TURNOS].map(t => <button key={t} onClick={() => setFilTurno(t)} style={S.btnSm(filTurno === t, "#8b5cf6")}>{t}</button>)}<button onClick={() => setFilTurno("SIN_TURNO")} style={S.btnSm(filTurno === "SIN_TURNO", "#6b7280")}>Sin turno</button>
         <span style={{ color: "#374151", fontSize: "0.6rem" }}>|</span>
         <span style={{ color: "#4b5563", fontSize: "0.65rem", fontWeight: 700, textTransform: "uppercase" }}>Color</span>
         <button onClick={() => setModColor("logistica")} style={S.btnSm(modColor === "logistica", "#6366f1")}>Logistica</button>
@@ -2346,7 +2348,7 @@ function VistaLogistica({envios,sesion,lc}){
     if(modFecha==="hoy"&&fEnv!==hoy)return false;
     if(modFecha==="proximos"&&(fEnv<hoy||fEnv>hasta7))return false;
     if(modFecha==="rango"&&(fEnv<rangoD||fEnv>rangoH))return false;
-    if(filTurno!=="TODOS"&&e.turno!==filTurno)return false;
+    if(filTurno==="SIN_TURNO"){if(e.turno)return false;}else if(filTurno!=="TODOS"&&e.turno!==filTurno)return false;
     if(filTipo==="FLEX"&&e.origen!=="ML")return false;
     if(filTipo==="NOFLEX"&&e.origen==="ML")return false;
     if(busqueda){const srch=busqueda.toLowerCase();return e.direccion.toLowerCase().includes(srch)||e.partido.toLowerCase().includes(srch)||(e.clienteNombre||"").toLowerCase().includes(srch)||(e.nroOrdenTN||"").includes(srch);}
@@ -2376,7 +2378,7 @@ function VistaLogistica({envios,sesion,lc}){
           {[{k:"hoy",l:"Hoy"},{k:"proximos",l:"Proximos 7 dias"},{k:"todos",l:"Todos"},{k:"rango",l:"Rango"}].map(x =><button key={x.k} onClick={()=>setModFecha(x.k)} style={{...S.btn(modFecha===x.k),padding:"0.28rem 0.6rem",fontSize:"0.72rem"}}>{x.l}</button>)}
           {modFecha==="rango"&&<><input type="date" value={rangoD} onChange={e=>setRangoD(e.target.value)} style={{...S.input,padding:"3px 8px",width:"130px",fontSize:"0.72rem"}}/><input type="date" value={rangoH} onChange={e=>setRangoH(e.target.value)} style={{...S.input,padding:"3px 8px",width:"130px",fontSize:"0.72rem"}}/></>}
           <span style={{color:"#374151",fontSize:"0.6rem",alignSelf:"center"}}>|</span>
-          {["TODOS",...TURNOS].map(t =><button key={t} onClick={()=>setFilTurno(t)} style={{...S.btnSm(filTurno===t,"#8b5cf6"),padding:"0.28rem 0.6rem",fontSize:"0.72rem"}}>{t}</button>)}
+          {["TODOS",...TURNOS].map(t =><button key={t} onClick={()=>setFilTurno(t)} style={{...S.btnSm(filTurno===t,"#8b5cf6"),padding:"0.28rem 0.6rem",fontSize:"0.72rem"}}>{t}</button>)}<button onClick={()=>setFilTurno("SIN_TURNO")} style={{...S.btnSm(filTurno==="SIN_TURNO","#6b7280"),padding:"0.28rem 0.6rem",fontSize:"0.72rem"}}>Sin turno</button>
           <span style={{color:"#374151",fontSize:"0.6rem",alignSelf:"center"}}>|</span>
           <button onClick={()=>setFilTipo("TODOS")} style={{...S.btnSm(filTipo==="TODOS"),padding:"0.28rem 0.6rem",fontSize:"0.72rem"}}>Todos</button>
           <button onClick={()=>setFilTipo("FLEX")} style={{padding:"0.28rem 0.6rem",fontSize:"0.72rem",borderRadius:"6px",fontWeight:700,cursor:"pointer",background:filTipo==="FLEX"?"#0d1c04":"#0f1420",color:filTipo==="FLEX"?"#84cc16":"#4b7a10",border:"1px solid "+(filTipo==="FLEX"?"#84cc16":"#1a3008")}}>FLEX</button>
@@ -3025,6 +3027,7 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
   // procesarScan debe declararse ANTES del useEffect que lo usa como dep
   const procesarScan=useCallback((nro)=>{
     const srch=nro.trim();if(!srch)return;
+    setResultado(null); // limpiar mensaje anterior inmediatamente
     const nums=srch.replace(/\D/g,"");
     // 1. Match exacto por nroSeguimiento o id
     let found=envios.find(e=>e.nroSeguimiento===srch||e.id===srch||e.nroSeguimiento===nums);
@@ -3032,12 +3035,12 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
     if(!found) found=envios.find(e=>e.nroSeguimiento&&nums.startsWith(e.nroSeguimiento));
     // 3. El nro del envio tiene datos extra: el QR es prefijo del nro registrado
     if(!found) found=envios.find(e=>e.nroSeguimiento&&e.nroSeguimiento.startsWith(nums));
-    if(!found){setResultado({ok:false,msg:"No encontrado: "+srch.slice(0,20)});setTimeout(()=>setResultado(null),30000);return;}
-    if(found.preparado){setResultado({ok:"ya",envio:found,msg:"Ya estaba preparado"});setTimeout(()=>setResultado(null),30000);return;}
+    if(!found){setResultado({ok:false,msg:"No encontrado: "+srch.slice(0,20)});setTimeout(()=>setResultado(null),10000);return;}
+    if(found.preparado){setResultado({ok:"ya",envio:found,msg:"Ya estaba preparado"});setTimeout(()=>setResultado(null),10000);return;}
     setEnvios(pv=>pv.map(e=>e.id===found.id?{...e,preparado:true}:e));
     setResultado({ok:true,envio:found,msg:"✓ Preparado"});
     beepOK();
-    setTimeout(()=>setResultado(null),30000);
+    setTimeout(()=>setResultado(null),10000);
   },[envios,setEnvios]);
 
   const confirmarBultos=useCallback((envio)=>{
@@ -3080,7 +3083,10 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
             const barcodes=await detector.detect(videoRef.current);
             if(barcodes.length>0){
               const val=barcodes[0].rawValue;
-              // El QR de ML tiene datos extra — pasar el valor completo y dejar que procesarScan encuentre el match
+              // Delay de 1 seg para feedback visual antes de procesar
+              setResultado({ok:"scanning",msg:"Escaneando..."});
+              await new Promise(r=>setTimeout(r,1000));
+              if(!activo)return;
               procesarScan(val);
               setCamara(false);
               return;
@@ -3229,11 +3235,11 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
             <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"140px",height:"140px",border:"2px solid #84cc16",borderRadius:"8px",boxShadow:"0 0 0 9999px rgba(0,0,0,0.4)"}}/>
             <button onClick={()=>setCamara(false)} style={{position:"absolute",top:"8px",right:"8px",background:"rgba(0,0,0,0.7)",border:"1px solid #84cc16",color:"#84cc16",borderRadius:"6px",padding:"4px 10px",fontSize:"12px",cursor:"pointer"}}>Cerrar</button>
           </div>}
-          {resultado&&<div onClick={()=>setResultado(null)} style={{padding:"8px 12px",borderRadius:"8px",cursor:"pointer",
-            background:resultado.ok===true?"#041f14":resultado.ok==="ya"?"#12172a":"#1c0404",
-            border:"1px solid "+(resultado.ok===true?"#065f46":resultado.ok==="ya"?"#252d40":"#7f1d1d"),color:resultado.ok===true?"#34d399":resultado.ok==="ya"?"#6b7280":"#f87171",fontSize:"0.82rem",fontWeight:700,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"8px"}}>
-            <div>{resultado.msg}{resultado.envio&&<div style={{fontWeight:400,color:"#9ca3af",marginTop:"2px",fontSize:"0.75rem"}}>{resultado.envio.direccion} {resultado.envio.trans?<span style={{color:resultado.envio.trans&&lc[resultado.envio.trans]?.color||"#6b7280",fontWeight:700}}>· {resultado.envio.trans}</span>:""}</div>}</div>
-            <span style={{opacity:0.5,fontSize:"0.75rem",flexShrink:0}}>✕ cerrar</span>
+          {resultado&&<div onClick={()=>resultado.ok!=="scanning"&&setResultado(null)} style={{padding:"8px 12px",borderRadius:"8px",cursor:resultado.ok==="scanning"?"default":"pointer",
+            background:resultado.ok===true?"#041f14":resultado.ok==="ya"?"#12172a":resultado.ok==="scanning"?"#0d1c2e":"#1c0404",
+            border:"1px solid "+(resultado.ok===true?"#065f46":resultado.ok==="ya"?"#252d40":resultado.ok==="scanning"?"#38bdf8":"#7f1d1d"),color:resultado.ok===true?"#34d399":resultado.ok==="ya"?"#6b7280":resultado.ok==="scanning"?"#38bdf8":"#f87171",fontSize:"0.82rem",fontWeight:700,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"8px"}}>
+            <div>{resultado.ok==="scanning"?"⏳ "+resultado.msg:resultado.msg}{resultado.envio&&<div style={{fontWeight:400,color:"#9ca3af",marginTop:"2px",fontSize:"0.75rem"}}>{resultado.envio.direccion} {resultado.envio.trans?<span style={{color:resultado.envio.trans&&lc[resultado.envio.trans]?.color||"#6b7280",fontWeight:700}}>· {resultado.envio.trans}</span>:""}</div>}</div>
+            {resultado.ok!=="scanning"&&<span style={{opacity:0.5,fontSize:"0.75rem",flexShrink:0}}>✕ cerrar</span>}
           </div>}
         </div>
 
@@ -3498,7 +3504,7 @@ export default function App(){
     if(esChofer)return<VistaChofer envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>;
     return<VistaLogistica envios={envios} sesion={sesion} lc={lc}/>;
   }
-  if(sesion.rol==="expedicion")return<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>;
+  if(sesion.rol==="expedicion"||sesion.rol==="admin")return<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>;
 
   if(pantalla==="asignacion"){return<PantallaAsignacion borrador={borrador} fileName={fileName} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc}/>;}
   if(pantalla==="asignacion-tn"){return<PantallaAsignacionTN borrador={borrador} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc}/>;}
