@@ -1961,7 +1961,8 @@ function TabLiquidacion({ envios, setEnvios, lc }) {
                   <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginBottom: "3px", alignItems: "center" }}>
                     {e.trans && <Bdg label={e.trans} bg={lci?.bg || "#1a1f2e"} t={lci?.color || "#6b7280"} />}
                     {e.turno && <Bdg label={e.turno} bg={TURNO_C[e.turno]?.bg || "#130d2a"} t={TURNO_C[e.turno]?.c || "#a78bfa"} />}
-                    {e.fecha && <Bdg label={fmtCorta(e.fecha)} bg="#12172a" t="#6b7280" />}
+                    {e.fechaVenta && <Bdg label={"V:"+fmtCorta(e.fechaVenta)} bg="#0d1a12" t="#4ade80" />}
+                    {e.fecha && <Bdg label={"E:"+fmtCorta(e.fecha)} bg="#12172a" t="#6b7280" />}
                     {recibido && <Bdg label={"Recibido" + (fecha ? " " + fmtCorta(fecha) : "")} bg="#041f14" t="#34d399" />}
                   </div>
                   <div style={{ color: "#e5e7eb", fontSize: "0.82rem", lineHeight: 1.35 }}>{e.direccion}</div>
@@ -2182,7 +2183,7 @@ function TabCtasCtes({envios,lc}){
                 <div style={{flex:1,minWidth:"200px"}}>
                   <div style={{fontSize:"0.82rem",color:"#d1d5db",fontWeight:500}}>{e.direccion?.slice(0,60)}</div>
                   <div style={{fontSize:"0.68rem",color:"#4b5563",marginTop:"2px"}}>
-                    ID {e.id.slice(-8)} · {e.fecha?fmtCorta(e.fecha):"sin fecha"}
+                    ID {e.id.slice(-8)}{e.fechaVenta?<span> · Venta: {fmtCorta(e.fechaVenta)}</span>:null}{e.fecha?<span> · Envio: {fmtCorta(e.fecha)}</span>:null}
                     {e.trans&&<span style={{marginLeft:"6px",padding:"1px 6px",background:lc[e.trans]?.color+"22",color:lc[e.trans]?.color,borderRadius:"4px",fontSize:"0.65rem",fontWeight:700}}>{e.trans}</span>}
                   </div>
                 </div>
@@ -2217,6 +2218,7 @@ function TabCtasCtes({envios,lc}){
           </div>
         )}
       </div>
+      {modalPago&&<ModalRegistrarPago {...modalPago} onClose={()=>setModalPago(null)} envios={envios.filter(e=>{const deuda=getDeudaEnvio(e);return deuda&&getClienteKey(e)===modalPago.clienteKey;})} pagos={pagos.filter(p=>p.clienteKey===modalPago.clienteKey)} getDeudaEnvio={getDeudaEnvio}/>}
     );
   }
 
