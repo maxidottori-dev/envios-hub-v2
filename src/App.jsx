@@ -57,7 +57,7 @@ const cargarPDFLib=()=>new Promise(resolve=>{
 // ════════════════════════════════════════════════════════════════════
 const ML_ARMADO_URL = "https://ml-armado.onrender.com";
 
-async function procesarConMLArmado(file, envioType, onProgress) {
+async function procesarConMLArmado(file, envioType, onProgress, logisticaMap = {}) {
   // 1. Obtener estado actual (para continuar numeracion del dia)
   let startNumber = 1;
   try {
@@ -79,6 +79,7 @@ async function procesarConMLArmado(file, envioType, onProgress) {
   formData.append("header_offset", "20");
   formData.append("font_size_num", "30");
   formData.append("font_size_lbl", "25");
+  formData.append("logistica_map", JSON.stringify(logisticaMap));
   // Keywords se toman del estado guardado en Firebase, no hace falta enviarlas
 
   const res = await fetch(ML_ARMADO_URL + "/api/process", {
@@ -4035,7 +4036,11 @@ export default function App(){
                 // ML Armado — solo si el usuario lo eligió
                 if(procesarArmado){
                   try{
-                    await procesarConMLArmado(f,"Flex",null);
+                    const logMap = {};
+                    for(const e of envios){
+                      if(e.nroSeguimiento && e.trans) logMap[e.nroSeguimiento] = e.trans;
+                    }
+                    await procesarConMLArmado(f,"Flex",null,logMap);
                   }catch(mlErr){
                     mostrarToast("ML Armado no disponible — intentá de nuevo en unos segundos");
                   }
