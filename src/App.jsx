@@ -2217,8 +2217,8 @@ function TabCtasCtes({envios,lc}){
             ))}
           </div>
         )}
-      </div>
       {modalPago&&<ModalRegistrarPago {...modalPago} onClose={()=>setModalPago(null)} envios={envios.filter(e=>{const deuda=getDeudaEnvio(e);return deuda&&getClienteKey(e)===modalPago.clienteKey;})} pagos={pagos.filter(p=>p.clienteKey===modalPago.clienteKey)} getDeudaEnvio={getDeudaEnvio}/>}
+      </div>
     );
   }
 
