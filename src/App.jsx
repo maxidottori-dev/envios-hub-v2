@@ -1968,6 +1968,7 @@ function TabLiquidacion({ envios, setEnvios, lc }) {
                   <div style={{ color: "#e5e7eb", fontSize: "0.82rem", lineHeight: 1.35 }}>{e.direccion}</div>
                   <div style={{ color: "#374151", fontSize: "0.68rem", marginTop: "2px" }}>
                     <span style={{ fontFamily: "monospace" }}>...{e.id.slice(-10)}</span>
+                    {e.nroOrdenTN&&<><span style={{margin:"0 4px"}}>·</span><span style={{fontFamily:"monospace"}}>#{e.nroOrdenTN}</span></>}
                     <span style={{ margin: "0 4px" }}>·</span>
                     <span>{e.partido}</span>
                   </div>
@@ -2313,19 +2314,44 @@ function TabCtasCtes({envios,lc}){
 }
 
 function ModalRegistrarPago({clienteKey,clienteNombre,saldoPendiente,onClose,envios,pagos,getDeudaEnvio}){
+  const hoy=new Date().toISOString().slice(0,10);
+  const [seleccion,setSeleccion]=useState({});
   const [monto,setMonto]=useState("");
+  const [montoManual,setMontoManual]=useState(false);
   const [nota,setNota]=useState("");
+  const [fechaCobro,setFechaCobro]=useState(hoy);
   const [guardando,setGuardando]=useState(false);
   const fmt=(n)=>"$"+Math.round(n).toLocaleString("es-AR");
 
+  // Calcular saldo pendiente por envio (descontando pagos ya registrados)
+  const saldoEnvio=(e)=>{
+    const pagEnvio=pagos.filter(p=>p.envioIds?.includes(e.id)).reduce((s,p)=>s+(p.monto||0),0);
+    return Math.max(0,(getDeudaEnvio(e)?.monto||0)-pagEnvio);
+  };
+
+  const toggleEnvio=(id,importe)=>{
+    const next={...seleccion};
+    if(next[id])delete next[id];
+    else next[id]=importe;
+    setSeleccion(next);
+    if(!montoManual){
+      const total=Object.values(next).reduce((s,v)=>s+v,0);
+      setMonto(total>0?String(total):"");
+    }
+  };
+
+  const montoSeleccionado=Object.values(seleccion).reduce((s,v)=>s+v,0);
+  const enviosIds=Object.keys(seleccion).length>0?Object.keys(seleccion):envios.map(e=>e.id);
+
   const guardar=async()=>{
     const m=parseFloat(monto);
-    if(!m||m<=0){alert("Ingresa un monto válido.");return;}
+    if(!m||m<=0){alert("Ingresa un monto valido.");return;}
     setGuardando(true);
     try{
       await addDoc(collection(db,"pagosCC"),{
         clienteKey,clienteNombre,monto:m,nota:nota.trim(),
-        envioIds:envios.map(e=>e.id),
+        envioIds,
+        fechaCobro,
         creadoEn:serverTimestamp(),
       });
       onClose();
@@ -2335,18 +2361,55 @@ function ModalRegistrarPago({clienteKey,clienteNombre,saldoPendiente,onClose,env
 
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
-      <div style={{background:"#12172a",border:"1px solid #10b981",borderRadius:"16px",padding:"1.5rem",minWidth:"360px",maxWidth:"480px",width:"100%"}}>
+      <div style={{background:"#12172a",border:"1px solid #10b981",borderRadius:"16px",padding:"1.5rem",minWidth:"380px",maxWidth:"520px",width:"100%",maxHeight:"90vh",overflowY:"auto"}}>
         <div style={{fontWeight:800,fontSize:"0.95rem",color:"#e5e7eb",marginBottom:"4px"}}>Registrar pago</div>
-        <div style={{fontSize:"0.75rem",color:"#6b7280",marginBottom:"1.25rem"}}>{clienteNombre} · Saldo pendiente: <strong style={{color:"#f59e0b"}}>{fmt(saldoPendiente)}</strong></div>
+        <div style={{fontSize:"0.75rem",color:"#6b7280",marginBottom:"1rem"}}>{clienteNombre} · Saldo pendiente: <strong style={{color:"#f59e0b"}}>{fmt(saldoPendiente)}</strong></div>
 
+        {/* Seleccion de pedidos */}
+        <div style={{marginBottom:"1rem"}}>
+          <label style={{display:"block",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",color:"#6b7280",marginBottom:"6px"}}>Pedidos a cancelar</label>
+          <div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
+            {envios.map(e=>{
+              const sl=saldoEnvio(e);
+              if(sl<=0)return null;
+              const sel=!!seleccion[e.id];
+              return(
+                <div key={e.id} onClick={()=>toggleEnvio(e.id,sl)} style={{display:"flex",alignItems:"center",gap:"8px",padding:"7px 10px",borderRadius:"8px",border:"1px solid "+(sel?"#10b981":"#1e2535"),background:sel?"#041f14":"#0d1119",cursor:"pointer"}}>
+                  <div style={{width:"14px",height:"14px",borderRadius:"3px",border:"2px solid "+(sel?"#10b981":"#4b5563"),background:sel?"#10b981":"transparent",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    {sel&&<span style={{color:"#fff",fontSize:"9px",fontWeight:900}}>✓</span>}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:"0.78rem",color:"#d1d5db",fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion?.slice(0,45)}</div>
+                    <div style={{fontSize:"0.65rem",color:"#4b5563",marginTop:"1px"}}>
+                      {e.nroOrdenTN?"#"+e.nroOrdenTN:e.id.slice(-8)}
+                      {e.fechaVenta&&" · "+fmtCorta(e.fechaVenta)}
+                    </div>
+                  </div>
+                  <div style={{fontWeight:700,color:sel?"#10b981":"#f59e0b",fontSize:"0.82rem",flexShrink:0}}>{fmt(sl)}</div>
+                </div>
+              );
+            })}
+          </div>
+          {Object.keys(seleccion).length>0&&<div style={{fontSize:"0.7rem",color:"#10b981",marginTop:"5px",textAlign:"right"}}>Seleccionado: {fmt(montoSeleccionado)}</div>}
+          {Object.keys(seleccion).length===0&&<div style={{fontSize:"0.68rem",color:"#4b5563",marginTop:"4px"}}>Sin seleccion — el pago se aplica al cliente en general</div>}
+        </div>
+
+        {/* Monto */}
         <div style={{marginBottom:"0.75rem"}}>
           <label style={{display:"block",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",color:"#6b7280",marginBottom:"4px"}}>Monto cobrado</label>
           <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
-            <input type="number" value={monto} onChange={e=>setMonto(e.target.value)} placeholder="0" style={{...S.input,flex:1}}/>
-            <button onClick={()=>setMonto(String(saldoPendiente))} style={{...S.btnSm(false,"#10b981"),whiteSpace:"nowrap",fontSize:"0.7rem"}}>Total ({fmt(saldoPendiente)})</button>
+            <input type="number" value={monto} onChange={e=>{setMonto(e.target.value);setMontoManual(true);}} placeholder="0" style={{...S.input,flex:1}}/>
+            <button onClick={()=>{setMonto(String(saldoPendiente));setMontoManual(false);}} style={{...S.btnSm(false,"#10b981"),whiteSpace:"nowrap",fontSize:"0.7rem"}}>Total</button>
           </div>
         </div>
 
+        {/* Fecha cobro */}
+        <div style={{marginBottom:"0.75rem"}}>
+          <label style={{display:"block",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",color:"#6b7280",marginBottom:"4px"}}>Fecha del cobro</label>
+          <input type="date" value={fechaCobro} onChange={e=>setFechaCobro(e.target.value)} style={{...S.input,width:"100%"}}/>
+        </div>
+
+        {/* Nota */}
         <div style={{marginBottom:"1rem"}}>
           <label style={{display:"block",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",color:"#6b7280",marginBottom:"4px"}}>Nota (opcional)</label>
           <input value={nota} onChange={e=>setNota(e.target.value)} placeholder="ej. Transferencia, efectivo..." style={{...S.input,width:"100%"}}/>
