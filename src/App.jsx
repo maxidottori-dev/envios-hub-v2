@@ -1449,13 +1449,17 @@ function TabInforme({envios,zc,lc}){
   const [desde,setDesde]=useState(sem.d);
   const [hasta,setHasta]=useState(sem.h);
   const [logSel,setLogSel]=useState("TODAS");
+  const [filTipos,setFilTipos]=useState(new Set());
+  const toggleTipo=t=>setFilTipos(prev=>{const n=new Set(prev);n.has(t)?n.delete(t):n.add(t);return n;});
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const tmap=buildTarifaMap(zc);
   const getImp=e=>calcImp(e,tmap,lc,zc);
+  const getTipo=e=>e.origen==="ML"?"FLEX":e.origen==="Tienda Nube"?"TN":"Manual";
   const envSem=envios.filter(e=>{
     const ds=e.fecha||e.fechaVenta||"";
     if(e.estado==="cancelado")return false;
     if(logSel!=="TODAS"&&e.trans!==logSel)return false;
+    if(filTipos.size>0&&!filTipos.has(getTipo(e)))return false;
     return ds>=desde&&ds<=hasta;
   });
   const logsMost=logSel==="TODAS"?logActivas:[logSel];
@@ -1470,11 +1474,18 @@ function TabInforme({envios,zc,lc}){
         <button onClick={()=>{const s=initSem();setDesde(s.d);setHasta(s.h);}} style={S.btnSm(false)}>Esta semana</button>
       </div>
       <div style={{...S.card,padding:"0.55rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"0.35rem",flexWrap:"wrap",alignItems:"center"}}>
+        <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",marginRight:"4px"}}>Tipo</span>
+        {[{k:"FLEX",c:"#84cc16"},{k:"TN",c:"#38bdf8"},{k:"Manual",c:"#a78bfa"}].map(({k,c})=>(
+          <button key={k} onClick={()=>toggleTipo(k)} style={{...S.btnSm(filTipos.has(k),c),opacity:filTipos.size>0&&!filTipos.has(k)?0.45:1}}>{k}</button>
+        ))}
+        {filTipos.size>0&&<button onClick={()=>setFilTipos(new Set())} style={{...S.btnSm(false),fontSize:"0.65rem",padding:"2px 8px",color:"#6b7280"}}>✕ Limpiar</button>}
+      </div>
+      <div style={{...S.card,padding:"0.55rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"0.35rem",flexWrap:"wrap",alignItems:"center"}}>
         <button onClick={()=>setLogSel("TODAS")} style={S.btn(logSel==="TODAS")}>TODAS</button>
         {logActivas.map(l =><button key={l} onClick={()=>setLogSel(l)} style={S.btn(logSel===l,lc[l]?.color||"#6366f1")}>{l}</button>)}
         <button onClick={()=>{
           const filas=envSem.map((e,i)=>({
-            "#":i+1,Logistica:e.trans||"",Partido:e.partido,Direccion:e.direccion,
+            "#":i+1,Tipo:getTipo(e),Logistica:e.trans||"",Partido:e.partido,Direccion:e.direccion,
             Fecha:e.fecha||"",Turno:e.turno||"",Bultos:e.bultos||1,
             Zona:(()=>{const zi=getZonaLogistica(zc,e.trans,e.partido);return zi?zi.nombre:"";})(),
             Importe:getImp(e),EstadoLiq:e.estadoLiq||"normal",NotaLiq:e.notaLiq||"",
