@@ -18,6 +18,7 @@ export default async function handler(req, res) {
     || "";
 
   const topicFinal = topic.startsWith("order/") ? topic : "order/created";
+  if (!topic) console.log("WEBHOOK_NO_TOPIC - defaulting to order/created", order.id);
 
   console.log("WEBHOOK_IN", JSON.stringify({ topic: topicFinal, orderId: order.id, shipping: order.shipping_option || "" }));
 
@@ -71,7 +72,20 @@ export default async function handler(req, res) {
     }
 
     const data = existing.data();
+
+    // PROTECCION: si ya tiene trans asignado, nunca sobreescribir con set()
+    // Esto evita que un webhook mal clasificado borre la asignacion
+    if (data.trans) {
+      console.log("WEBHOOK SKIP_SET - already assigned", order.id, "trans:", data.trans);
+    }
     if (data.estado === "cancelado") return res.status(200).json({ ok: true, skipped: "cancelled" });
+
+    // Si TN cancela la orden → marcar como cancelado en Firestore
+    if (order.status === "cancelled") {
+      await docRef.update({ estado: "cancelado" });
+      console.log("WEBHOOK CANCELLED", order.id);
+      return res.status(200).json({ ok: true, action: "cancelled", id: String(order.id) });
+    }
 
     const update = { notasOrden, notasCliente };
 
