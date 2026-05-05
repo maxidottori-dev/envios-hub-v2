@@ -3888,11 +3888,39 @@ export default function App(){
   const [fileName,setFileName]=useState("");
   const [toast,setToast]=useState("");
   const mostrarToast=msg=>{setToast(msg);setTimeout(()=>setToast(""),2500);};
+  const [alertas,setAlertas]=useState([]);
+  const prevEnviosRef=useRef(null); // para detectar cambios en onSnapshot
+  const agregarAlerta=(tipo,msg,persistente=false)=>{
+    const id=Date.now()+Math.random();
+    setAlertas(prev=>[...prev,{id,tipo,msg,persistente}]);
+    if(!persistente)setTimeout(()=>setAlertas(prev=>prev.filter(a=>a.id!==id)),5000);
+  };
 
   useEffect(()=>{
     const unsub=onSnapshot(collection(db,"envios"),(snap)=>{
       const docs=snap.docs.map(d=>({...d.data(),id:d.id}));
       docs.sort((a,b)=>(b.fechaVenta||b.fecha||"").localeCompare(a.fechaVenta||a.fecha||""));
+
+      // Detectar cambios relevantes (saltar carga inicial)
+      if(prevEnviosRef.current!==null){
+        const prev=prevEnviosRef.current;
+        docs.forEach(nuevo=>{
+          const viejo=prev.find(e=>e.id===nuevo.id);
+          // Orden cancelada que tenia logistica asignada → alerta roja persistente
+          if(viejo&&viejo.estado!=="cancelado"&&nuevo.estado==="cancelado"&&viejo.trans){
+            agregarAlerta("error",`❌ Orden TN #${nuevo.nroOrdenTN||nuevo.id} cancelada — estaba asignada a ${viejo.trans}`,true);
+          }
+          // Orden cancelada sin asignar → alerta azul que se cierra sola
+          if(viejo&&viejo.estado!=="cancelado"&&nuevo.estado==="cancelado"&&!viejo.trans){
+            agregarAlerta("info",`🔔 Orden TN #${nuevo.nroOrdenTN||nuevo.id} cancelada`,false);
+          }
+          // Orden nueva de TN → alerta azul
+          if(!viejo&&nuevo.origen==="Tienda Nube"){
+            agregarAlerta("info",`🛍 Nuevo pedido TN #${nuevo.nroOrdenTN||nuevo.id} — ${nuevo.clienteNombre||""}`,false);
+          }
+        });
+      }
+      prevEnviosRef.current=docs;
       setEnviosLocal(docs);setSyncLoading(false);
     },(err)=>{console.error(err);setSyncLoading(false);});
     return()=>unsub();
@@ -3964,6 +3992,25 @@ export default function App(){
     <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif"}}>
       <style>{`*{box-sizing:border-box;}::-webkit-scrollbar{width:6px;height:10px;}::-webkit-scrollbar-track{background:#0f1420;border-radius:4px;}::-webkit-scrollbar-thumb{background:#4b5563;border-radius:4px;border:1px solid #0f1420;}::-webkit-scrollbar-thumb:hover{background:#9ca3af;}::-webkit-scrollbar-corner{background:#0f1420;}html{scrollbar-width:thin;scrollbar-color:#4b5563 #0f1420;}select option{background:#1a1f2e;color:#e5e7eb;}button:hover{opacity:0.85;}`}</style>
       {toast&&<div style={{position:"fixed",top:"16px",right:"16px",zIndex:999,background:"#041f14",border:"1px solid #10b981",borderRadius:"10px",padding:"0.6rem 1.1rem",color:"#34d399",fontWeight:700,fontSize:"0.82rem"}}>{toast}</div>}
+      {/* Alertas flotantes TN — abajo a la derecha */}
+      {alertas.length>0&&(
+        <div style={{position:"fixed",bottom:"20px",right:"16px",zIndex:1000,display:"flex",flexDirection:"column",gap:"8px",maxWidth:"320px"}}>
+          {alertas.map(a=>(
+            <div key={a.id} style={{
+              background:a.tipo==="error"?"#1c0505":"#0d1c2e",
+              border:`1px solid ${a.tipo==="error"?"#f87171":"#38bdf8"}`,
+              borderRadius:"10px",padding:"0.65rem 1rem",
+              color:a.tipo==="error"?"#fca5a5":"#7dd3fc",
+              fontSize:"0.82rem",fontWeight:600,
+              display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:"10px",
+              boxShadow:"0 4px 16px rgba(0,0,0,0.5)",
+            }}>
+              <span>{a.msg}</span>
+              <button onClick={()=>setAlertas(prev=>prev.filter(x=>x.id!==a.id))} style={{background:"none",border:"none",color:"inherit",cursor:"pointer",fontSize:"1rem",padding:0,flexShrink:0,opacity:0.7}}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
       <div style={{position:"sticky",top:0,zIndex:100,background:"#0f1420",borderBottom:"1px solid #1a1f2e",padding:"0.7rem 1rem",display:"flex",alignItems:"center",gap:"0.55rem",flexWrap:"wrap"}}>
         <div style={{width:"26px",height:"26px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:"7px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>🛵</div>
         <div style={{marginRight:"0.2rem"}}>
