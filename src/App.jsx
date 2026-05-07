@@ -1818,10 +1818,13 @@ function TabLiquidacion({ envios, setEnvios, lc }) {
   // Por logistica - cobranzas
   const porLogCob = logActivas.map(l => {
     const envL = conCobranza.filter(e => e.trans === l);
+    const total = envL.reduce((s,e) => s + (e.cobranza||0), 0);
+    const recibido = envL.filter(e => e.cobranzaRecibida).reduce((s,e) => s + (e.cobranza||0), 0);
     return {
       l,
-      total: envL.reduce((s,e) => s + (e.cobranza||0), 0),
-      recibido: envL.filter(e => e.cobranzaRecibida).reduce((s,e) => s + (e.cobranza||0), 0),
+      total,
+      recibido,
+      pendienteImporte: total - recibido,
       pendienteN: envL.filter(e => !e.cobranzaRecibida).length,
     };
   }).filter(x => x.total > 0);
@@ -1916,11 +1919,11 @@ function TabLiquidacion({ envios, setEnvios, lc }) {
             <div style={{ color: "#f59e0b", fontWeight: 800, fontSize: "1.1rem" }}>{fmt(totalPendiente)}</div>
             <div style={{ color: "#6b7280", fontSize: "0.62rem", marginTop: "2px" }}>Pendiente</div>
           </div>
-          {porLogCob.map(({ l, total, recibido, pendienteN }) => (
+          {porLogCob.map(({ l, pendienteImporte, pendienteN }) => (
             <div key={l} style={{ ...S.card, padding: "0.75rem 1rem", borderLeft: "3px solid " + lc[l].color }}>
               <div style={{ color: lc[l].color, fontWeight: 800, fontSize: "0.9rem" }}>{l}</div>
-              <div style={{ color: "#10b981", fontWeight: 700, fontSize: "0.85rem" }}>{fmt(total)}</div>
-              {pendienteN > 0 && <div style={{ color: "#f59e0b", fontSize: "0.68rem", marginTop: "2px" }}>{pendienteN} pendiente{pendienteN !== 1 ? "s" : ""}</div>}
+              <div style={{ color: "#f59e0b", fontWeight: 700, fontSize: "0.85rem" }}>{fmt(pendienteImporte)}</div>
+              {pendienteN > 0 && <div style={{ color: "#6b7280", fontSize: "0.68rem", marginTop: "2px" }}>{pendienteN} pendiente{pendienteN !== 1 ? "s" : ""}</div>}
             </div>
           ))}
         </div>
