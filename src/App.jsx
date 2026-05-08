@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import * as XLSXLib from "xlsx";
 import { db } from "./firebase.js";
-import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where, getDocs, addDoc, serverTimestamp, limit } from "firebase/firestore";
+import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, query, where, getDocs, addDoc, serverTimestamp, limit } from "firebase/firestore";
 
 const VERSION = "2.1";
 
@@ -3833,6 +3833,18 @@ function ScrollTop(){
 export default function App(){
   const [sesion,setSesion]=useState(()=>getSession());
   const [pantalla,setPantalla]=useState("dashboard");
+
+  // Validar sesión contra Firebase al arrancar — si el usuario fue desactivado, forzar logout
+  useEffect(()=>{
+    if(!sesion?.id) return;
+    getDoc(doc(db,"usuarios",sesion.id)).then(snap=>{
+      if(!snap.exists()||snap.data().activo===false){
+        clearSession();
+        setSesion(null);
+      }
+    }).catch(()=>{}); // si no hay internet, dejar pasar (no bloquear)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
   const [borrador,setBorrador]=useState([]);
   const [modalPDF,setModalPDF]=useState(null); // archivo pendiente mientras modal abierto
   const [envios,setEnviosLocal]=useState([]);
