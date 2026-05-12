@@ -2606,6 +2606,7 @@ function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc}){
         {grupoKeys.map(key=>{
           const grupo=grupos[key];
           const ids=grupo.envios.map(e=>e.id);
+          const idsPagados=grupo.envios.filter(e=>puedeAsignar(e)).map(e=>e.id);
           const gT=getGrupo(ids,"trans");
           const turnoC=TURNO_C[grupo.turno]||{c:"#6b7280",bg:"#1a1f2e"};
           const asigCount=ids.filter(id=>getA(id).trans).length;
@@ -2620,8 +2621,8 @@ function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc}){
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:"0.5rem",flexWrap:"wrap"}}>
                   <span style={{color:"#6b7280",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Logistica:</span>
-                  {logActivas.map(l =><button key={l} onClick={()=>setGrupo(ids,"trans",gT===l?"":l)} style={S.btnSm(gT===l,lc[l]?.color||"#6366f1")}>{l}</button>)}
-                  {gT&&<button onClick={()=>setGrupo(ids,"trans","")} style={{...S.btnSm(false),color:"#6b7280"}}>x</button>}
+                  {logActivas.map(l =><button key={l} onClick={()=>setGrupo(idsPagados,"trans",gT===l?"":l)} style={S.btnSm(gT===l,lc[l]?.color||"#6366f1")} disabled={idsPagados.length===0}>{l}</button>)}
+                  {gT&&<button onClick={()=>setGrupo(idsPagados,"trans","")} style={{...S.btnSm(false),color:"#6b7280"}}>x</button>}
                 </div>
               </div>
               {grupo.envios.map((e,i)=>{
