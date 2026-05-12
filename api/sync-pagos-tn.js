@@ -14,19 +14,21 @@ export default async function handler(req, res) {
   let db;
   try { db = initDb(); } catch(e) { return res.status(500).json({ error: "Firebase init failed", detail: e.message }); }
 
-  // Buscar todos los pedidos TN con pagoEstado = "cuenta_corriente"
+  // Buscar pedidos con pagoEstado = "cuenta_corriente" (query simple, sin índice compuesto)
+  // El filtro de origen="Tienda Nube" se aplica en memoria
   const snap = await db.collection("envios")
-    .where("origen", "==", "Tienda Nube")
     .where("pagoEstado", "==", "cuenta_corriente")
     .get();
 
-  const total = snap.docs.length;
+  // Filtrar solo los de origen Tienda Nube en memoria
+  const docsCC = snap.docs.filter(d => d.data().origen === "Tienda Nube");
+  const total = docsCC.length;
   let actualizados = 0;
   let pendientes = 0;
   let errores = 0;
   const detalle = [];
 
-  for (const docSnap of snap.docs) {
+  for (const docSnap of docsCC) {
     const data = docSnap.data();
     const idTN = data.idTN || data.id;
     if (!idTN) { errores++; continue; }

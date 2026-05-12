@@ -776,6 +776,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
   const totalImp=activos.reduce((s,e)=>s+getImp(e),0);
   const sinAsig=filtrados.filter(e=>getEstado(e)==="sin_asignar").length;
   const porTrans=logActivas.map(l =>({l,n:activos.filter(e=>e.trans===l).length,v:activos.filter(e=>e.trans===l).reduce((s,e)=>s+getImp(e),0)})).filter(x =>x.n>0);
+  const filtrarPorLogistica=(l)=>setFilTrans(filTrans===l?"TODOS":l);
   const toggleSel=id=>setSeleccionados(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
   const saveEnvio=updated=>{setEnvios(p=>p.map(e=>e.id===updated.id?{...updated,estado:getEstado(updated)}:e));setEditId(null);};
   const eliminar=async id=>{if(window.confirm("Eliminar este envio?")){await deleteDoc(doc(db,"envios",id));setEnvios(p=>p.filter(e=>e.id!==id));}};
