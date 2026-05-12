@@ -2079,7 +2079,7 @@ function TabCtasCtes({envios,lc}){
   const [pagos,setPagos]=useState([]);
   const [loadingPagos,setLoadingPagos]=useState(true);
   const [vistaCliente,setVistaCliente]=useState(null);
-  const [filtro,setFiltro]=useState("todos");
+  const [filtro,setFiltro]=useState("deuda");
   const [busqueda,setBusqueda]=useState("");
   const [sortCC,setSortCC]=useState({col:"saldo",dir:"desc"});
   const [modalPago,setModalPago]=useState(null);
@@ -2132,6 +2132,7 @@ function TabCtasCtes({envios,lc}){
 
   // Calcular deuda de cada envio
   const getDeudaEnvio=(e)=>{
+    if(e.estado==="cancelado")return null;
     if(e.pagoEstado==="cuenta_corriente"&&e.importeOrden>0)return{monto:e.importeOrden,tipo:"TN CC",logistica:e.trans||""};
     if(e.cobranza>0&&e.pagoEstado!=="pagado")return{monto:e.cobranza,tipo:"Efectivo",logistica:e.trans||""};
     if(e.esCC&&e.importeCC>0)return{monto:e.importeCC,tipo:"Manual CC",logistica:e.trans||""};
@@ -4269,7 +4270,7 @@ export default function App(){
         {tab==="envios"  &&<TabEnvios   envios={envios.filter(e=>e.origen!=="ML")} setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin}/>}
         {tab==="flex"    &&<TabEnvios   envios={envios.filter(e=>e.origen==="ML")}  setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin}/>}
         {tab==="imprimir"&&<TabImprimir envios={envios} zc={zc} lc={lc}/>}
-        {tab==="manual"  &&<TabManual   setEnvios={setEnvios} onSuccess={()=>{setTab("envios");mostrarToast("Envio agregado");}} lc={lc} enviosExistentes={envios}/>}
+        {tab==="manual"  &&<TabManual   setEnvios={setEnvios} onSuccess={()=>{mostrarToast("Envio agregado");}} lc={lc} enviosExistentes={envios}/>}
         {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZcPersist} lc={lc} setLc={setLcPersist}/>}
         {tab==="informe"     &&<TabInforme     envios={envios} zc={zc} lc={lc}/>}
         {tab==="liquidacion" &&<TabLiquidacion envios={envios} setEnvios={setEnvios} lc={lc}/>}
