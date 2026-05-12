@@ -2083,6 +2083,19 @@ function TabCtasCtes({envios,lc}){
   const [modalPago,setModalPago]=useState(null);
   const [limites,setLimites]=useState({});
   const [loadingLim,setLoadingLim]=useState(true);
+  const [syncPagos,setSyncPagos]=useState(null); // null | "cargando" | {actualizados, pendientes, errores}
+
+  const sincronizarPagosTN=async()=>{
+    if(!window.confirm("Esto va a consultar Tienda Nube por cada pedido CC y actualizar los que ya están pagados. ¿Continuar?"))return;
+    setSyncPagos("cargando");
+    try{
+      const resp=await fetch("/api/sync-pagos-tn",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})});
+      const d=await resp.json();
+      setSyncPagos(d);
+    }catch(e){
+      setSyncPagos({error:e.message});
+    }
+  };
 
   useEffect(()=>{
     const unsub=onSnapshot(collection(db,"pagosCC"),snap=>{
@@ -2267,6 +2280,21 @@ function TabCtasCtes({envios,lc}){
 
   return(
     <div>
+      {/* Botón sync TN + resultado */}
+      <div style={{display:"flex",alignItems:"center",gap:"0.75rem",marginBottom:"0.8rem",flexWrap:"wrap"}}>
+        <button onClick={sincronizarPagosTN} disabled={syncPagos==="cargando"}
+          style={{...S.btnSm(false,"#38bdf8"),padding:"0.4rem 0.9rem",fontSize:"0.78rem",opacity:syncPagos==="cargando"?0.6:1}}>
+          {syncPagos==="cargando"?"⏳ Sincronizando...":"🔄 Sincronizar pagos TN"}
+        </button>
+        {syncPagos&&syncPagos!=="cargando"&&(
+          <span style={{fontSize:"0.75rem",color:syncPagos.error?"#fca5a5":"#6b7280"}}>
+            {syncPagos.error
+              ? "Error: "+syncPagos.error
+              : `✅ ${syncPagos.actualizados} actualizados · ${syncPagos.pendientes} pendientes · ${syncPagos.errores} errores (de ${syncPagos.total} CC)`}
+          </span>
+        )}
+      </div>
+
       {/* Alerta vencidos */}
       {clientes.filter(c=>c.dias>=c.limite&&c.saldo>0).length>0&&(
         <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"1rem",background:"#1c0a0a",border:"1px solid #7f1d1d",color:"#fca5a5",display:"flex",alignItems:"center",gap:"0.75rem"}}>
