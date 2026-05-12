@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import * as XLSXLib from "xlsx";
 import { db } from "./firebase.js";
 import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, query, where, getDocs, addDoc, serverTimestamp, limit } from "firebase/firestore";
@@ -1189,7 +1189,18 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes}){
   const [f,setF]=useState(vacio);
   const [err,setErr]=useState("");
   const [dupWarn,setDupWarn]=useState("");
+  const [sugsVisible,setSugsVisible]=useState(false);
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
+
+  // Lista de clientes únicos ya registrados (para autocomplete)
+  const clientesExistentes=useMemo(()=>{
+    const nombres=new Set();
+    (enviosExistentes||[]).forEach(e=>{if(e.clienteNombre?.trim())nombres.add(e.clienteNombre.trim());});
+    return[...nombres].sort((a,b)=>a.localeCompare(b));
+  },[enviosExistentes]);
+  const sugerencias=sugsVisible&&f.clienteNombre.length>=2
+    ?clientesExistentes.filter(n=>n.toLowerCase().includes(f.clienteNombre.toLowerCase())&&n.toLowerCase()!==f.clienteNombre.toLowerCase()).slice(0,8)
+    :[];
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   useEffect(()=>{const p=cpAPartido(f.cp);if(p)set("partido",p);},[f.cp]);
   useEffect(()=>{if(f.nroSeguimiento&&(enviosExistentes||[]).some(e=>e.nroSeguimiento===f.nroSeguimiento)){setDupWarn("Ya existe un envio con este numero de seguimiento.");}else{setDupWarn("");};},[f.nroSeguimiento]);
@@ -1211,7 +1222,7 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes}){
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.7rem",marginBottom:"0.7rem"}}>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. venta / referencia</label><input value={f.id} onChange={e=>set("id",e.target.value)} style={{...S.input,width:"100%"}} placeholder="ej. 2000012345"/></div>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. seguimiento</label><input value={f.nroSeguimiento} onChange={e=>set("nroSeguimiento",e.target.value)} style={{...S.input,width:"100%",borderColor:dupWarn?"#f59e0b":"#252d40"}} placeholder="ej. 46669555629"/></div>
-          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nombre cliente</label><input value={f.clienteNombre} onChange={e=>set("clienteNombre",e.target.value)} style={{...S.input,width:"100%"}} placeholder="Nombre completo"/></div>
+          <div style={{position:"relative"}}><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nombre cliente</label><input value={f.clienteNombre} onChange={e=>{set("clienteNombre",e.target.value);setSugsVisible(true);}} onFocus={()=>setSugsVisible(true)} onBlur={()=>setTimeout(()=>setSugsVisible(false),150)} style={{...S.input,width:"100%"}} placeholder="Nombre completo o buscar existente"/>{sugerencias.length>0&&(<div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:200,background:"#1a1f2e",border:"1px solid #6366f1",borderRadius:"6px",marginTop:"2px",boxShadow:"0 6px 16px rgba(0,0,0,0.5)",overflow:"hidden"}}>{sugerencias.map(n=>(<div key={n} onMouseDown={()=>{set("clienteNombre",n);setSugsVisible(false);}} style={{padding:"0.5rem 0.75rem",cursor:"pointer",color:"#e5e7eb",fontSize:"0.85rem",borderBottom:"1px solid #252d40",transition:"background 0.1s"}} onMouseEnter={e=>e.currentTarget.style.background="#252d40"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>{n}</div>))}</div>)}</div>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Teléfono</label><input value={f.telefono} onChange={e=>set("telefono",e.target.value)} style={{...S.input,width:"100%"}} placeholder="ej. 1165432100"/></div>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Origen</label><div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["ML","Tienda Nube","Particular","Otro"].map(o =><button key={o} onClick={()=>set("origen",o)} style={S.btnSm(f.origen===o,"#6366f1")}>{o}</button>)}</div></div>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Bultos</label><input type="number" min="1" value={f.bultos||""} onChange={ev=>{const v=parseInt(ev.target.value);set("bultos",v>0?v:"");}} placeholder="1" style={{...S.input,width:"120px",padding:"4px 10px"}}/></div>
