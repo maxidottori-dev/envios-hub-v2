@@ -2132,7 +2132,7 @@ function TabCtasCtes({envios,lc}){
   // Calcular deuda de cada envio
   const getDeudaEnvio=(e)=>{
     if(e.pagoEstado==="cuenta_corriente"&&e.importeOrden>0)return{monto:e.importeOrden,tipo:"TN CC",logistica:e.trans||""};
-    if(e.cobranza>0)return{monto:e.cobranza,tipo:"Efectivo",logistica:e.trans||""};
+    if(e.cobranza>0&&e.pagoEstado!=="pagado")return{monto:e.cobranza,tipo:"Efectivo",logistica:e.trans||""};
     if(e.esCC&&e.importeCC>0)return{monto:e.importeCC,tipo:"Manual CC",logistica:e.trans||""};
     return null;
   };
@@ -2301,7 +2301,7 @@ function TabCtasCtes({envios,lc}){
           <span style={{fontSize:"0.75rem",color:syncPagos.error?"#fca5a5":"#6b7280"}}>
             {syncPagos.error
               ? "Error: "+syncPagos.error
-              : `✅ ${syncPagos.actualizados} actualizados · ${syncPagos.pendientes} pendientes · ${syncPagos.errores} errores (de ${syncPagos.total} CC)`}
+              : `✅ ${syncPagos.actualizados} actualizados · ${syncPagos.pendientes} pendientes · ${syncPagos.errores} errores (${syncPagos.totalCC??""} CC + ${syncPagos.totalEfectivo??""} efectivo)`}
           </span>
         )}
       </div>

@@ -10,19 +10,30 @@ export default async function handler(req, res) {
     // 1. Inicializar Firebase
     const db = initDb();
 
-    // 2. Buscar pedidos con pagoEstado="cuenta_corriente" (query simple)
+    // 2. Traer todos los envios de Tienda Nube (una sola query, filtrado en memoria)
     const snap = await db.collection("envios")
-      .where("pagoEstado", "==", "cuenta_corriente")
+      .where("origen", "==", "Tienda Nube")
       .get();
 
-    // 3. Filtrar solo Tienda Nube en memoria
-    const docsCC = snap.docs.filter(d => d.data().origen === "Tienda Nube");
+    // 3a. CC: pagoEstado === "cuenta_corriente"
+    const docsCC = snap.docs.filter(d => d.data().pagoEstado === "cuenta_corriente");
+
+    // 3b. Efectivo: cobranza > 0 y aun no marcado como pagado
+    const docsEfectivo = snap.docs.filter(d => {
+      const data = d.data();
+      return data.cobranza > 0 && data.pagoEstado !== "pagado";
+    });
+
+    // Unificar (un pedido puede caer en ambos grupos — dedup por id)
+    const mapaUniq = new Map();
+    [...docsCC, ...docsEfectivo].forEach(d => mapaUniq.set(d.id, d));
+    const todos = [...mapaUniq.values()];
 
     let actualizados = 0, pendientes = 0, errores = 0;
     const detalle = [];
 
-    // 4. Consultar TN por cada uno (sin delay — TN tolera ~2 req/s)
-    for (const docSnap of docsCC) {
+    // 4. Consultar TN por cada uno y actualizar si está pagado
+    for (const docSnap of todos) {
       const data = docSnap.data();
       const idTN  = data.idTN || data.id;
       if (!idTN) { errores++; continue; }
@@ -50,10 +61,18 @@ export default async function handler(req, res) {
       }
     }
 
-    return res.status(200).json({ ok: true, total: docsCC.length, actualizados, pendientes, errores, detalle });
+    return res.status(200).json({
+      ok: true,
+      totalCC: docsCC.length,
+      totalEfectivo: docsEfectivo.length,
+      total: todos.length,
+      actualizados,
+      pendientes,
+      errores,
+      detalle
+    });
 
   } catch(e) {
-    // Devolver el error real como JSON para poder diagnosticarlo
     return res.status(500).json({ ok: false, error: e.message, stack: e.stack?.slice(0, 300) });
   }
 }
