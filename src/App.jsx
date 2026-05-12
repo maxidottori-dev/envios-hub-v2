@@ -832,6 +832,13 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
   const toggleSel=id=>setSeleccionados(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
   const saveEnvio=updated=>{setEnvios(p=>p.map(e=>e.id===updated.id?{...updated,estado:getEstado(updated)}:e));setEditId(null);};
   const saveMultipleEnvios=updates=>{setEnvios(p=>p.map(e=>{const u=updates.find(x=>x.id===e.id);return u?{...u,estado:getEstado(u)}:e;}));};
+  const [accionMasiva,setAccionMasiva]=useState(null); // {tipo:"fecha"|"turno", valor:""}
+  const aplicarAccionMasiva=()=>{
+    if(!accionMasiva?.valor)return;
+    const campo=accionMasiva.tipo;
+    setEnvios(p=>p.map(e=>seleccionados.has(e.id)?{...e,[campo]:accionMasiva.valor}:e));
+    setSeleccionados(new Set());setModoSel(false);setAccionMasiva(null);
+  };
   const eliminar=async id=>{if(window.confirm("Eliminar este envio?")){await deleteDoc(doc(db,"envios",id));setEnvios(p=>p.filter(e=>e.id!==id));}};
   const eliminarSel=async()=>{if(!window.confirm(`Eliminar ${seleccionados.size} envio(s)?`))return;await Promise.all([...seleccionados].map(id=>deleteDoc(doc(db,"envios",id))));setEnvios(p=>p.filter(e=>!seleccionados.has(e.id)));setSeleccionados(new Set());setModoSel(false);};
   const reasignarSel=()=>{const items=envios.filter(e=>seleccionados.has(e.id));onReasignar(items);setSeleccionados(new Set());setModoSel(false);};
@@ -996,8 +1003,12 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
         <div style={{position:"fixed",bottom:"20px",left:"50%",transform:"translateX(-50%)",background:"#1a1f2e",border:"1px solid #6366f1",borderRadius:"12px",padding:"0.7rem 1.25rem",display:"flex",gap:"0.6rem",alignItems:"center",zIndex:50,boxShadow:"0 4px 20px rgba(0,0,0,0.5)",flexWrap:"wrap",maxWidth:"95vw"}}>
           <span style={{color:"#e5e7eb",fontWeight:700,fontSize:"0.9rem"}}>{seleccionados.size} selec.</span>
           <button onClick={reasignarSel} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.4rem 0.9rem",fontSize:"0.75rem"}}>Reasignar</button>
-          <button onClick={()=>{const f=window.prompt("Nueva fecha (YYYY-MM-DD):");if(!f)return;setEnvios(p=>p.map(e=>seleccionados.has(e.id)?{...e,fecha:f}:e));setSeleccionados(new Set());setModoSel(false);}} style={{...S.btn(false),padding:"0.4rem 0.9rem",fontSize:"0.75rem"}}>Cambiar fecha</button>
-          <button onClick={()=>{const t=window.prompt("Turno (AM/MD/PM/Turbo):");if(!t)return;setEnvios(p=>p.map(e=>seleccionados.has(e.id)?{...e,turno:t}:e));setSeleccionados(new Set());setModoSel(false);}} style={{...S.btn(false),padding:"0.4rem 0.9rem",fontSize:"0.75rem"}}>Cambiar turno</button>
+          {accionMasiva?.tipo==="fecha"
+            ?<><input autoFocus type="date" value={accionMasiva.valor} onChange={ev=>setAccionMasiva(p=>({...p,valor:ev.target.value}))} onKeyDown={ev=>{if(ev.key==="Enter")aplicarAccionMasiva();if(ev.key==="Escape")setAccionMasiva(null);}} style={{...S.input,padding:"3px 7px",fontSize:"0.75rem",height:"32px"}}/><button onClick={aplicarAccionMasiva} style={{...S.btn(true),padding:"0.3rem 0.7rem",fontSize:"0.75rem"}}>OK</button><button onClick={()=>setAccionMasiva(null)} style={{...S.btn(false),padding:"0.3rem 0.7rem",fontSize:"0.75rem"}}>✕</button></>
+            :<button onClick={()=>setAccionMasiva({tipo:"fecha",valor:fechaHoy()})} style={{...S.btn(false),padding:"0.4rem 0.9rem",fontSize:"0.75rem"}}>Cambiar fecha</button>}
+          {accionMasiva?.tipo==="turno"
+            ?<><div style={{display:"flex",gap:"3px"}}>{TURNOS.map(t=><button key={t} onClick={()=>setAccionMasiva(p=>({...p,valor:t}))} style={{...S.btnSm(accionMasiva.valor===t,"#a78bfa"),fontSize:"0.72rem"}}>{t}</button>)}</div><button onClick={aplicarAccionMasiva} disabled={!accionMasiva.valor} style={{...S.btn(true),padding:"0.3rem 0.7rem",fontSize:"0.75rem",opacity:accionMasiva.valor?1:0.5}}>OK</button><button onClick={()=>setAccionMasiva(null)} style={{...S.btn(false),padding:"0.3rem 0.7rem",fontSize:"0.75rem"}}>✕</button></>
+            :<button onClick={()=>setAccionMasiva({tipo:"turno",valor:""})} style={{...S.btn(false),padding:"0.4rem 0.9rem",fontSize:"0.75rem"}}>Cambiar turno</button>}
           <button onClick={cancelarSel} style={{...S.btn(true),background:"#7f1d1d",padding:"0.4rem 0.9rem",fontSize:"0.75rem"}}>Cancelar</button>
           {esAdmin&&<button onClick={eliminarSel} style={{...S.btn(true),background:"#450a0a",padding:"0.4rem 0.9rem",fontSize:"0.75rem",color:"#fca5a5"}}>Eliminar</button>}
           <button onClick={()=>{setModoSel(false);setSeleccionados(new Set());}} style={{...S.btn(false),padding:"0.4rem 0.9rem",fontSize:"0.75rem"}}>Salir</button>
@@ -1091,7 +1102,7 @@ function TabImprimir({envios,zc,lc}){
           ${td(28,"text-align:center;font-weight:"+(((e.bultos||1)>1)?700:400)+";",e.bultos||1)}
           <td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:18px;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td>
           ${td("","font-weight:500;",dir+refExtra)}
-          ${td(45,"",zml)}
+          ${td("","white-space:nowrap;font-size:"+(fs-1)+"px;",zml)}
           ${td(32,"text-align:center;",e.turno||"—")}
           ${td(42,"text-align:center;",e.fecha?fmtCorta(e.fecha):"—")}
           ${hayCobro?td(72,"text-align:right;font-weight:"+(e.cobranza?600:400)+";color:"+(e.cobranza?"#b45309":"#aaa")+";",cobrar):""}
@@ -1102,7 +1113,7 @@ function TabImprimir({envios,zc,lc}){
     const thPDF="background:#e8e8e8;padding:3px 4px;text-align:left;font-size:"+(fs-2)+"px;font-weight:700;text-transform:uppercase;color:#555;border-bottom:1.5px solid #333;";
     const headerRow=esSimple
       ?`<tr><th style="${thPDF}width:20px;">#</th><th style="${thPDF}width:50px;">Lote</th><th style="${thPDF}width:100px;">Nro envio</th><th style="${thPDF}width:35px;text-align:center;">Tipo</th><th style="${thPDF}width:25px;text-align:center;">Blts</th><th style="${thPDF}width:18px;text-align:center;">Chk</th><th style="${thPDF}">Direccion</th><th style="${thPDF}">Ciudad</th><th style="${thPDF}">Partido</th><th style="${thPDF}white-space:nowrap;">Zona</th><th style="${thPDF}width:30px;text-align:center;">Turno</th><th style="${thPDF}width:40px;text-align:center;">Fecha</th>${hayCobro?`<th style="${thPDF}width:70px;text-align:right;">Cobrar</th>`:""}</tr>`
-      :`<tr><th style="${thPDF}width:20px;">#</th><th style="${thPDF}width:55px;text-align:center;">Lote</th><th style="${thPDF}width:100px;">Nro envio / orden</th><th style="${thPDF}width:38px;text-align:center;">Tipo</th><th style="${thPDF}width:28px;text-align:center;">Blts</th><th style="${thPDF}width:18px;text-align:center;">Chk</th><th style="${thPDF}">Direccion · Localidad · Partido · CP · Referencia</th><th style="${thPDF}width:45px;">Zona</th><th style="${thPDF}width:32px;text-align:center;">Turno</th><th style="${thPDF}width:42px;text-align:center;">Fecha</th>${hayCobro?`<th style="${thPDF}width:72px;text-align:right;">Cobrar</th>`:""}</tr>`;
+      :`<tr><th style="${thPDF}width:20px;">#</th><th style="${thPDF}width:55px;text-align:center;">Lote</th><th style="${thPDF}width:100px;">Nro envio / orden</th><th style="${thPDF}width:38px;text-align:center;">Tipo</th><th style="${thPDF}width:28px;text-align:center;">Blts</th><th style="${thPDF}width:18px;text-align:center;">Chk</th><th style="${thPDF}">Direccion · Localidad · Partido · CP · Referencia</th><th style="${thPDF}white-space:nowrap;">Zona</th><th style="${thPDF}width:32px;text-align:center;">Turno</th><th style="${thPDF}width:42px;text-align:center;">Fecha</th>${hayCobro?`<th style="${thPDF}width:72px;text-align:right;">Cobrar</th>`:""}</tr>`;
 
     const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Envios ${fecha||"hoy"}</title><style>
       @page{size:A4 ${pdfOrient};margin:8mm 10mm;}
