@@ -115,7 +115,10 @@ export default async function handler(req, res) {
     }
 
     // Actualizar pagoEstado
-    if (data.pagoEstado !== "cuenta_corriente") {
+    // Si TN confirma el pago, actualizar siempre (incluso en pedidos CC)
+    if (order.payment_status === "paid") {
+      update.pagoEstado = "pagado";
+    } else if (data.pagoEstado !== "cuenta_corriente") {
       update.pagoEstado = getPagoEstadoInicial(order);
     }
 

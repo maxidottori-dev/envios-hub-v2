@@ -2210,7 +2210,7 @@ function TabCtasCtes({envios,lc}){
                 <div style={{flex:1,minWidth:"200px"}}>
                   <div style={{fontSize:"0.82rem",color:"#d1d5db",fontWeight:500}}>{e.direccion?.slice(0,60)}</div>
                   <div style={{fontSize:"0.68rem",color:"#4b5563",marginTop:"2px"}}>
-                    ID {e.id.slice(-8)}{e.fechaVenta?<span> · Venta: {fmtCorta(e.fechaVenta)}</span>:null}{e.fecha?<span> · Envio: {fmtCorta(e.fecha)}</span>:null}
+                    {e.nroOrdenTN?<span style={{color:"#7dd3fc",fontWeight:700}}>#{e.nroOrdenTN}</span>:<span>ID {e.id.slice(-8)}</span>}{e.fechaVenta?<span> · Venta: {fmtCorta(e.fechaVenta)}</span>:null}{e.fecha?<span> · Envio: {fmtCorta(e.fecha)}</span>:null}
                     {e.trans&&<span style={{marginLeft:"6px",padding:"1px 6px",background:lc[e.trans]?.color+"22",color:lc[e.trans]?.color,borderRadius:"4px",fontSize:"0.65rem",fontWeight:700}}>{e.trans}</span>}
                   </div>
                 </div>
