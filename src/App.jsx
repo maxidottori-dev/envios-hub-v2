@@ -1228,8 +1228,9 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes}){
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Bultos</label><input type="number" min="1" value={f.bultos||""} onChange={ev=>{const v=parseInt(ev.target.value);set("bultos",v>0?v:"");}} placeholder="1" style={{...S.input,width:"120px",padding:"4px 10px"}}/></div>
         </div>
         <div style={{marginBottom:"0.7rem"}}><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Direccion completa</label><textarea value={f.direccion} onChange={e=>set("direccion",e.target.value)} style={{...S.input,width:"100%",height:"56px",resize:"vertical"}} placeholder="Calle, numero..."/></div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"0.7rem",marginBottom:"0.7rem"}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.7rem",marginBottom:"0.7rem"}}>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>CP</label><input value={f.cp} onChange={e=>set("cp",e.target.value)} style={{...S.input,width:"100%"}} placeholder="1642"/></div>
+          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Ciudad</label><input value={f.ciudad||""} onChange={e=>set("ciudad",e.target.value)} style={{...S.input,width:"100%"}} placeholder="ej. Buenos Aires"/></div>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Partido (auto)</label><input value={f.partido} onChange={e=>set("partido",e.target.value)} style={{...S.input,width:"100%",color:f.partido?"#10b981":"#6b7280"}} placeholder="Por CP"/></div>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Zona ML</label><div style={{...S.input,padding:"0.45rem 0.6rem",color:ZONA_ML_COLOR[getZonaML(f.partido)]||"#6b7280",fontSize:"0.8rem",fontWeight:700}}>{getZonaML(f.partido)||"-"}</div></div>
         </div>
@@ -1240,8 +1241,13 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes}){
         </div>
         <div style={{marginBottom:"0.6rem"}}><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Observaciones</label><textarea value={f.observaciones} onChange={e=>set("observaciones",e.target.value)} style={{...S.input,display:"block",width:"100%",height:"44px",resize:"vertical",fontSize:"0.8rem"}} placeholder="Notas adicionales..."/></div>
         <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.55rem",background:"#0f1420"}}><div style={{display:"flex",alignItems:"center",gap:"0.75rem"}}><button onClick={()=>set("cobranza",f.cobranza!==null?null:0)} style={S.btnSm(f.cobranza!==null,"#f59e0b")}>Cobranza</button>{f.cobranza!==null?<input type="number" placeholder="Monto" value={f.cobranza||""} onChange={e=>set("cobranza",parseFloat(e.target.value)||0)} style={{...S.input,width:"150px",padding:"4px 10px"}}/>:<span style={{color:"#374151",fontSize:"0.78rem"}}>Sin cobranza</span>}</div></div>
-        <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.55rem",background:"#0f1420"}}><button onClick={()=>set("cambio",f.cambio!==null?null:"")} style={S.btnSm(f.cambio!==null,"#ec4899")}>Cambio</button>{f.cambio!==null?<textarea value={f.cambio||""} onChange={e=>set("cambio",e.target.value)} placeholder="Que retirar para el cambio..." style={{...S.input,display:"block",width:"100%",marginTop:"6px",height:"44px",resize:"vertical"}}/>:<span style={{color:"#374151",fontSize:"0.78rem",marginLeft:"8px"}}>Sin cambio</span>}</div>
-        <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.9rem",background:"#0f1420"}}><button onClick={()=>set("retiro",f.retiro!==null?null:"")} style={S.btnSm(f.retiro!==null,"#f97316")}>Retiro</button>{f.retiro!==null?<textarea value={f.retiro||""} onChange={e=>set("retiro",e.target.value)} placeholder="Que tiene que retirar..." style={{...S.input,display:"block",width:"100%",marginTop:"6px",height:"44px",resize:"vertical"}}/>:<span style={{color:"#374151",fontSize:"0.78rem",marginLeft:"8px"}}>Sin retiro</span>}</div>
+        <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.9rem",background:"#0f1420"}}>
+          <div style={{fontSize:"0.62rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"8px"}}>Cambio / Retiro</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.7rem"}}>
+            <div><label style={{display:"block",color:"#ec4899",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Lo que se entrega</label><textarea value={f.cambio||""} onChange={e=>set("cambio",e.target.value||null)} placeholder="Qué dejamos..." style={{...S.input,display:"block",width:"100%",height:"56px",resize:"vertical",fontSize:"0.8rem"}}/></div>
+            <div><label style={{display:"block",color:"#f97316",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Lo que se retira</label><textarea value={f.retiro||""} onChange={e=>set("retiro",e.target.value||null)} placeholder="Qué buscamos..." style={{...S.input,display:"block",width:"100%",height:"56px",resize:"vertical",fontSize:"0.8rem"}}/></div>
+          </div>
+        </div>
         <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.9rem",background:f.esCC?"#130d2a":"#0f1420",border:f.esCC?"1px solid #a78bfa":"1px solid #1e2535"}}><div style={{display:"flex",alignItems:"center",gap:"0.75rem"}}><button onClick={()=>set("esCC",!f.esCC)} style={S.btnSm(f.esCC,"#a78bfa")}>Cta. Corriente</button>{f.esCC?<><span style={{color:"#6b7280",fontSize:"0.78rem"}}>Importe:</span><input type="number" placeholder="Monto" value={f.importeCC||""} onChange={e=>set("importeCC",parseFloat(e.target.value)||0)} style={{...S.input,width:"150px",padding:"4px 10px"}}/><span style={{color:"#a78bfa",fontSize:"0.72rem"}}>El cliente te debe este monto</span></>:<span style={{color:"#374151",fontSize:"0.78rem"}}>Marcar como Cuenta Corriente</span>}</div></div>
         <div style={{display:"flex",justifyContent:"flex-end",gap:"0.5rem"}}><button onClick={()=>{setF(vacio);setErr("");setDupWarn("");}} style={S.btn(false)}>Limpiar</button><button onClick={guardar} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.5rem 1.2rem"}}>Agregar envio</button></div>
       </div>
@@ -1918,20 +1924,18 @@ function TabLiquidacion({ envios, setEnvios, lc }) {
       {/* Resumen cards */}
       {seccion === "cobranzas" && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: "0.55rem", marginBottom: "0.8rem" }}>
-          <div style={{ ...S.card, padding: "0.75rem 1rem" }}>
-            <div style={{ color: "#f59e0b", fontWeight: 800, fontSize: "1.1rem" }}>{fmt(totalEsperado)}</div>
-            <div style={{ color: "#6b7280", fontSize: "0.62rem", marginTop: "2px" }}>Total esperado</div>
-          </div>
-          <div style={{ ...S.card, padding: "0.75rem 1rem", borderLeft: "3px solid #10b981" }}>
-            <div style={{ color: "#10b981", fontWeight: 800, fontSize: "1.1rem" }}>{fmt(totalRecibido)}</div>
-            <div style={{ color: "#6b7280", fontSize: "0.62rem", marginTop: "2px" }}>Recibido</div>
-          </div>
-          <div style={{ ...S.card, padding: "0.75rem 1rem", borderLeft: "3px solid #f59e0b" }}>
+          <div onClick={() => setFilEstado(filEstado === "pendiente" ? "todos" : "pendiente")}
+               style={{ ...S.card, padding: "0.75rem 1rem", borderLeft: "3px solid #f59e0b", cursor: "pointer",
+                        opacity: filEstado === "todos" || filEstado === "pendiente" ? 1 : 0.65,
+                        outline: filEstado === "pendiente" ? "2px solid #f59e0b" : "none", outlineOffset: "-2px" }}>
             <div style={{ color: "#f59e0b", fontWeight: 800, fontSize: "1.1rem" }}>{fmt(totalPendiente)}</div>
             <div style={{ color: "#6b7280", fontSize: "0.62rem", marginTop: "2px" }}>Pendiente</div>
           </div>
           {porLogCob.map(({ l, pendienteImporte, pendienteN }) => (
-            <div key={l} style={{ ...S.card, padding: "0.75rem 1rem", borderLeft: "3px solid " + lc[l].color }}>
+            <div key={l} onClick={() => setFilTrans(filTrans === l ? "TODOS" : l)}
+                 style={{ ...S.card, padding: "0.75rem 1rem", borderLeft: "3px solid " + lc[l].color, cursor: "pointer",
+                          opacity: filTrans === "TODOS" || filTrans === l ? 1 : 0.65,
+                          outline: filTrans === l ? "2px solid " + lc[l].color : "none", outlineOffset: "-2px" }}>
               <div style={{ color: lc[l].color, fontWeight: 800, fontSize: "0.9rem" }}>{l}</div>
               <div style={{ color: "#f59e0b", fontWeight: 700, fontSize: "0.85rem" }}>{fmt(pendienteImporte)}</div>
               {pendienteN > 0 && <div style={{ color: "#6b7280", fontSize: "0.68rem", marginTop: "2px" }}>{pendienteN} pendiente{pendienteN !== 1 ? "s" : ""}</div>}
@@ -1942,20 +1946,32 @@ function TabLiquidacion({ envios, setEnvios, lc }) {
 
       {seccion === "retiros" && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: "0.55rem", marginBottom: "0.8rem" }}>
-          <div style={{ ...S.card, padding: "0.75rem 1rem" }}>
+          <div onClick={() => setFilEstado("todos")}
+               style={{ ...S.card, padding: "0.75rem 1rem", cursor: "pointer",
+                        opacity: filEstado === "todos" ? 1 : 0.65,
+                        outline: filEstado === "todos" ? "2px solid #ec4899" : "none", outlineOffset: "-2px" }}>
             <div style={{ color: "#ec4899", fontWeight: 800, fontSize: "1.8rem" }}>{conRetiro.length}</div>
             <div style={{ color: "#6b7280", fontSize: "0.62rem", marginTop: "2px" }}>Total</div>
           </div>
-          <div style={{ ...S.card, padding: "0.75rem 1rem", borderLeft: "3px solid #f59e0b" }}>
+          <div onClick={() => setFilEstado(filEstado === "pendiente" ? "todos" : "pendiente")}
+               style={{ ...S.card, padding: "0.75rem 1rem", borderLeft: "3px solid #f59e0b", cursor: "pointer",
+                        opacity: filEstado === "todos" || filEstado === "pendiente" ? 1 : 0.65,
+                        outline: filEstado === "pendiente" ? "2px solid #f59e0b" : "none", outlineOffset: "-2px" }}>
             <div style={{ color: "#f59e0b", fontWeight: 800, fontSize: "1.8rem" }}>{conRetiro.filter(e => !e.retiroRecibido).length}</div>
             <div style={{ color: "#6b7280", fontSize: "0.62rem", marginTop: "2px" }}>Pendientes</div>
           </div>
-          <div style={{ ...S.card, padding: "0.75rem 1rem", borderLeft: "3px solid #10b981" }}>
+          <div onClick={() => setFilEstado(filEstado === "recibido" ? "todos" : "recibido")}
+               style={{ ...S.card, padding: "0.75rem 1rem", borderLeft: "3px solid #10b981", cursor: "pointer",
+                        opacity: filEstado === "todos" || filEstado === "recibido" ? 1 : 0.65,
+                        outline: filEstado === "recibido" ? "2px solid #10b981" : "none", outlineOffset: "-2px" }}>
             <div style={{ color: "#10b981", fontWeight: 800, fontSize: "1.8rem" }}>{conRetiro.filter(e => e.retiroRecibido).length}</div>
             <div style={{ color: "#6b7280", fontSize: "0.62rem", marginTop: "2px" }}>Recibidos</div>
           </div>
           {porLogRet.map(({ l, total, pendiente }) => (
-            <div key={l} style={{ ...S.card, padding: "0.75rem 1rem", borderLeft: "3px solid " + lc[l].color }}>
+            <div key={l} onClick={() => setFilTrans(filTrans === l ? "TODOS" : l)}
+                 style={{ ...S.card, padding: "0.75rem 1rem", borderLeft: "3px solid " + lc[l].color, cursor: "pointer",
+                          opacity: filTrans === "TODOS" || filTrans === l ? 1 : 0.65,
+                          outline: filTrans === l ? "2px solid " + lc[l].color : "none", outlineOffset: "-2px" }}>
               <div style={{ color: lc[l].color, fontWeight: 800, fontSize: "0.9rem" }}>{l}</div>
               <div style={{ color: "#e5e7eb", fontWeight: 700 }}>{total} items</div>
               {pendiente > 0 && <div style={{ color: "#f59e0b", fontSize: "0.68rem", marginTop: "2px" }}>{pendiente} pendiente{pendiente !== 1 ? "s" : ""}</div>}
@@ -3913,6 +3929,7 @@ export default function App(){
   const [loading,setLoading]=useState(false);
   const [syncLoading,setSyncLoading]=useState(true);
   const [fileName,setFileName]=useState("");
+  const [fechaImport,setFechaImport]=useState(fechaHoy());
   const [toast,setToast]=useState("");
   const mostrarToast=msg=>{setToast(msg);setTimeout(()=>setToast(""),2500);};
   const [alertas,setAlertas]=useState([]);
@@ -3965,10 +3982,12 @@ export default function App(){
     });
   },[]);
 
-  const cargarArchivo=useCallback(async(file)=>{
+  const cargarArchivo=useCallback(async(file,fechaEntrega)=>{
     if(!file)return;setLoading(true);setError("");
     try{
       const parsed=await parsearExcel(file);
+      // Aplicar fecha de entrega seleccionada a todos los envios del lote
+      if(fechaEntrega){parsed.forEach(e=>{e.fecha=fechaEntrega;});}
       const dups=parsed.filter(e=>e.nroSeguimiento&&envios.some(ex=>ex.nroSeguimiento===e.nroSeguimiento)).map(e=>e.nroSeguimiento);
       if(dups.length>0){const ok=window.confirm(`Se detectaron ${dups.length} envio(s) duplicado(s) por numero de seguimiento. Continuar de todas formas?`);if(!ok){setLoading(false);return;}}
       setBorrador(parsed);setFileName(file.name);setPantalla("asignacion");
@@ -4163,10 +4182,13 @@ export default function App(){
             }}/>
             <span style={{display:"inline-block",padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#1a0d2e",border:"1px solid #a78bfa",color:"#a78bfa",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>{loading?"...":"📋 Colecta"}</span>
           </label>
-          <label style={{cursor:"pointer"}}>
-            <input type="file" accept=".xlsx,.xls" style={{display:"none"}} onChange={e=>{if(e.target.files[0]){cargarArchivo(e.target.files[0]);e.target.value="";}}}/>
-            <span style={{display:"inline-block",padding:"0.33rem 0.75rem",borderRadius:"7px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",color:"#fff",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>{loading?"...":"Cargar Excel"}</span>
-          </label>
+          <div style={{display:"flex",alignItems:"center",gap:"3px",background:"#12172a",border:"1px solid #6366f1",borderRadius:"7px",overflow:"hidden"}}>
+            <input type="date" value={fechaImport} onChange={e=>setFechaImport(e.target.value)} style={{...S.input,border:"none",borderRadius:0,padding:"0.28rem 0.5rem",fontSize:"0.72rem",width:"130px",color:"#a5b4fc"}} title="Fecha de entrega para los envios del Excel"/>
+            <label style={{cursor:"pointer",margin:0}}>
+              <input type="file" accept=".xlsx,.xls" style={{display:"none"}} onChange={e=>{if(e.target.files[0]){cargarArchivo(e.target.files[0],fechaImport);e.target.value="";}}}/>
+              <span style={{display:"inline-block",padding:"0.33rem 0.75rem",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",color:"#fff",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>{loading?"...":"Cargar Excel"}</span>
+            </label>
+          </div>
           <span style={{color:"#4b5563",fontSize:"0.7rem",borderLeft:"1px solid #1a1f2e",paddingLeft:"0.5rem"}}>{sesion?.usuario}</span>
           <button onClick={()=>{clearSession();setSesion(null);}} style={{...S.btnSm(false),color:"#f87171",fontSize:"0.7rem"}}>Salir</button>
         </div>
