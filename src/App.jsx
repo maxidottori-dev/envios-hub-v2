@@ -569,9 +569,25 @@ function ModalOpcionesPDF({onConfirm, onCancel}){
   );
 }
 
-function PanelEdit({envio,onSave,onClose,lc}){
+function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp}){
   const [e,setE]=useState({...envio});
   const set=(k,v)=>setE(p=>({...p,[k]:v}));
+  const [costoOverride,setCostoOverride]=useState(envio.importeOverride>0?envio.importeOverride:null);
+  const [editandoCosto,setEditandoCosto]=useState(false);
+  const [dividido,setDividido]=useState(false);
+  const costoBase=getImp?getImp(envio):0;
+  const costoMostrar=costoOverride!==null?costoOverride:costoBase;
+  const normDir=d=>(d||"").toLowerCase().trim().replace(/\s+/g," ");
+  const duplicados=envios.filter(o=>o.id!==envio.id&&o.fecha===envio.fecha&&normDir(o.direccion)===normDir(envio.direccion)&&getEstado(o)!=="cancelado");
+  const handleDividir=()=>{
+    const total=costoMostrar||costoBase;
+    const n=duplicados.length+1;
+    const porPedido=Math.round(total/n);
+    setCostoOverride(porPedido);
+    if(onSaveMultiple)onSaveMultiple(duplicados.map(d=>({...d,importeOverride:porPedido})));
+    setDividido(true);
+  };
+  const handleSave=()=>onSave({...e,importeOverride:costoOverride||null});
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const handleTrans=l=>{const t=e.trans===l?"":l;setE(p=>({...p,trans:t,estado:t?"asignado":(p.estado==="cancelado"?"cancelado":"sin_asignar")}));};
   const esTN = e.origen === "Tienda Nube";
@@ -615,6 +631,42 @@ function PanelEdit({envio,onSave,onClose,lc}){
         </div>
       )}
 
+      {/* Costo logística editable */}
+      <div style={{display:"flex",alignItems:"center",gap:"0.6rem",marginBottom:"0.65rem",flexWrap:"wrap"}}>
+        <span style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase"}}>Costo logística:</span>
+        {editandoCosto?(
+          <div style={{display:"flex",alignItems:"center",gap:"4px"}}>
+            <span style={{fontSize:"0.8rem",color:"#6b7280"}}>$</span>
+            <input autoFocus type="number" value={costoOverride!==null?costoOverride:costoBase} onChange={ev=>setCostoOverride(parseFloat(ev.target.value)||0)}
+              onBlur={()=>setEditandoCosto(false)} onKeyDown={ev=>{if(ev.key==="Enter")setEditandoCosto(false);if(ev.key==="Escape"){setCostoOverride(null);setEditandoCosto(false);}}}
+              style={{...S.input,width:"90px",padding:"2px 8px",fontSize:"0.82rem",fontWeight:700}}/>
+            {costoOverride!==null&&<button onClick={()=>{setCostoOverride(null);setEditandoCosto(false);}} style={{fontSize:"0.68rem",color:"#6b7280",background:"none",border:"none",cursor:"pointer",padding:"0 4px"}}>↩ base</button>}
+          </div>
+        ):(
+          <button onClick={()=>setEditandoCosto(true)} style={{display:"flex",alignItems:"center",gap:"4px",background:"none",border:"0.5px solid #252d40",borderRadius:"6px",padding:"2px 8px",cursor:"pointer"}}>
+            <span style={{fontSize:"0.82rem",fontWeight:700,color:costoOverride!==null?"#fbbf24":"#10b981"}}>{costoMostrar>0?"$"+Math.round(costoMostrar).toLocaleString("es-AR"):"—"}</span>
+            {costoOverride!==null&&<span style={{fontSize:"0.62rem",color:"#fbbf24",opacity:.7}}>*</span>}
+            <span style={{fontSize:"0.65rem",color:"#374151",marginLeft:"2px"}}>✏</span>
+          </button>
+        )}
+        {costoBase>0&&costoOverride!==null&&<span style={{fontSize:"0.68rem",color:"#4b5563"}}>base: ${Math.round(costoBase).toLocaleString("es-AR")}</span>}
+      </div>
+      {/* Alerta dirección duplicada */}
+      {duplicados.length>0&&!dividido&&(
+        <div style={{background:"#1c1400",border:"1px solid #78350f",borderRadius:"8px",padding:"8px 12px",marginBottom:"0.65rem"}}>
+          <div style={{display:"flex",alignItems:"flex-start",gap:"8px"}}>
+            <span style={{color:"#fbbf24",fontSize:"0.85rem",flexShrink:0}}>⚠</span>
+            <div style={{flex:1}}>
+              <div style={{color:"#fbbf24",fontWeight:700,fontSize:"0.78rem",marginBottom:"3px"}}>{duplicados.length} pedido{duplicados.length>1?"s":"+"} más a esta dirección el {envio.fecha?fmtCorta(envio.fecha):"mismo día"}</div>
+              <div style={{color:"#92400e",fontSize:"0.72rem",marginBottom:"6px"}}>{duplicados.map(d=>d.nroOrdenTN?"#"+d.nroOrdenTN:d.id.slice(-6)).join(" · ")}</div>
+              <button onClick={handleDividir} style={{fontSize:"0.72rem",padding:"3px 10px",borderRadius:"5px",border:"1px solid #78350f",background:"#12172a",color:"#fbbf24",cursor:"pointer",fontWeight:600}}>
+                Dividir ${costoMostrar>0?Math.round(costoMostrar).toLocaleString("es-AR"):"?"} entre {duplicados.length+1} pedidos → ${costoMostrar>0?Math.round(costoMostrar/(duplicados.length+1)).toLocaleString("es-AR"):"?"} c/u
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {dividido&&<div style={{background:"#041f14",border:"1px solid #065f46",borderRadius:"8px",padding:"6px 12px",marginBottom:"0.65rem",fontSize:"0.75rem",color:"#34d399"}}>✓ Costo dividido aplicado a {duplicados.length+1} pedidos</div>}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.6rem 1rem",marginBottom:"0.65rem",opacity:(esTN&&e.pagoEstado==="pendiente")?0.35:1,pointerEvents:(esTN&&e.pagoEstado==="pendiente")?"none":"auto"}}>
         <div>
           <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Logistica</div>
@@ -722,7 +774,7 @@ function PanelEdit({envio,onSave,onClose,lc}){
       </div>
       <div style={{display:"flex",gap:"0.5rem",justifyContent:"flex-end"}}>
         <button onClick={onClose} style={S.btn(false)}>Cancelar</button>
-        <button onClick={()=>onSave(e)} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)"}}>Guardar</button>
+        <button onClick={handleSave} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)"}}>Guardar</button>
       </div>
     </div>
   );
@@ -779,6 +831,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
   const filtrarPorLogistica=(l)=>setFilTrans(filTrans===l?"TODOS":l);
   const toggleSel=id=>setSeleccionados(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
   const saveEnvio=updated=>{setEnvios(p=>p.map(e=>e.id===updated.id?{...updated,estado:getEstado(updated)}:e));setEditId(null);};
+  const saveMultipleEnvios=updates=>{setEnvios(p=>p.map(e=>{const u=updates.find(x=>x.id===e.id);return u?{...u,estado:getEstado(u)}:e;}));};
   const eliminar=async id=>{if(window.confirm("Eliminar este envio?")){await deleteDoc(doc(db,"envios",id));setEnvios(p=>p.filter(e=>e.id!==id));}};
   const eliminarSel=async()=>{if(!window.confirm(`Eliminar ${seleccionados.size} envio(s)?`))return;await Promise.all([...seleccionados].map(id=>deleteDoc(doc(db,"envios",id))));setEnvios(p=>p.filter(e=>!seleccionados.has(e.id)));setSeleccionados(new Set());setModoSel(false);};
   const reasignarSel=()=>{const items=envios.filter(e=>seleccionados.has(e.id));onReasignar(items);setSeleccionados(new Set());setModoSel(false);};
@@ -879,7 +932,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
           const zml=getZonaML(e.partido);
           const isEdit=editId===e.id;
           const isSel=seleccionados.has(e.id);
-          const imp=getImp(e);
+          const imp=e.importeOverride>0?e.importeOverride:getImp(e);
           const estKey=getEstado(e);
           const estC=ESTADO_C[estKey]||ESTADO_C.sin_asignar;
           const esTN=e.origen==="Tienda Nube";
@@ -929,11 +982,11 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
                     {e.linkML&&<a href={e.linkML} target="_blank" rel="noreferrer" onClick={ev=>ev.stopPropagation()} title="Ver en ML" style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:"26px",height:"26px",borderRadius:"6px",background:"#0f1420",border:"1px solid #252d40",textDecoration:"none",flexShrink:0}}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>}
                     {!modoSel&&esAdmin&&<button onClick={ev=>{ev.stopPropagation();eliminar(e.id);}} style={{...S.btnSm(false),padding:"1px 6px",fontSize:"0.68rem",color:"#f87171"}}>x</button>}
                   </div>
-                  {imp>0&&<span style={{color:"#10b981",fontWeight:700,fontSize:"0.82rem"}}>{fmt(imp)}</span>}
+                  {imp>0&&<span style={{color:e.importeOverride>0?"#fbbf24":"#10b981",fontWeight:700,fontSize:"0.82rem"}}>{fmt(imp)}{e.importeOverride>0&&<span style={{fontSize:"0.62rem",opacity:.65,marginLeft:"2px"}}>*</span>}</span>}
                   {esTN&&e.importeOrden>0&&<span style={{color:"#6b7280",fontSize:"0.7rem"}}>{fmt(e.importeOrden)}</span>}
                 </div>
               </div>
-              {isEdit&&!modoSel&&<PanelEdit envio={e} onSave={saveEnvio} onClose={()=>setEditId(null)} lc={lc}/>}
+              {isEdit&&!modoSel&&<PanelEdit envio={e} onSave={saveEnvio} onSaveMultiple={saveMultipleEnvios} onClose={()=>setEditId(null)} lc={lc} envios={envios} getImp={getImp}/>}
             </div>
           );
         })}
