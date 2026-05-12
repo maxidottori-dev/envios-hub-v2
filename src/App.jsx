@@ -994,7 +994,7 @@ function TabImprimir({envios,zc,lc}){
   const [pdfVersion,setPdfVersion]=useState("completa"); // "completa" | "simple"
   const generarPDF=()=>{
     const ahora=new Date();
-    const ts=ahora.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+" "+ahora.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+    const ts=ahora.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+" "+ahora.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false});
     const origenLabel=filOrigen==="FLEX"?"Solo FLEX":filOrigen==="NO_FLEX"?"NO FLEX":"Todos";
     const fs=pdfFontSize;
     const esSimple=pdfVersion==="simple";
@@ -1007,7 +1007,7 @@ function TabImprimir({envios,zc,lc}){
       const zml=esFlex?(getZonaML(e.partido)||""):(e.partido||"");
       const refExtra=(e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20)))?" — "+e.referencia:"";
       const cobrar=e.cobranza?"$"+Number(e.cobranza).toLocaleString("es-AR"):"—";
-      const loteCell=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}):"—";
+      const loteCell=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"—";
       const tipoCell=e.tipoEntrega?`<span style="background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":"#dcfce7"};color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":"#15803d"};border-radius:3px;padding:0 4px;font-size:${fs-2}px;font-weight:700;">${e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</span>`:"—";
       const origenBadge=esFlex?`<span style="background:#1a3008;color:#84cc16;border-radius:3px;padding:0 4px;font-size:${fs-3}px;font-weight:700;">FLEX</span>`:`<span style="background:#0c1a40;color:#38bdf8;border-radius:3px;padding:0 4px;font-size:${fs-3}px;font-weight:700;">TN</span>`;
 
@@ -1099,7 +1099,7 @@ function TabImprimir({envios,zc,lc}){
           <button onClick={()=>{
             const filas=lista.map((e,i)=>{
               const esFlex=e.origen==="ML";
-              const lote=esFlex&&e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}):"";
+              const lote=esFlex&&e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"";
               return{"#":i+1,
                 Lote:lote,
                 Tipo:e.tipoEntrega==="COMERCIAL"?"COM":e.tipoEntrega==="RESIDENCIAL"?"RES":"",
@@ -1157,7 +1157,7 @@ function TabImprimir({envios,zc,lc}){
                 <td style={{...tdSt,textAlign:"center",color:"#4b5563"}}>{i+1}</td>
                 <td style={{...tdSt,textAlign:"center",width:"52px"}}>
                   {esFlex&&e.loteImportacion
-                    ?<span style={{background:"#0d1c04",color:"#84cc16",padding:"1px 5px",borderRadius:"4px",fontSize:"0.68rem",fontWeight:700,whiteSpace:"nowrap"}}>{new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})}</span>
+                    ?<span style={{background:"#0d1c04",color:"#84cc16",padding:"1px 5px",borderRadius:"4px",fontSize:"0.68rem",fontWeight:700,whiteSpace:"nowrap"}}>{new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false})}</span>
                     :<span style={{color:"#374151"}}>—</span>}
                 </td>
                 <td style={{...tdSt,textAlign:"center"}}>
@@ -1902,7 +1902,7 @@ function TabLiquidacion({ envios, setEnvios, lc }) {
         }} style={{...S.btnSm(false),color:"#10b981",border:"1px solid #10b981",padding:"3px 10px",fontSize:"0.72rem"}}>⬇ Excel</button>
         <button onClick={()=>{
           const ahora=new Date();
-          const ts=ahora.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+" "+ahora.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+          const ts=ahora.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+" "+ahora.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false});
           const rows=lista.map((e,i)=>{
             const campo=seccion==="cobranzas"?"cobranzaRecibida":"retiroRecibido";
             const recibido=!!e[campo];
@@ -2838,7 +2838,7 @@ function VistaLogistica({envios,sesion,lc}){
           <button onClick={()=>{
             const filas=filtrados.sort((a,b)=>(a.loteImportacion||"9").localeCompare(b.loteImportacion||"9")).map((e,i)=>{
               const esFlex=e.origen==="ML";
-              const lote=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}):"";
+              const lote=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"";
               const nroRef=esFlex?(e.nroSeguimiento||""):("#"+(e.nroOrdenTN||""));
               const zona=getZonaML(e.partido)||"";
               return{"#":i+1,
@@ -2858,13 +2858,13 @@ function VistaLogistica({envios,sesion,lc}){
           }} style={{...S.btnSm(false),border:"1px solid #10b981",color:"#10b981",padding:"4px 10px",fontSize:"0.72rem"}}>⬇ Excel</button>
           <button onClick={()=>{
             const ahora=new Date();
-            const ts=ahora.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+" "+ahora.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+            const ts=ahora.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+" "+ahora.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false});
             const hayCobro=filtrados.some(e=>e.cobranza!==null&&e.cobranza>0);
             const rows=filtrados.map((e,i)=>{
               const esFlex=e.origen==="ML";
               const dir=[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · ");
               const nroRef=esFlex?(e.nroSeguimiento||e.id.slice(-10)):("#"+(e.nroOrdenTN||e.id.slice(-8)));
-              const lote=esFlex&&e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}):"—";
+              const lote=esFlex&&e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"—";
               const tipo=e.tipoEntrega==="COMERCIAL"?"COM":e.tipoEntrega==="RESIDENCIAL"?"RES":"—";
               const cobrar=e.cobranza?"$"+Number(e.cobranza).toLocaleString("es-AR"):"—";
               return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}"><td style="text-align:center;padding:3px 4px;color:#888;border-bottom:0.5px solid #ddd;">${i+1}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;color:#16a34a;font-size:9px;font-weight:700;">${lote}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;font-size:9px;font-weight:700;background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":e.tipoEntrega?"#dcfce7":"transparent"};color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":e.tipoEntrega?"#15803d":"#aaa"};">${tipo}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;font-weight:500;">${dir}${(e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20)))?" — "+e.referencia:""}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;font-family:monospace;font-size:9px;color:#444;">${nroRef}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;">${e.turno||"—"}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;">${e.fecha?fmtCorta(e.fecha):"—"}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;font-weight:${(e.bultos||1)>1?700:400};">${e.bultos||1}</td>${hayCobro?`<td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}<td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td></tr>`;
@@ -2907,7 +2907,7 @@ function VistaLogistica({envios,sesion,lc}){
               <div key={e.id} style={{...S.card,padding:"0.6rem 0.75rem",opacity:estKey==="cancelado"?0.4:1,cursor:"pointer"}} onClick={()=>setExpandId(isExp?null:e.id)}>
                 <div style={{display:"flex",gap:"3px",flexWrap:"wrap",alignItems:"center",marginBottom:"3px"}}>
                   <Bdg label={estC.label} bg={estC.bg} t={estC.t}/>
-                  {e.origen==="ML"&&e.loteImportacion&&<Bdg label={new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})} bg="#0d1c04" t="#84cc16"/>}
+                  {e.origen==="ML"&&e.loteImportacion&&<Bdg label={new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false})} bg="#0d1c04" t="#84cc16"/>}
                   {e.tipoEntrega&&<span style={{padding:"1px 6px",background:e.tipoEntrega==="COMERCIAL"?"#0c1a40":"#0a1a0a",color:e.tipoEntrega==="COMERCIAL"?"#38bdf8":"#86efac",borderRadius:"4px",fontSize:"0.65rem",fontWeight:700}}>{e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</span>}
                   {zml&&<Bdg label={zml} bg={ZONA_ML_BG[zml]||"#1a1f2e"} t={ZONA_ML_COLOR[zml]||"#6b7280"}/>}
                   {e.turno&&<Bdg label={e.turno} bg={TURNO_C[e.turno]?.bg||"#130d2a"} t={TURNO_C[e.turno]?.c||"#a78bfa"}/>}
@@ -3581,7 +3581,7 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
           <button onClick={()=>{
             const filas=filtrados.sort((a,b)=>(a.loteImportacion||"9").localeCompare(b.loteImportacion||"9")).map((e,i)=>{
               const esFlex=e.origen==="ML";
-              const lote=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}):"";
+              const lote=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"";
               const nroRef=esFlex?(e.nroSeguimiento||""):("#"+(e.nroOrdenTN||""));
               const zona=getZonaML(e.partido)||"";
               return{"#":i+1,
@@ -3601,13 +3601,13 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
           }} style={{...S.btnSm(false),border:"1px solid #10b981",color:"#10b981",padding:"4px 10px",fontSize:"0.72rem"}}>⬇ Excel</button>
           <button onClick={()=>{
             const ahora=new Date();
-            const ts=ahora.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+" "+ahora.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
+            const ts=ahora.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+" "+ahora.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false});
             const hayCobro=filtrados.some(e=>e.cobranza!==null&&e.cobranza>0);
             const rows=filtrados.map((e,i)=>{
               const esFlex=e.origen==="ML";
               const dir=[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · ");
               const nroRef=esFlex?(e.nroSeguimiento||e.id.slice(-10)):("#"+(e.nroOrdenTN||e.id.slice(-8)));
-              const lote=esFlex&&e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}):"—";
+              const lote=esFlex&&e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"—";
               const tipo=e.tipoEntrega==="COMERCIAL"?"COM":e.tipoEntrega==="RESIDENCIAL"?"RES":"—";
               const cobrar=e.cobranza?"$"+Number(e.cobranza).toLocaleString("es-AR"):"—";
               return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}"><td style="text-align:center;padding:3px 4px;color:#888;border-bottom:0.5px solid #ddd;">${i+1}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;color:#16a34a;font-size:9px;font-weight:700;">${lote}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;font-size:9px;font-weight:700;background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":e.tipoEntrega?"#dcfce7":"transparent"};color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":e.tipoEntrega?"#15803d":"#aaa"};">${tipo}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;font-weight:500;">${dir}${(e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20)))?" — "+e.referencia:""}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;font-family:monospace;font-size:9px;color:#444;">${nroRef}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;">${e.turno||"—"}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;">${e.fecha?fmtCorta(e.fecha):"—"}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;font-weight:${(e.bultos||1)>1?700:400};">${e.bultos||1}</td>${hayCobro?`<td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}<td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td></tr>`;
