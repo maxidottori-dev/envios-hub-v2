@@ -2081,6 +2081,7 @@ function TabCtasCtes({envios,lc}){
   const [vistaCliente,setVistaCliente]=useState(null);
   const [filtro,setFiltro]=useState("todos");
   const [busqueda,setBusqueda]=useState("");
+  const [sortCC,setSortCC]=useState({col:"saldo",dir:"desc"});
   const [modalPago,setModalPago]=useState(null);
   const [limites,setLimites]=useState({});
   const [loadingLim,setLoadingLim]=useState(true);
@@ -2172,18 +2173,30 @@ function TabCtasCtes({envios,lc}){
     const dias=diasDeuda(c.fechaMin);
     const limite=limites[c.key]||15;
     return{...c,cobrado,saldo,dias,limite,logisticas:[...c.logisticas]};
-  }).sort((a,b)=>b.saldo-a.saldo);
+  });
 
   const fmt=(n)=>"$"+Math.round(n).toLocaleString("es-AR");
   const hoy=new Date();hoy.setHours(0,0,0,0);
 
-  // Filtros
+  // Filtros + sort
   const clientesFiltrados=clientes.filter(c=>{
     if(filtro==="deuda"&&c.saldo===0)return false;
     if(filtro==="vencidos"&&c.dias<c.limite)return false;
     if(filtro==="saldados"&&c.saldo>0)return false;
     if(busqueda&&!c.nombre.toLowerCase().includes(busqueda.toLowerCase()))return false;
     return true;
+  }).sort((a,b)=>{
+    const {col,dir}=sortCC;
+    let va,vb;
+    if(col==="nombre"){va=a.nombre.toLowerCase();vb=b.nombre.toLowerCase();}
+    else if(col==="deudaTotal"){va=a.deudaTotal;vb=b.deudaTotal;}
+    else if(col==="cobrado"){va=a.cobrado;vb=b.cobrado;}
+    else if(col==="saldo"){va=a.saldo;vb=b.saldo;}
+    else if(col==="dias"){va=a.dias;vb=b.dias;}
+    else{va=a.saldo;vb=b.saldo;}
+    if(va<vb)return dir==="asc"?-1:1;
+    if(va>vb)return dir==="asc"?1:-1;
+    return 0;
   });
 
   // Metricas globales
@@ -2342,9 +2355,26 @@ function TabCtasCtes({envios,lc}){
         <table style={{width:"100%",borderCollapse:"collapse"}}>
           <thead>
             <tr style={{background:"#12172a"}}>
-              {["Cliente","Logisticas","Deuda total","Cobrado","Saldo","Antigüedad",""].map(h=>(
-                <th key={h} style={{padding:"8px 10px",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",color:"#6b7280",textAlign:h==="Deuda total"||h==="Cobrado"||h==="Saldo"?"right":"left",borderBottom:"1px solid #1e2535"}}>{h}</th>
-              ))}
+              {[
+                {label:"Cliente",col:"nombre",align:"left"},
+                {label:"Logísticas",col:null,align:"left"},
+                {label:"Deuda total",col:"deudaTotal",align:"right"},
+                {label:"Cobrado",col:"cobrado",align:"right"},
+                {label:"Saldo",col:"saldo",align:"right"},
+                {label:"Antigüedad",col:"dias",align:"left"},
+                {label:"",col:null,align:"left"},
+              ].map(h=>{
+                const activo=sortCC.col===h.col&&h.col;
+                const flecha=activo?(sortCC.dir==="asc"?"▲":"▼"):"";
+                return(
+                  <th key={h.label} onClick={h.col?()=>setSortCC(p=>p.col===h.col?{col:h.col,dir:p.dir==="asc"?"desc":"asc"}:{col:h.col,dir:"desc"}):undefined}
+                    style={{padding:"8px 10px",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",
+                      color:activo?"#a5b4fc":"#6b7280",textAlign:h.align,borderBottom:"1px solid #1e2535",
+                      cursor:h.col?"pointer":"default",userSelect:"none",whiteSpace:"nowrap"}}>
+                    {h.label}{flecha&&<span style={{marginLeft:"4px",fontSize:"0.6rem"}}>{flecha}</span>}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
