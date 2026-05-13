@@ -2526,7 +2526,7 @@ function ModalRegistrarPago({clienteKey,clienteNombre,saldoPendiente,onClose,env
     try{
       await addDoc(collection(db,"pagosCC"),{
         clienteKey,clienteNombre,monto:m,nota:nota.trim(),
-        envioIds,
+        envioIds:enviosIds,
         fechaCobro,
         creadoEn:serverTimestamp(),
       });
