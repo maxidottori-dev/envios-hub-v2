@@ -702,9 +702,13 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp}){
         </div>
         <div>
           <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Cobranza</div>
-          <div style={{display:"flex",gap:"3px",alignItems:"center"}}>
-            <button onClick={()=>set("cobranza",e.cobranza!==null?null:0)} style={S.btnSm(e.cobranza!==null,"#f59e0b")}>{e.cobranza!==null?"Activa":"Agregar"}</button>
-            {e.cobranza!==null&&<input type="number" placeholder="Monto" value={e.cobranza||""} onChange={ev=>set("cobranza",parseFloat(ev.target.value)||0)} style={{...S.input,width:"120px",padding:"3px 8px",fontSize:"0.8rem"}}/>}
+          <div style={{display:"flex",gap:"3px",alignItems:"center",flexWrap:"wrap"}}>
+            {!e.esCC&&<>
+              <button onClick={()=>set("cobranza",e.cobranza!==null?null:0)} style={S.btnSm(e.cobranza!==null,"#f59e0b")}>{e.cobranza!==null?"Activa":"Agregar"}</button>
+              {e.cobranza!==null&&<input type="number" placeholder="Monto" value={e.cobranza||""} onChange={ev=>set("cobranza",parseFloat(ev.target.value)||0)} style={{...S.input,width:"120px",padding:"3px 8px",fontSize:"0.8rem"}}/>}
+            </>}
+            <button onClick={()=>{if(e.esCC){setE(p=>({...p,esCC:false,importeCC:0}));}else{setE(p=>({...p,esCC:true,importeCC:0,cobranza:null}));}}} style={S.btnSm(e.esCC,"#a78bfa")}>CC</button>
+            {e.esCC&&<input type="number" placeholder="Importe CC" value={e.importeCC||""} onChange={ev=>setE(p=>({...p,importeCC:parseFloat(ev.target.value)||0}))} style={{...S.input,width:"120px",padding:"3px 8px",fontSize:"0.8rem"}}/>}
           </div>
         </div>
       </div>
