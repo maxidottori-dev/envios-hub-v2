@@ -1880,6 +1880,7 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
   const [modalPago,setModalPago]=useState(null);
   const [pago,setPago]=useState({monto:"",fecha:hoy,notas:""});
   const [guardandoPago,setGuardandoPago]=useState(false);
+  const [confirmEliminarPago,setConfirmEliminarPago]=useState(null); // id del pago a eliminar
   const [historial,setHistorial]=useState([]);
   const [vista,setVista]=useState("envios"); // "envios" | "confirmar" | "historial"
   const [confDesde,setConfDesde]=useState("");
@@ -1985,6 +1986,15 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
     });
     setGuardandoPago(false);
     setModalPago(null);
+  };
+
+  const eliminarPago=async(h)=>{
+    // Revertir envíos de abonado → confirmado
+    if(h.enviosIds?.length){
+      setEnvios(prev=>prev.map(e=>h.enviosIds.includes(e.id)?{...e,estadoPago:"confirmado",estadoPagoFecha:null}:e));
+    }
+    await deleteDoc(doc(db,"pagosLogistica",h.id));
+    setConfirmEliminarPago(null);
   };
 
   const toggleSel=id=>setSelIds(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
@@ -2107,7 +2117,7 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
           {historial.length===0?(
             <div style={{...S.card,padding:"2rem",textAlign:"center",color:"#4b5563"}}>Sin pagos registrados aún</div>
           ):historial.filter(h=>filTrans==="TODOS"||h.logistica===filTrans).map(h=>(
-            <div key={h.id} style={{...S.card,padding:"0.75rem 1rem",display:"flex",gap:"1rem",alignItems:"center",flexWrap:"wrap"}}>
+            <div key={h.id} style={{...S.card,padding:"0.75rem 1rem",display:"flex",gap:"1rem",alignItems:"center",flexWrap:"wrap",border:confirmEliminarPago===h.id?"1px solid #7f1d1d":"1px solid #1e2535"}}>
               <Bdg label={h.logistica} bg={lc[h.logistica]?.bg||"#1e293b"} t={lc[h.logistica]?.color||"#94a3b8"} style={{fontSize:"0.7rem",flexShrink:0}}/>
               <span style={{color:"#6b7280",fontSize:"0.75rem",flexShrink:0}}>{fmtF(h.fecha)}</span>
               <span style={{color:"#6b7280",fontSize:"0.72rem",flexShrink:0}}>{h.cantEnvios} envíos</span>
@@ -2115,6 +2125,15 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
               <div style={{flex:1}}/>
               {h.notas&&<span style={{color:"#4b5563",fontSize:"0.7rem",fontStyle:"italic"}}>{h.notas}</span>}
               <span style={{color:"#10b981",fontWeight:700,fontSize:"1rem",flexShrink:0}}>{fmt(h.montoPagado)}</span>
+              {confirmEliminarPago===h.id?(
+                <div style={{display:"flex",gap:"6px",alignItems:"center",flexShrink:0}}>
+                  <span style={{color:"#f87171",fontSize:"0.72rem"}}>¿Eliminar y revertir envíos a confirmado?</span>
+                  <button onClick={()=>eliminarPago(h)} style={{...S.btnSm(false),color:"#f87171",borderColor:"#7f1d1d",fontSize:"0.72rem"}}>Sí</button>
+                  <button onClick={()=>setConfirmEliminarPago(null)} style={{...S.btnSm(false),fontSize:"0.72rem"}}>No</button>
+                </div>
+              ):(
+                <button onClick={()=>setConfirmEliminarPago(h.id)} style={{...S.btnSm(false),color:"#f87171",borderColor:"#7f1d1d",padding:"2px 8px",fontSize:"0.7rem",flexShrink:0}}>Eliminar</button>
+              )}
             </div>
           ))}
         </div>
