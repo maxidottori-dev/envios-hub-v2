@@ -1081,11 +1081,11 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
                   </div>}
                   <div style={{color:esTN&&e.clienteNombre?"#9ca3af":"#e5e7eb",fontSize:"0.8rem",lineHeight:1.35,textDecoration:getEstado(e)==="cancelado"?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",width:"100%",display:"block"}}>{e.direccion}{e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20))?" — "+e.referencia:""}</div>
                   <div style={{color:"#9ca3af",fontSize:"0.74rem",marginTop:"2px",display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center"}}>
-                    {!esTN&&<span style={{fontFamily:"monospace",color:"#9ca3af"}}>...{e.id.slice(-10)}</span>}
-                    {e.nroSeguimiento&&<span style={{background:"#0f1420",padding:"0 5px",borderRadius:"4px",border:"1px solid #252d40",color:"#9ca3af"}}>📦 {e.nroSeguimiento}</span>}
+                    {!esTN&&<span style={{fontFamily:"monospace",color:"#94a3b8"}}>...{e.id.slice(-10)}</span>}
+                    {e.nroSeguimiento&&<span style={{background:"#0f1420",padding:"0 5px",borderRadius:"4px",border:"1px solid #252d40",color:"#94a3b8"}}>📦 {e.nroSeguimiento}</span>}
                     {e.tipoEntrega&&<span style={{background:e.tipoEntrega==="COMERCIAL"?"#0c1a40":"#0a1a0a",color:e.tipoEntrega==="COMERCIAL"?"#38bdf8":"#86efac",border:"1px solid "+(e.tipoEntrega==="COMERCIAL"?"#1e4060":"#1a3a1a"),borderRadius:"4px",padding:"0 5px",fontSize:"0.68rem",fontWeight:700}}>{e.tipoEntrega}</span>}
                     {e.destinatario&&<span style={{color:"#cbd5e1",fontWeight:500,fontSize:"0.74rem"}}>· {e.destinatario}</span>}
-                    <span style={{color:"#9ca3af"}}>· {e.localidad?e.localidad+" · ":""}{e.partido}{e.cp?" · "+e.cp:""}</span>
+                    <span style={{color:"#cbd5e1",fontWeight:500,fontSize:"14px"}}>· {e.localidad?e.localidad+" · ":""}{e.partido}{e.cp?" · "+e.cp:""}</span>
                     {e.fechaVenta&&<span style={{color:"#6b7280"}}>· venta {fmtCorta(e.fechaVenta)}</span>}
                     {e.formaPago&&esTN&&<span style={{color:e.formaPago==="Efectivo"?"#fbbf24":"#9ca3af",fontWeight:e.formaPago==="Efectivo"?700:400}}>· {e.formaPago}</span>}
                     {e.observaciones&&<span style={{color:"#6b7280",fontStyle:"italic"}}>· "{e.observaciones.slice(0,30)}{e.observaciones.length>30?"...":""}"</span>}
