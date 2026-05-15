@@ -797,7 +797,6 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
         <button onClick={onClose} style={S.btn(false)}>Cancelar</button>
         {!bloqueado&&<button onClick={handleSave} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)"}}>Guardar</button>}
         {!confirmado&&e.trans&&e.estado!=="cancelado"&&(
-          <button onClick={handleConfirmar} style={{...S.btn(true),background:"linear-gradient(135deg,#059669,#10b981)"}}>✓ Confirmar envío</button>
         )}
       </div>
     </div>
