@@ -796,8 +796,6 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
       <div style={{display:"flex",gap:"0.5rem",justifyContent:"flex-end",flexWrap:"wrap",marginTop:"0.5rem"}}>
         <button onClick={onClose} style={S.btn(false)}>Cancelar</button>
         {!bloqueado&&<button onClick={handleSave} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)"}}>Guardar</button>}
-        {!confirmado&&e.trans&&e.estado!=="cancelado"&&(
-        )}
       </div>
     </div>
   );
@@ -2048,12 +2046,12 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
         for(let i=0;i<h.enviosIds.length;i+=CHUNK){
           const batch=writeBatch(db);
           h.enviosIds.slice(i,i+CHUNK).forEach(id=>{
-            batch.update(doc(db,"envios",id),{estadoPago:null,estadoPagoFecha:null});
+            batch.update(doc(db,"envios",id),{estadoPago:"confirmado",estadoPagoFecha:null});
           });
           await batch.commit();
         }
         // Actualizar estado local para reflejo inmediato
-        setEnvios(prev=>prev.map(e=>h.enviosIds.includes(e.id)?{...e,estadoPago:null,estadoPagoFecha:null}:e));
+        setEnvios(prev=>prev.map(e=>h.enviosIds.includes(e.id)?{...e,estadoPago:"confirmado",estadoPagoFecha:null}:e));
       }
       await deleteDoc(doc(db,"pagosLogistica",h.id));
       setConfirmEliminarPago(null);
