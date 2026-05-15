@@ -569,7 +569,7 @@ function ModalOpcionesPDF({onConfirm, onCancel}){
   );
 }
 
-function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp}){
+function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAdmin=false}){
   const [e,setE]=useState({...envio});
   const set=(k,v)=>setE(p=>({...p,[k]:v}));
   const [costoOverride,setCostoOverride]=useState(envio.importeOverride>0?envio.importeOverride:null);
@@ -591,6 +591,10 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp}){
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const handleTrans=l=>{const t=e.trans===l?"":l;setE(p=>({...p,trans:t,estado:t?"asignado":(p.estado==="cancelado"?"cancelado":"sin_asignar")}));};
   const esTN = e.origen === "Tienda Nube";
+  const confirmado=envio.estadoPago==="confirmado"||envio.estadoPago==="abonado";
+  const bloqueado=confirmado&&!esAdmin;
+  const handleConfirmar=()=>onSave({...e,importeOverride:costoOverride||null,estadoPago:"confirmado",estadoPagoFecha:fechaHoy()});
+  const handleDesconfirmar=()=>onSave({...e,importeOverride:costoOverride||null,estadoPago:envio.estadoPago==="abonado"?"confirmado":null,estadoPagoFecha:null});
   const pagoOk = puedeAsignar(e);
   const autorizarCC=()=>setE(p=>({...p,pagoEstado:"cuenta_corriente"}));
   return(
@@ -631,6 +635,18 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp}){
         </div>
       )}
 
+      {/* Banner confirmado/abonado */}
+      {confirmado&&(
+        <div style={{background:envio.estadoPago==="abonado"?"#041f14":"#0f0b2a",border:"1px solid "+(envio.estadoPago==="abonado"?"#065f46":"#4c1d95"),borderRadius:"8px",padding:"0.5rem 1rem",marginBottom:"0.65rem",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"0.5rem"}}>
+          <div>
+            <div style={{color:envio.estadoPago==="abonado"?"#34d399":"#a78bfa",fontWeight:700,fontSize:"0.82rem"}}>{envio.estadoPago==="abonado"?"✓ Abonado a la logística":"🔒 Confirmado — envío anclado"}</div>
+            {!esAdmin&&<div style={{color:"#4b5563",fontSize:"0.68rem",marginTop:"2px"}}>Solo administradores pueden modificar este envío</div>}
+          </div>
+          {esAdmin&&<button onClick={handleDesconfirmar} style={{...S.btnSm(false),color:"#f59e0b",borderColor:"#78350f",fontSize:"0.7rem",flexShrink:0}}>↩ Desconfirmar</button>}
+        </div>
+      )}
+      {/* Wrapper de bloqueo */}
+      <div style={{opacity:bloqueado?0.45:1,pointerEvents:bloqueado?"none":"auto"}}>
       {/* Costo logística editable */}
       <div style={{display:"flex",alignItems:"center",gap:"0.6rem",marginBottom:"0.65rem",flexWrap:"wrap"}}>
         <span style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase"}}>Costo logística:</span>
@@ -776,9 +792,13 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp}){
         <button onClick={()=>set("retiro",e.retiro!==null?null:"")} style={S.btnSm(e.retiro!==null,"#f97316")}>Retiro</button>
         {e.retiro!==null&&<textarea value={e.retiro||""} onChange={ev=>set("retiro",ev.target.value)} placeholder="Que tiene que retirar..." style={{...S.input,display:"block",width:"100%",marginTop:"4px",height:"42px",resize:"vertical",fontSize:"0.8rem"}}/>}
       </div>
-      <div style={{display:"flex",gap:"0.5rem",justifyContent:"flex-end"}}>
+      </div>{/* fin wrapper bloqueo */}
+      <div style={{display:"flex",gap:"0.5rem",justifyContent:"flex-end",flexWrap:"wrap",marginTop:"0.5rem"}}>
         <button onClick={onClose} style={S.btn(false)}>Cancelar</button>
-        <button onClick={handleSave} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)"}}>Guardar</button>
+        {!bloqueado&&<button onClick={handleSave} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)"}}>Guardar</button>}
+        {!confirmado&&e.trans&&e.estado!=="cancelado"&&(
+          <button onClick={handleConfirmar} style={{...S.btn(true),background:"linear-gradient(135deg,#059669,#10b981)"}}>✓ Confirmar entrega</button>
+        )}
       </div>
     </div>
   );
@@ -997,7 +1017,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
                   {esTN&&e.importeOrden>0&&<span style={{color:"#6b7280",fontSize:"0.7rem"}}>{fmt(e.importeOrden)}</span>}
                 </div>
               </div>
-              {isEdit&&!modoSel&&<PanelEdit envio={e} onSave={saveEnvio} onSaveMultiple={saveMultipleEnvios} onClose={()=>setEditId(null)} lc={lc} envios={envios} getImp={getImp}/>}
+              {isEdit&&!modoSel&&<PanelEdit envio={e} onSave={saveEnvio} onSaveMultiple={saveMultipleEnvios} onClose={()=>setEditId(null)} lc={lc} envios={envios} getImp={getImp} esAdmin={esAdmin}/>}
             </div>
           );
         })}
@@ -1848,334 +1868,247 @@ function TabMapa({ envios, lc }) {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// TAB LIQUIDACION LOG — registro de pagos a logísticas
+// TAB LIQUIDACION LOG — envíos confirmados y pagos a logísticas
 // ════════════════════════════════════════════════════════════════════
-const ESTADO_LIQ_C={pendiente:{l:"Pendiente",c:"#f59e0b",bg:"#1c1400"},verificado:{l:"Verificado",c:"#6366f1",bg:"#0f0b2a"},pagado:{l:"Pagado",c:"#10b981",bg:"#041f14"}};
-function TabLiquidacionLog({envios,zc,lc}){
+function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
   const hoy=fechaHoy();
-  const [liquidaciones,setLiquidaciones]=useState([]);
   const [filTrans,setFilTrans]=useState("TODOS");
-  const [filEstado,setFilEstado]=useState("todos");
-  const [modalNueva,setModalNueva]=useState(false);
-  const [nueva,setNueva]=useState({logistica:"",desde:"",hasta:"",montoLogistica:"",notas:""});
-  const [preview,setPreview]=useState(null); // {envios,montoSistema}
-  const [expandedId,setExpandedId]=useState(null);
-  const [modalPago,setModalPago]=useState(null); // liquidacion doc
+  const [filVista,setFilVista]=useState("pendiente");
+  const [filDesde,setFilDesde]=useState("");
+  const [filHasta,setFilHasta]=useState("");
+  const [selIds,setSelIds]=useState(new Set());
+  const [modalPago,setModalPago]=useState(null);
   const [pago,setPago]=useState({monto:"",fecha:hoy,notas:""});
+  const [historial,setHistorial]=useState([]);
+  const [vistaHistorial,setVistaHistorial]=useState(false);
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const tmap=buildTarifaMap(zc);
   const getImp=e=>calcImp(e,tmap,lc,zc);
+  const fmt=n=>"$"+Math.round(n||0).toLocaleString("es-AR");
+  const fmtF=f=>f?f.split("-").reverse().join("/"):"";
 
   useEffect(()=>{
-    const unsub=onSnapshot(collection(db,"liquidacionesLog"),snap=>{
-      setLiquidaciones(snap.docs.map(d=>({id:d.id,...d.data()}))
+    const unsub=onSnapshot(collection(db,"pagosLogistica"),snap=>{
+      setHistorial(snap.docs.map(d=>({id:d.id,...d.data()}))
         .sort((a,b)=>(b.creadoEn?.seconds||0)-(a.creadoEn?.seconds||0)));
     });
-    return ()=>unsub();
+    return()=>unsub();
   },[]);
 
-  const calcularPreview=()=>{
-    if(!nueva.logistica||!nueva.desde||!nueva.hasta)return;
-    const envPeriodo=envios.filter(e=>{
-      const f=e.fecha||e.fechaVenta||"";
-      return e.trans===nueva.logistica&&f>=nueva.desde&&f<=nueva.hasta&&e.estado!=="cancelado";
-    });
-    const montoSistema=envPeriodo.reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
-    setPreview({envios:envPeriodo,montoSistema});
+  const envRelevantes=envios.filter(e=>e.estadoPago==="confirmado"||e.estadoPago==="abonado");
+
+  const cardsPorLog=logActivas.map(l=>{
+    const conf=envRelevantes.filter(e=>e.trans===l&&e.estadoPago==="confirmado");
+    const abon=envRelevantes.filter(e=>e.trans===l&&e.estadoPago==="abonado");
+    const saldo=conf.reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
+    const pagado=abon.reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
+    return{l,saldo,pagado,confCount:conf.length,abonCount:abon.length};
+  }).filter(x=>x.confCount>0||x.abonCount>0);
+
+  const envFil=envRelevantes.filter(e=>{
+    if(filTrans!=="TODOS"&&e.trans!==filTrans)return false;
+    if(filVista==="pendiente"&&e.estadoPago!=="confirmado")return false;
+    if(filVista==="abonado"&&e.estadoPago!=="abonado")return false;
+    const f=e.fecha||e.fechaVenta||"";
+    if(filDesde&&f<filDesde)return false;
+    if(filHasta&&f>filHasta)return false;
+    return true;
+  }).sort((a,b)=>{
+    const la=a.trans||"",lb=b.trans||"";
+    if(la!==lb)return la.localeCompare(lb);
+    return(a.fecha||"").localeCompare(b.fecha||"");
+  });
+
+  const porLog={};
+  envFil.forEach(e=>{if(!porLog[e.trans])porLog[e.trans]=[];porLog[e.trans].push(e);});
+
+  const confirmarSeleccionados=()=>{
+    if(!selIds.size)return;
+    setEnvios(prev=>prev.map(e=>selIds.has(e.id)&&!e.estadoPago?{...e,estadoPago:"confirmado",estadoPagoFecha:hoy}:e));
+    setSelIds(new Set());
   };
 
-  const crearLiquidacion=async()=>{
-    if(!preview||!nueva.logistica)return;
-    const montoLog=parseFloat((nueva.montoLogistica||"").toString().replace(",","."))||0;
-    await addDoc(collection(db,"liquidacionesLog"),{
-      logistica:nueva.logistica,
-      desde:nueva.desde,
-      hasta:nueva.hasta,
-      cantEnvios:preview.envios.length,
-      montoSistema:preview.montoSistema,
-      montoLogistica:montoLog,
-      diferencia:montoLog-preview.montoSistema,
-      estado:"pendiente",
-      fechaPago:null,
-      montoPagado:null,
-      notas:nueva.notas||"",
-      creadoEn:serverTimestamp(),
-    });
-    setModalNueva(false);
-    setNueva({logistica:"",desde:"",hasta:"",montoLogistica:"",notas:""});
-    setPreview(null);
+  const abrirModalPago=(logistica,enviosAPagar)=>{
+    const total=enviosAPagar.reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
+    setModalPago({logistica,envios:enviosAPagar,total});
+    setPago({monto:Math.round(total).toString(),fecha:hoy,notas:""});
   };
-
-  const verificar=async(id)=>await updateDoc(doc(db,"liquidacionesLog",id),{estado:"verificado"});
 
   const registrarPago=async()=>{
     if(!modalPago)return;
-    await updateDoc(doc(db,"liquidacionesLog",modalPago.id),{
-      estado:"pagado",
-      fechaPago:pago.fecha,
-      montoPagado:parseFloat((pago.monto||"").toString().replace(",","."))||0,
+    const monto=parseFloat((pago.monto||"").toString().replace(",","."))||0;
+    const ids=modalPago.envios.map(e=>e.id);
+    setEnvios(prev=>prev.map(e=>ids.includes(e.id)?{...e,estadoPago:"abonado",estadoPagoFecha:hoy}:e));
+    await addDoc(collection(db,"pagosLogistica"),{
+      logistica:modalPago.logistica,
+      enviosIds:ids,
+      cantEnvios:ids.length,
+      montoSistema:modalPago.total,
+      montoPagado:monto,
+      fecha:pago.fecha,
       notas:pago.notas,
+      creadoEn:serverTimestamp(),
     });
     setModalPago(null);
-    setPago({monto:"",fecha:hoy,notas:""});
   };
 
-  const eliminarLiq=async(id)=>{
-    if(!window.confirm("¿Eliminar esta liquidación?"))return;
-    await deleteDoc(doc(db,"liquidacionesLog",id));
+  const toggleSel=id=>setSelIds(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
+  const toggleLogSel=envLog=>{
+    const ids=envLog.map(e=>e.id);
+    const allSel=ids.every(id=>selIds.has(id));
+    setSelIds(p=>{const n=new Set(p);ids.forEach(id=>allSel?n.delete(id):n.add(id));return n;});
   };
 
-  const listaFil=liquidaciones.filter(l=>{
-    if(filTrans!=="TODOS"&&l.logistica!==filTrans)return false;
-    if(filEstado!=="todos"&&l.estado!==filEstado)return false;
-    return true;
-  });
-
-  const cardsPorLog=logActivas.map(l=>{
-    const liqs=liquidaciones.filter(x=>x.logistica===l&&x.estado!=="pagado");
-    const total=liqs.reduce((s,x)=>s+(x.montoLogistica||x.montoSistema||0),0);
-    return{l,total,count:liqs.length};
-  }).filter(x=>x.count>0);
-
-  const fmt=n=>n>0?"$"+Math.round(n).toLocaleString("es-AR"):"$0";
-  const fmtFecha=f=>f?f.split("-").reverse().join("/"):"";
+  const totalSaldoPendiente=envRelevantes.filter(e=>e.estadoPago==="confirmado").reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
 
   return(
     <div>
-      {/* Cards resumen por logística */}
+      {/* Resumen global */}
+      {totalSaldoPendiente>0&&(
+        <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.8rem",background:"#1c1400",border:"1px solid #78350f",display:"flex",alignItems:"center",gap:"1rem",flexWrap:"wrap"}}>
+          <span style={{color:"#f59e0b",fontWeight:700,fontSize:"0.85rem"}}>Saldo pendiente de pago a logísticas</span>
+          <span style={{color:"#fbbf24",fontWeight:800,fontSize:"1.2rem"}}>{fmt(totalSaldoPendiente)}</span>
+        </div>
+      )}
+
+      {/* Cards por logística */}
       {cardsPorLog.length>0&&(
         <div style={{display:"flex",gap:"0.6rem",flexWrap:"wrap",marginBottom:"0.8rem"}}>
           {cardsPorLog.map(c=>(
             <div key={c.l} onClick={()=>setFilTrans(filTrans===c.l?"TODOS":c.l)}
               style={{...S.card,padding:"0.65rem 1rem",cursor:"pointer",border:filTrans===c.l?"1px solid "+(lc[c.l]?.color||"#6366f1"):"1px solid #1e2535",minWidth:"160px",flex:"1 1 160px"}}>
-              <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"4px"}}>
-                <Bdg label={c.l} bg={lc[c.l]?.bg||"#1e293b"} t={lc[c.l]?.color||"#94a3b8"} style={{fontSize:"0.7rem"}}/>
-              </div>
-              <div style={{color:"#f59e0b",fontWeight:700,fontSize:"1.1rem"}}>{fmt(c.total)}</div>
-              <div style={{color:"#4b5563",fontSize:"0.68rem"}}>{c.count} liq. pendiente{c.count!==1?"s":""} de pago</div>
+              <Bdg label={c.l} bg={lc[c.l]?.bg||"#1e293b"} t={lc[c.l]?.color||"#94a3b8"} style={{fontSize:"0.7rem",marginBottom:"6px",display:"inline-block"}}/>
+              <div style={{color:"#f59e0b",fontWeight:700,fontSize:"1.1rem"}}>{fmt(c.saldo)}</div>
+              <div style={{color:"#4b5563",fontSize:"0.68rem"}}>{c.confCount} pendiente{c.confCount!==1?"s":""} de pago</div>
+              {c.abonCount>0&&<div style={{color:"#10b981",fontSize:"0.68rem",marginTop:"2px"}}>✓ {c.abonCount} abonado{c.abonCount!==1?"s":""}</div>}
             </div>
           ))}
         </div>
       )}
 
-      {/* Barra de filtros + botón nueva */}
+      {/* Barra filtros */}
       <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"4px",flexWrap:"wrap",alignItems:"center"}}>
-        <button onClick={()=>{setModalNueva(true);setPreview(null);}} style={S.btn(false,"#6366f1")}>+ Nueva liquidación</button>
-        <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
-        {["TODOS",...logActivas].map(t=>(
-          <button key={t} onClick={()=>setFilTrans(t)} style={S.btnSm(filTrans===t,lc[t]?.color||"#6366f1")}>{t}</button>
-        ))}
-        <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
-        {[{k:"todos",l:"Todos"},{k:"pendiente",l:"Pendientes"},{k:"verificado",l:"Verificados"},{k:"pagado",l:"Pagados"}].map(x=>(
-          <button key={x.k} onClick={()=>setFilEstado(x.k)} style={S.btnSm(filEstado===x.k,ESTADO_LIQ_C[x.k]?.c||"#6b7280")}>{x.l}</button>
-        ))}
+        <button onClick={()=>setVistaHistorial(false)} style={S.btn(!vistaHistorial,"#6366f1")}>Envíos</button>
+        <button onClick={()=>setVistaHistorial(true)} style={S.btn(vistaHistorial,"#10b981")}>Historial pagos</button>
+        {!vistaHistorial&&<>
+          <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
+          {["TODOS",...logActivas].map(t=>(
+            <button key={t} onClick={()=>setFilTrans(t)} style={S.btnSm(filTrans===t,lc[t]?.color||"#6366f1")}>{t}</button>
+          ))}
+          <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
+          {[{k:"pendiente",l:"Pendientes"},{k:"abonado",l:"Abonados"},{k:"todos",l:"Todos"}].map(x=>(
+            <button key={x.k} onClick={()=>setFilVista(x.k)} style={S.btnSm(filVista===x.k,x.k==="pendiente"?"#f59e0b":x.k==="abonado"?"#10b981":"#6b7280")}>{x.l}</button>
+          ))}
+          <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
+          <input type="date" value={filDesde} onChange={ev=>setFilDesde(ev.target.value)} style={{...S.input,padding:"3px 6px",width:"128px",fontSize:"0.72rem"}}/>
+          <input type="date" value={filHasta} onChange={ev=>setFilHasta(ev.target.value)} style={{...S.input,padding:"3px 6px",width:"128px",fontSize:"0.72rem"}}/>
+          {(filDesde||filHasta)&&<button onClick={()=>{setFilDesde("");setFilHasta("");}} style={{...S.btnSm(false),fontSize:"0.68rem",color:"#6b7280"}}>✕</button>}
+        </>}
       </div>
 
-      {/* Lista de liquidaciones */}
-      {listaFil.length===0?(
-        <div style={{...S.card,padding:"2rem",textAlign:"center",color:"#4b5563"}}>No hay liquidaciones{filTrans!=="TODOS"?` para ${filTrans}`:""}{filEstado!=="todos"?` en estado ${ESTADO_LIQ_C[filEstado]?.l||filEstado}`:""}</div>
-      ):(
+      {/* Historial de pagos */}
+      {vistaHistorial&&(
         <div style={{display:"flex",flexDirection:"column",gap:"0.5rem"}}>
-          {listaFil.map(liq=>{
-            const ec=ESTADO_LIQ_C[liq.estado]||ESTADO_LIQ_C.pendiente;
-            const difPos=liq.diferencia>0;
-            const difNeg=liq.diferencia<0;
-            const expanded=expandedId===liq.id;
-            // Detalle de envíos del período
-            const envPeriodo=envios.filter(e=>{
-              const f=e.fecha||e.fechaVenta||"";
-              return e.trans===liq.logistica&&f>=liq.desde&&f<=liq.hasta&&e.estado!=="cancelado";
-            });
-            return(
-              <div key={liq.id} style={{...S.card,padding:"0",overflow:"hidden",border:"1px solid #1e2535"}}>
-                {/* Header */}
-                <div style={{display:"flex",alignItems:"center",gap:"0.75rem",padding:"0.75rem 1rem",cursor:"pointer"}} onClick={()=>setExpandedId(expanded?null:liq.id)}>
-                  <Bdg label={liq.logistica} bg={lc[liq.logistica]?.bg||"#1e293b"} t={lc[liq.logistica]?.color||"#94a3b8"} style={{fontSize:"0.7rem",flexShrink:0}}/>
-                  <span style={{color:"#9ca3af",fontSize:"0.78rem",flexShrink:0}}>{fmtFecha(liq.desde)} → {fmtFecha(liq.hasta)}</span>
-                  <span style={{color:"#4b5563",fontSize:"0.72rem",flexShrink:0}}>{liq.cantEnvios} envíos</span>
-                  <div style={{flex:1}}/>
-                  {liq.diferencia!==0&&liq.diferencia!=null&&(
-                    <span style={{fontSize:"0.72rem",fontWeight:600,color:difPos?"#f87171":"#34d399",background:difPos?"#1c0a0a":"#041f14",border:"1px solid "+(difPos?"#7f1d1d":"#065f46"),borderRadius:"5px",padding:"2px 7px",flexShrink:0}}>
-                      {difPos?"↑":""}{difNeg?"↓":""}{fmt(Math.abs(liq.diferencia))} dif.
-                    </span>
-                  )}
-                  <div style={{textAlign:"right",flexShrink:0}}>
-                    <div style={{color:"#e5e7eb",fontWeight:700,fontSize:"0.95rem"}}>{fmt(liq.montoPagado||liq.montoLogistica||liq.montoSistema)}</div>
-                    <div style={{color:ec.c,fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>{ec.l}</div>
-                  </div>
-                  <span style={{color:"#374151",fontSize:"0.7rem",marginLeft:"4px"}}>{expanded?"▲":"▼"}</span>
-                </div>
-
-                {/* Detalle expandible */}
-                {expanded&&(
-                  <div style={{borderTop:"1px solid #1e2535",padding:"0.75rem 1rem"}}>
-                    {/* Comparación montos */}
-                    <div style={{display:"flex",gap:"1rem",marginBottom:"0.75rem",flexWrap:"wrap"}}>
-                      <div style={{background:"#0d1119",borderRadius:"8px",padding:"0.5rem 0.9rem",flex:1,minWidth:"130px"}}>
-                        <div style={{color:"#4b5563",fontSize:"0.62rem",textTransform:"uppercase",fontWeight:700}}>Sistema</div>
-                        <div style={{color:"#10b981",fontWeight:700,fontSize:"1rem"}}>{fmt(liq.montoSistema)}</div>
-                      </div>
-                      <div style={{background:"#0d1119",borderRadius:"8px",padding:"0.5rem 0.9rem",flex:1,minWidth:"130px"}}>
-                        <div style={{color:"#4b5563",fontSize:"0.62rem",textTransform:"uppercase",fontWeight:700}}>Logística reportó</div>
-                        <div style={{color:"#e5e7eb",fontWeight:700,fontSize:"1rem"}}>{fmt(liq.montoLogistica)}</div>
-                      </div>
-                      {liq.diferencia!=null&&liq.diferencia!==0&&(
-                        <div style={{background:difPos?"#1c0a0a":"#041f14",borderRadius:"8px",padding:"0.5rem 0.9rem",flex:1,minWidth:"130px",border:"1px solid "+(difPos?"#7f1d1d":"#065f46")}}>
-                          <div style={{color:"#4b5563",fontSize:"0.62rem",textTransform:"uppercase",fontWeight:700}}>Diferencia</div>
-                          <div style={{color:difPos?"#f87171":"#34d399",fontWeight:700,fontSize:"1rem"}}>{difPos?"+":""}{fmt(liq.diferencia)}</div>
-                          <div style={{color:"#4b5563",fontSize:"0.62rem"}}>{difPos?"Logística cobró más":"Logística cobró menos"}</div>
-                        </div>
-                      )}
-                      {liq.estado==="pagado"&&(
-                        <div style={{background:"#041f14",borderRadius:"8px",padding:"0.5rem 0.9rem",flex:1,minWidth:"130px",border:"1px solid #065f46"}}>
-                          <div style={{color:"#4b5563",fontSize:"0.62rem",textTransform:"uppercase",fontWeight:700}}>Pagado</div>
-                          <div style={{color:"#10b981",fontWeight:700,fontSize:"1rem"}}>{fmt(liq.montoPagado)}</div>
-                          <div style={{color:"#4b5563",fontSize:"0.62rem"}}>{fmtFecha(liq.fechaPago)}</div>
-                        </div>
-                      )}
-                    </div>
-                    {liq.notas&&<div style={{background:"#0d1119",borderRadius:"6px",padding:"0.4rem 0.8rem",marginBottom:"0.6rem",fontSize:"0.75rem",color:"#9ca3af",fontStyle:"italic"}}>{liq.notas}</div>}
-
-                    {/* Envíos incluidos */}
-                    <div style={{marginBottom:"0.75rem"}}>
-                      <div style={{color:"#4b5563",fontSize:"0.65rem",textTransform:"uppercase",fontWeight:700,marginBottom:"6px"}}>Envíos del período ({envPeriodo.length})</div>
-                      <div style={{maxHeight:"220px",overflowY:"auto",display:"flex",flexDirection:"column",gap:"3px"}}>
-                        {envPeriodo.map(e=>{
-                          const imp=e.importeOverride||getImp(e)||0;
-                          return(
-                            <div key={e.id} style={{display:"flex",gap:"0.5rem",alignItems:"center",padding:"4px 8px",background:"#0d1119",borderRadius:"6px",fontSize:"0.75rem"}}>
-                              <span style={{color:"#6b7280",fontSize:"0.68rem",flexShrink:0}}>{fmtFecha(e.fecha||e.fechaVenta)}</span>
-                              <span style={{color:"#e5e7eb",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}{e.partido?` · ${e.partido}`:""}</span>
-                              {e.nroOrdenTN&&<span style={{color:"#4b5563",fontSize:"0.68rem",flexShrink:0}}>#{e.nroOrdenTN}</span>}
-                              {e.importeOverride&&<span style={{color:"#fbbf24",fontSize:"0.68rem",flexShrink:0}}>*</span>}
-                              <span style={{color:"#10b981",fontWeight:600,flexShrink:0}}>{fmt(imp)}</span>
-                            </div>
-                          );
-                        })}
-                        {envPeriodo.length===0&&<div style={{color:"#4b5563",fontSize:"0.75rem",padding:"8px"}}>No se encontraron envíos para este período.</div>}
-                      </div>
-                    </div>
-
-                    {/* Acciones */}
-                    <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
-                      {liq.estado==="pendiente"&&<button onClick={()=>verificar(liq.id)} style={S.btn(false,"#6366f1")}>✓ Verificar</button>}
-                      {liq.estado==="verificado"&&<button onClick={()=>{setModalPago(liq);setPago({monto:liq.montoLogistica||"",fecha:hoy,notas:liq.notas||""});}} style={S.btn(false,"#10b981")}>💳 Registrar pago</button>}
-                      {liq.estado==="pendiente"&&<button onClick={()=>eliminarLiq(liq.id)} style={{...S.btnSm(false),color:"#f87171",borderColor:"#7f1d1d"}}>Eliminar</button>}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {historial.length===0?(
+            <div style={{...S.card,padding:"2rem",textAlign:"center",color:"#4b5563"}}>Sin pagos registrados aún</div>
+          ):historial.filter(h=>filTrans==="TODOS"||h.logistica===filTrans).map(h=>(
+            <div key={h.id} style={{...S.card,padding:"0.75rem 1rem",display:"flex",gap:"1rem",alignItems:"center",flexWrap:"wrap"}}>
+              <Bdg label={h.logistica} bg={lc[h.logistica]?.bg||"#1e293b"} t={lc[h.logistica]?.color||"#94a3b8"} style={{fontSize:"0.7rem",flexShrink:0}}/>
+              <span style={{color:"#6b7280",fontSize:"0.75rem",flexShrink:0}}>{fmtF(h.fecha)}</span>
+              <span style={{color:"#6b7280",fontSize:"0.72rem",flexShrink:0}}>{h.cantEnvios} envíos</span>
+              {h.montoSistema!==h.montoPagado&&<span style={{color:"#4b5563",fontSize:"0.7rem"}}>Sistema: {fmt(h.montoSistema)}</span>}
+              <div style={{flex:1}}/>
+              {h.notas&&<span style={{color:"#4b5563",fontSize:"0.7rem",fontStyle:"italic"}}>{h.notas}</span>}
+              <span style={{color:"#10b981",fontWeight:700,fontSize:"1rem",flexShrink:0}}>{fmt(h.montoPagado)}</span>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Modal nueva liquidación */}
-      {modalNueva&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:"1rem"}}>
-          <div style={{background:"#12172a",border:"1px solid #1e2535",borderRadius:"14px",padding:"1.5rem",width:"100%",maxWidth:"560px",maxHeight:"90vh",overflowY:"auto"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
-              <span style={{color:"#e5e7eb",fontWeight:700,fontSize:"1rem"}}>Nueva liquidación</span>
-              <button onClick={()=>{setModalNueva(false);setPreview(null);setNueva({logistica:"",desde:"",hasta:"",montoLogistica:"",notas:""}); }} style={{background:"none",border:"none",color:"#6b7280",cursor:"pointer",fontSize:"1.2rem"}}>✕</button>
-            </div>
-
-            {/* Logística */}
-            <div style={{marginBottom:"0.75rem"}}>
-              <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"6px"}}>Logística</div>
-              <div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>
-                {logActivas.map(l=>(
-                  <button key={l} onClick={()=>{setNueva(p=>({...p,logistica:l}));setPreview(null);}} style={S.chip(nueva.logistica===l,lc[l]?.color||"#6366f1",lc[l]?.bg||"#1e293b")}>{l}</button>
-                ))}
-              </div>
-            </div>
-
-            {/* Período */}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.6rem",marginBottom:"0.75rem"}}>
-              <div>
-                <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Desde</div>
-                <input type="date" value={nueva.desde} onChange={ev=>{setNueva(p=>({...p,desde:ev.target.value}));setPreview(null);}} style={{...S.input,width:"100%",padding:"5px 8px"}}/>
-              </div>
-              <div>
-                <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Hasta</div>
-                <input type="date" value={nueva.hasta} onChange={ev=>{setNueva(p=>({...p,hasta:ev.target.value}));setPreview(null);}} style={{...S.input,width:"100%",padding:"5px 8px"}}/>
-              </div>
-            </div>
-
-            {/* Botón calcular */}
-            <button onClick={calcularPreview} disabled={!nueva.logistica||!nueva.desde||!nueva.hasta}
-              style={{...S.btn(false,"#6366f1"),width:"100%",marginBottom:"0.75rem",opacity:(!nueva.logistica||!nueva.desde||!nueva.hasta)?0.4:1}}>
-              🔍 Calcular envíos del período
-            </button>
-
-            {/* Preview */}
-            {preview&&(
-              <div style={{background:"#0d1119",border:"1px solid #1e2535",borderRadius:"10px",padding:"0.75rem 1rem",marginBottom:"0.75rem"}}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:"6px"}}>
-                  <span style={{color:"#9ca3af",fontSize:"0.8rem"}}>{preview.envios.length} envíos encontrados</span>
-                  <span style={{color:"#10b981",fontWeight:700,fontSize:"0.9rem"}}>{fmt(preview.montoSistema)} sistema</span>
-                </div>
-                <div style={{maxHeight:"140px",overflowY:"auto",display:"flex",flexDirection:"column",gap:"2px"}}>
-                  {preview.envios.map(e=>(
-                    <div key={e.id} style={{display:"flex",gap:"0.5rem",fontSize:"0.72rem",padding:"3px 0",borderBottom:"1px solid #1e2535"}}>
-                      <span style={{color:"#6b7280",flexShrink:0}}>{fmtFecha(e.fecha||e.fechaVenta)}</span>
-                      <span style={{color:"#e5e7eb",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}</span>
-                      <span style={{color:"#10b981",flexShrink:0,fontWeight:600}}>{fmt(e.importeOverride||getImp(e)||0)}</span>
-                    </div>
-                  ))}
-                  {preview.envios.length===0&&<div style={{color:"#4b5563",fontSize:"0.75rem"}}>Sin envíos en ese período para {nueva.logistica}.</div>}
-                </div>
+      {/* Envíos agrupados por logística */}
+      {!vistaHistorial&&(
+        Object.keys(porLog).length===0?(
+          <div style={{...S.card,padding:"2rem",textAlign:"center",color:"#4b5563"}}>
+            {envRelevantes.length===0?"Ningún envío confirmado aún. Confirmá entregas desde el panel de edición de cada envío.":filVista==="pendiente"?"No hay envíos confirmados sin abonar en este filtro":"Sin envíos en este filtro"}
+          </div>
+        ):(
+          <div style={{display:"flex",flexDirection:"column",gap:"0.75rem"}}>
+            {selIds.size>0&&(
+              <div style={{...S.card,padding:"0.5rem 1rem",background:"#0f0b2a",border:"1px solid #4c1d95",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
+                <span style={{color:"#a78bfa",fontWeight:700,fontSize:"0.82rem"}}>{selIds.size} seleccionado{selIds.size!==1?"s":""}</span>
+                <span style={{color:"#6366f1",fontWeight:700}}>{fmt([...selIds].reduce((s,id)=>{const e=envios.find(x=>x.id===id);return s+(e?.importeOverride||getImp(e)||0);},0))}</span>
+                <div style={{flex:1}}/>
+                <button onClick={confirmarSeleccionados} style={S.btn(false,"#6366f1")}>✓ Confirmar seleccionados</button>
               </div>
             )}
-
-            {/* Monto logística */}
-            <div style={{marginBottom:"0.75rem"}}>
-              <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Monto que informó la logística</div>
-              <input type="number" placeholder="0" value={nueva.montoLogistica} onChange={ev=>setNueva(p=>({...p,montoLogistica:ev.target.value}))} style={{...S.input,width:"100%",padding:"6px 10px",fontSize:"0.9rem"}}/>
-              {preview&&nueva.montoLogistica&&(()=>{
-                const dif=parseFloat(nueva.montoLogistica||0)-preview.montoSistema;
-                if(Math.abs(dif)<1)return null;
-                return<div style={{marginTop:"4px",fontSize:"0.72rem",color:dif>0?"#f87171":"#34d399",fontWeight:600}}>
-                  Diferencia: {dif>0?"+":""}{fmt(dif)} ({dif>0?"logística cobró más":"logística cobró menos"})
-                </div>;
-              })()}
-            </div>
-
-            {/* Notas */}
-            <div style={{marginBottom:"1rem"}}>
-              <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Notas (opcional)</div>
-              <textarea value={nueva.notas} onChange={ev=>setNueva(p=>({...p,notas:ev.target.value}))} placeholder="Observaciones..." style={{...S.input,display:"block",width:"100%",height:"56px",resize:"vertical",fontSize:"0.8rem"}}/>
-            </div>
-
-            <div style={{display:"flex",gap:"8px",justifyContent:"flex-end"}}>
-              <button onClick={()=>{setModalNueva(false);setPreview(null);}} style={S.btnSm(false)}>Cancelar</button>
-              <button onClick={crearLiquidacion} disabled={!preview||preview.envios.length===0} style={{...S.btn(false,"#6366f1"),opacity:(!preview||preview.envios.length===0)?0.4:1}}>Guardar liquidación</button>
-            </div>
+            {Object.entries(porLog).map(([log,envLog])=>{
+              const totalLog=envLog.reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
+              const pendLog=envLog.filter(e=>e.estadoPago==="confirmado");
+              const totalPend=pendLog.reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
+              const allLogSel=envLog.length>0&&envLog.every(e=>selIds.has(e.id));
+              return(
+                <div key={log} style={{...S.card,padding:"0",overflow:"hidden",border:"1px solid #1e2535"}}>
+                  <div style={{padding:"0.65rem 1rem",background:"#12172a",borderBottom:"1px solid #252d40",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
+                    <input type="checkbox" checked={allLogSel} onChange={()=>toggleLogSel(envLog)} style={{cursor:"pointer"}}/>
+                    <Bdg label={log} bg={lc[log]?.bg||"#1e293b"} t={lc[log]?.color||"#94a3b8"} style={{fontSize:"0.75rem"}}/>
+                    <span style={{color:"#9ca3af",fontSize:"0.78rem"}}>{envLog.length} envío{envLog.length!==1?"s":""}</span>
+                    <div style={{flex:1}}/>
+                    {pendLog.length>0&&<span style={{color:"#f59e0b",fontWeight:700}}>{fmt(totalPend)} pendiente</span>}
+                    <span style={{color:"#10b981",fontWeight:700,fontSize:"0.95rem"}}>{fmt(totalLog)}</span>
+                    {pendLog.length>0&&(
+                      <button onClick={()=>abrirModalPago(log,pendLog)} style={{...S.btn(false,"#10b981"),padding:"0.3rem 0.8rem",fontSize:"0.75rem"}}>💳 Pagar {pendLog.length===envLog.length?"todos":pendLog.length}</button>
+                    )}
+                  </div>
+                  <div>
+                    {envLog.map(e=>{
+                      const imp=e.importeOverride||getImp(e)||0;
+                      const abonado=e.estadoPago==="abonado";
+                      return(
+                        <div key={e.id} style={{display:"flex",alignItems:"center",gap:"0.6rem",padding:"7px 1rem",borderBottom:"1px solid #1a1f2e",background:selIds.has(e.id)?"#0f0b2a":"transparent"}}>
+                          {!abonado?<input type="checkbox" checked={selIds.has(e.id)} onChange={()=>toggleSel(e.id)} style={{cursor:"pointer",flexShrink:0}}/>:<span style={{color:"#10b981",fontSize:"0.75rem",flexShrink:0,width:"16px"}}>✓</span>}
+                          <span style={{color:"#6b7280",fontSize:"0.72rem",flexShrink:0,minWidth:"50px"}}>{fmtF(e.fecha||e.fechaVenta)}</span>
+                          <span style={{color:"#e5e7eb",fontSize:"0.8rem",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}{e.partido?` · ${e.partido}`:""}</span>
+                          {e.nroOrdenTN&&<span style={{color:"#4b5563",fontSize:"0.7rem",flexShrink:0}}>#{e.nroOrdenTN}</span>}
+                          {e.origen==="ML"&&<span style={{color:"#84cc16",fontSize:"0.65rem",flexShrink:0,padding:"1px 5px",border:"1px solid #84cc16",borderRadius:"3px"}}>FLEX</span>}
+                          {e.importeOverride&&<span style={{color:"#fbbf24",fontSize:"0.68rem",flexShrink:0}}>*</span>}
+                          <span style={{color:abonado?"#4b5563":"#10b981",fontWeight:600,fontSize:"0.82rem",flexShrink:0,textDecoration:abonado?"line-through":"none"}}>{fmt(imp)}</span>
+                          {!abonado&&<button onClick={()=>abrirModalPago(log,[e])} style={{...S.btnSm(false),padding:"1px 7px",fontSize:"0.68rem",color:"#10b981",borderColor:"#065f46",flexShrink:0}}>Pagar</button>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
+        )
       )}
 
-      {/* Modal registrar pago */}
+      {/* Modal pago */}
       {modalPago&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:"1rem"}}>
-          <div style={{background:"#12172a",border:"1px solid #1e2535",borderRadius:"14px",padding:"1.5rem",width:"100%",maxWidth:"400px"}}>
+          <div style={{background:"#12172a",border:"1px solid #1e2535",borderRadius:"14px",padding:"1.5rem",width:"100%",maxWidth:"440px"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
               <span style={{color:"#e5e7eb",fontWeight:700,fontSize:"1rem"}}>Registrar pago — {modalPago.logistica}</span>
               <button onClick={()=>setModalPago(null)} style={{background:"none",border:"none",color:"#6b7280",cursor:"pointer",fontSize:"1.2rem"}}>✕</button>
             </div>
-            <div style={{color:"#6b7280",fontSize:"0.72rem",marginBottom:"1rem"}}>
-              Período: {fmtFecha(modalPago.desde)} → {fmtFecha(modalPago.hasta)} · {modalPago.cantEnvios} envíos · Sistema: {fmt(modalPago.montoSistema)}
-            </div>
+            <div style={{color:"#6b7280",fontSize:"0.72rem",marginBottom:"1rem"}}>{modalPago.envios.length} envío{modalPago.envios.length!==1?"s":""} · Sistema: {fmt(modalPago.total)}</div>
             <div style={{marginBottom:"0.75rem"}}>
-              <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Monto pagado</div>
+              <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Monto a pagar</div>
               <input type="number" autoFocus value={pago.monto} onChange={ev=>setPago(p=>({...p,monto:ev.target.value}))} style={{...S.input,width:"100%",padding:"6px 10px",fontSize:"0.9rem"}}/>
+              {pago.monto&&Math.abs(parseFloat(pago.monto)-modalPago.total)>1&&(
+                <div style={{marginTop:"4px",fontSize:"0.72rem",color:parseFloat(pago.monto)>modalPago.total?"#f87171":"#34d399",fontWeight:600}}>
+                  Diferencia: {parseFloat(pago.monto)>modalPago.total?"+":""}{fmt(parseFloat(pago.monto)-modalPago.total)}
+                </div>
+              )}
             </div>
             <div style={{marginBottom:"0.75rem"}}>
-              <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Fecha de pago</div>
+              <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Fecha</div>
               <input type="date" value={pago.fecha} onChange={ev=>setPago(p=>({...p,fecha:ev.target.value}))} style={{...S.input,width:"100%",padding:"6px 10px"}}/>
             </div>
             <div style={{marginBottom:"1rem"}}>
               <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Notas</div>
-              <textarea value={pago.notas} onChange={ev=>setPago(p=>({...p,notas:ev.target.value}))} placeholder="Ajustes, descuentos, etc..." style={{...S.input,display:"block",width:"100%",height:"56px",resize:"vertical",fontSize:"0.8rem"}}/>
+              <textarea value={pago.notas} onChange={ev=>setPago(p=>({...p,notas:ev.target.value}))} placeholder="Ajustes, descuentos..." style={{...S.input,display:"block",width:"100%",height:"52px",resize:"vertical",fontSize:"0.8rem"}}/>
             </div>
             <div style={{display:"flex",gap:"8px",justifyContent:"flex-end"}}>
               <button onClick={()=>setModalPago(null)} style={S.btnSm(false)}>Cancelar</button>
@@ -4684,7 +4617,7 @@ export default function App(){
         {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZcPersist} lc={lc} setLc={setLcPersist}/>}
         {tab==="informe"     &&<TabInforme     envios={envios} zc={zc} lc={lc}/>}
         {tab==="liquidacion"    &&<TabLiquidacion    envios={envios} setEnvios={setEnvios} lc={lc}/>}
-        {tab==="liquidacionlog" &&<TabLiquidacionLog envios={envios} zc={zc} lc={lc}/>}
+        {tab==="liquidacionlog" &&<TabLiquidacionLog envios={envios} setEnvios={setEnvios} zc={zc} lc={lc} esAdmin={esAdmin}/>}
         {tab==="ctasctes"       &&<TabCtasCtes       envios={envios} lc={lc}/>}
         {tab==="localidades" &&<TabLocalidades cpExtra={cpExtra} setCpExtra={setCpExtra}/>}
         {tab==="usuarios"   &&esAdmin&&<TabUsuarios lc={lc} setLc={setLcPersist}/>}
