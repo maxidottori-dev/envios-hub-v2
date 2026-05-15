@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import * as XLSXLib from "xlsx";
 import { db } from "./firebase.js";
-import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, query, where, getDocs, addDoc, serverTimestamp, limit } from "firebase/firestore";
+import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, updateDoc, query, where, getDocs, addDoc, serverTimestamp, limit } from "firebase/firestore";
 
 const VERSION = "2.1";
 
@@ -1841,6 +1841,347 @@ function TabMapa({ envios, lc }) {
         <div style={{ textAlign: "center", padding: "3rem", color: "#4b5563" }}>
           <div style={{ fontSize: "2rem" }}>🗺️</div>
           <p style={{ marginTop: "0.5rem" }}>Carga un Excel primero</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// TAB LIQUIDACION LOG — registro de pagos a logísticas
+// ════════════════════════════════════════════════════════════════════
+const ESTADO_LIQ_C={pendiente:{l:"Pendiente",c:"#f59e0b",bg:"#1c1400"},verificado:{l:"Verificado",c:"#6366f1",bg:"#0f0b2a"},pagado:{l:"Pagado",c:"#10b981",bg:"#041f14"}};
+function TabLiquidacionLog({envios,zc,lc}){
+  const hoy=fechaHoy();
+  const [liquidaciones,setLiquidaciones]=useState([]);
+  const [filTrans,setFilTrans]=useState("TODOS");
+  const [filEstado,setFilEstado]=useState("todos");
+  const [modalNueva,setModalNueva]=useState(false);
+  const [nueva,setNueva]=useState({logistica:"",desde:"",hasta:"",montoLogistica:"",notas:""});
+  const [preview,setPreview]=useState(null); // {envios,montoSistema}
+  const [expandedId,setExpandedId]=useState(null);
+  const [modalPago,setModalPago]=useState(null); // liquidacion doc
+  const [pago,setPago]=useState({monto:"",fecha:hoy,notas:""});
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
+  const tmap=buildTarifaMap(zc);
+  const getImp=e=>calcImp(e,tmap,lc,zc);
+
+  useEffect(()=>{
+    const unsub=onSnapshot(collection(db,"liquidacionesLog"),snap=>{
+      setLiquidaciones(snap.docs.map(d=>({id:d.id,...d.data()}))
+        .sort((a,b)=>(b.creadoEn?.seconds||0)-(a.creadoEn?.seconds||0)));
+    });
+    return ()=>unsub();
+  },[]);
+
+  const calcularPreview=()=>{
+    if(!nueva.logistica||!nueva.desde||!nueva.hasta)return;
+    const envPeriodo=envios.filter(e=>{
+      const f=e.fecha||e.fechaVenta||"";
+      return e.trans===nueva.logistica&&f>=nueva.desde&&f<=nueva.hasta&&e.estado!=="cancelado";
+    });
+    const montoSistema=envPeriodo.reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
+    setPreview({envios:envPeriodo,montoSistema});
+  };
+
+  const crearLiquidacion=async()=>{
+    if(!preview||!nueva.logistica)return;
+    const montoLog=parseFloat((nueva.montoLogistica||"").toString().replace(",","."))||0;
+    await addDoc(collection(db,"liquidacionesLog"),{
+      logistica:nueva.logistica,
+      desde:nueva.desde,
+      hasta:nueva.hasta,
+      cantEnvios:preview.envios.length,
+      montoSistema:preview.montoSistema,
+      montoLogistica:montoLog,
+      diferencia:montoLog-preview.montoSistema,
+      estado:"pendiente",
+      fechaPago:null,
+      montoPagado:null,
+      notas:nueva.notas||"",
+      creadoEn:serverTimestamp(),
+    });
+    setModalNueva(false);
+    setNueva({logistica:"",desde:"",hasta:"",montoLogistica:"",notas:""});
+    setPreview(null);
+  };
+
+  const verificar=async(id)=>await updateDoc(doc(db,"liquidacionesLog",id),{estado:"verificado"});
+
+  const registrarPago=async()=>{
+    if(!modalPago)return;
+    await updateDoc(doc(db,"liquidacionesLog",modalPago.id),{
+      estado:"pagado",
+      fechaPago:pago.fecha,
+      montoPagado:parseFloat((pago.monto||"").toString().replace(",","."))||0,
+      notas:pago.notas,
+    });
+    setModalPago(null);
+    setPago({monto:"",fecha:hoy,notas:""});
+  };
+
+  const eliminarLiq=async(id)=>{
+    if(!window.confirm("¿Eliminar esta liquidación?"))return;
+    await deleteDoc(doc(db,"liquidacionesLog",id));
+  };
+
+  const listaFil=liquidaciones.filter(l=>{
+    if(filTrans!=="TODOS"&&l.logistica!==filTrans)return false;
+    if(filEstado!=="todos"&&l.estado!==filEstado)return false;
+    return true;
+  });
+
+  const cardsPorLog=logActivas.map(l=>{
+    const liqs=liquidaciones.filter(x=>x.logistica===l&&x.estado!=="pagado");
+    const total=liqs.reduce((s,x)=>s+(x.montoLogistica||x.montoSistema||0),0);
+    return{l,total,count:liqs.length};
+  }).filter(x=>x.count>0);
+
+  const fmt=n=>n>0?"$"+Math.round(n).toLocaleString("es-AR"):"$0";
+  const fmtFecha=f=>f?f.split("-").reverse().join("/"):"";
+
+  return(
+    <div>
+      {/* Cards resumen por logística */}
+      {cardsPorLog.length>0&&(
+        <div style={{display:"flex",gap:"0.6rem",flexWrap:"wrap",marginBottom:"0.8rem"}}>
+          {cardsPorLog.map(c=>(
+            <div key={c.l} onClick={()=>setFilTrans(filTrans===c.l?"TODOS":c.l)}
+              style={{...S.card,padding:"0.65rem 1rem",cursor:"pointer",border:filTrans===c.l?"1px solid "+(lc[c.l]?.color||"#6366f1"):"1px solid #1e2535",minWidth:"160px",flex:"1 1 160px"}}>
+              <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"4px"}}>
+                <Bdg label={c.l} bg={lc[c.l]?.bg||"#1e293b"} t={lc[c.l]?.color||"#94a3b8"} style={{fontSize:"0.7rem"}}/>
+              </div>
+              <div style={{color:"#f59e0b",fontWeight:700,fontSize:"1.1rem"}}>{fmt(c.total)}</div>
+              <div style={{color:"#4b5563",fontSize:"0.68rem"}}>{c.count} liq. pendiente{c.count!==1?"s":""} de pago</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Barra de filtros + botón nueva */}
+      <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"4px",flexWrap:"wrap",alignItems:"center"}}>
+        <button onClick={()=>{setModalNueva(true);setPreview(null);}} style={S.btn(false,"#6366f1")}>+ Nueva liquidación</button>
+        <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
+        {["TODOS",...logActivas].map(t=>(
+          <button key={t} onClick={()=>setFilTrans(t)} style={S.btnSm(filTrans===t,lc[t]?.color||"#6366f1")}>{t}</button>
+        ))}
+        <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
+        {[{k:"todos",l:"Todos"},{k:"pendiente",l:"Pendientes"},{k:"verificado",l:"Verificados"},{k:"pagado",l:"Pagados"}].map(x=>(
+          <button key={x.k} onClick={()=>setFilEstado(x.k)} style={S.btnSm(filEstado===x.k,ESTADO_LIQ_C[x.k]?.c||"#6b7280")}>{x.l}</button>
+        ))}
+      </div>
+
+      {/* Lista de liquidaciones */}
+      {listaFil.length===0?(
+        <div style={{...S.card,padding:"2rem",textAlign:"center",color:"#4b5563"}}>No hay liquidaciones{filTrans!=="TODOS"?` para ${filTrans}`:""}{filEstado!=="todos"?` en estado ${ESTADO_LIQ_C[filEstado]?.l||filEstado}`:""}</div>
+      ):(
+        <div style={{display:"flex",flexDirection:"column",gap:"0.5rem"}}>
+          {listaFil.map(liq=>{
+            const ec=ESTADO_LIQ_C[liq.estado]||ESTADO_LIQ_C.pendiente;
+            const difPos=liq.diferencia>0;
+            const difNeg=liq.diferencia<0;
+            const expanded=expandedId===liq.id;
+            // Detalle de envíos del período
+            const envPeriodo=envios.filter(e=>{
+              const f=e.fecha||e.fechaVenta||"";
+              return e.trans===liq.logistica&&f>=liq.desde&&f<=liq.hasta&&e.estado!=="cancelado";
+            });
+            return(
+              <div key={liq.id} style={{...S.card,padding:"0",overflow:"hidden",border:"1px solid #1e2535"}}>
+                {/* Header */}
+                <div style={{display:"flex",alignItems:"center",gap:"0.75rem",padding:"0.75rem 1rem",cursor:"pointer"}} onClick={()=>setExpandedId(expanded?null:liq.id)}>
+                  <Bdg label={liq.logistica} bg={lc[liq.logistica]?.bg||"#1e293b"} t={lc[liq.logistica]?.color||"#94a3b8"} style={{fontSize:"0.7rem",flexShrink:0}}/>
+                  <span style={{color:"#9ca3af",fontSize:"0.78rem",flexShrink:0}}>{fmtFecha(liq.desde)} → {fmtFecha(liq.hasta)}</span>
+                  <span style={{color:"#4b5563",fontSize:"0.72rem",flexShrink:0}}>{liq.cantEnvios} envíos</span>
+                  <div style={{flex:1}}/>
+                  {liq.diferencia!==0&&liq.diferencia!=null&&(
+                    <span style={{fontSize:"0.72rem",fontWeight:600,color:difPos?"#f87171":"#34d399",background:difPos?"#1c0a0a":"#041f14",border:"1px solid "+(difPos?"#7f1d1d":"#065f46"),borderRadius:"5px",padding:"2px 7px",flexShrink:0}}>
+                      {difPos?"↑":""}{difNeg?"↓":""}{fmt(Math.abs(liq.diferencia))} dif.
+                    </span>
+                  )}
+                  <div style={{textAlign:"right",flexShrink:0}}>
+                    <div style={{color:"#e5e7eb",fontWeight:700,fontSize:"0.95rem"}}>{fmt(liq.montoPagado||liq.montoLogistica||liq.montoSistema)}</div>
+                    <div style={{color:ec.c,fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>{ec.l}</div>
+                  </div>
+                  <span style={{color:"#374151",fontSize:"0.7rem",marginLeft:"4px"}}>{expanded?"▲":"▼"}</span>
+                </div>
+
+                {/* Detalle expandible */}
+                {expanded&&(
+                  <div style={{borderTop:"1px solid #1e2535",padding:"0.75rem 1rem"}}>
+                    {/* Comparación montos */}
+                    <div style={{display:"flex",gap:"1rem",marginBottom:"0.75rem",flexWrap:"wrap"}}>
+                      <div style={{background:"#0d1119",borderRadius:"8px",padding:"0.5rem 0.9rem",flex:1,minWidth:"130px"}}>
+                        <div style={{color:"#4b5563",fontSize:"0.62rem",textTransform:"uppercase",fontWeight:700}}>Sistema</div>
+                        <div style={{color:"#10b981",fontWeight:700,fontSize:"1rem"}}>{fmt(liq.montoSistema)}</div>
+                      </div>
+                      <div style={{background:"#0d1119",borderRadius:"8px",padding:"0.5rem 0.9rem",flex:1,minWidth:"130px"}}>
+                        <div style={{color:"#4b5563",fontSize:"0.62rem",textTransform:"uppercase",fontWeight:700}}>Logística reportó</div>
+                        <div style={{color:"#e5e7eb",fontWeight:700,fontSize:"1rem"}}>{fmt(liq.montoLogistica)}</div>
+                      </div>
+                      {liq.diferencia!=null&&liq.diferencia!==0&&(
+                        <div style={{background:difPos?"#1c0a0a":"#041f14",borderRadius:"8px",padding:"0.5rem 0.9rem",flex:1,minWidth:"130px",border:"1px solid "+(difPos?"#7f1d1d":"#065f46")}}>
+                          <div style={{color:"#4b5563",fontSize:"0.62rem",textTransform:"uppercase",fontWeight:700}}>Diferencia</div>
+                          <div style={{color:difPos?"#f87171":"#34d399",fontWeight:700,fontSize:"1rem"}}>{difPos?"+":""}{fmt(liq.diferencia)}</div>
+                          <div style={{color:"#4b5563",fontSize:"0.62rem"}}>{difPos?"Logística cobró más":"Logística cobró menos"}</div>
+                        </div>
+                      )}
+                      {liq.estado==="pagado"&&(
+                        <div style={{background:"#041f14",borderRadius:"8px",padding:"0.5rem 0.9rem",flex:1,minWidth:"130px",border:"1px solid #065f46"}}>
+                          <div style={{color:"#4b5563",fontSize:"0.62rem",textTransform:"uppercase",fontWeight:700}}>Pagado</div>
+                          <div style={{color:"#10b981",fontWeight:700,fontSize:"1rem"}}>{fmt(liq.montoPagado)}</div>
+                          <div style={{color:"#4b5563",fontSize:"0.62rem"}}>{fmtFecha(liq.fechaPago)}</div>
+                        </div>
+                      )}
+                    </div>
+                    {liq.notas&&<div style={{background:"#0d1119",borderRadius:"6px",padding:"0.4rem 0.8rem",marginBottom:"0.6rem",fontSize:"0.75rem",color:"#9ca3af",fontStyle:"italic"}}>{liq.notas}</div>}
+
+                    {/* Envíos incluidos */}
+                    <div style={{marginBottom:"0.75rem"}}>
+                      <div style={{color:"#4b5563",fontSize:"0.65rem",textTransform:"uppercase",fontWeight:700,marginBottom:"6px"}}>Envíos del período ({envPeriodo.length})</div>
+                      <div style={{maxHeight:"220px",overflowY:"auto",display:"flex",flexDirection:"column",gap:"3px"}}>
+                        {envPeriodo.map(e=>{
+                          const imp=e.importeOverride||getImp(e)||0;
+                          return(
+                            <div key={e.id} style={{display:"flex",gap:"0.5rem",alignItems:"center",padding:"4px 8px",background:"#0d1119",borderRadius:"6px",fontSize:"0.75rem"}}>
+                              <span style={{color:"#6b7280",fontSize:"0.68rem",flexShrink:0}}>{fmtFecha(e.fecha||e.fechaVenta)}</span>
+                              <span style={{color:"#e5e7eb",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}{e.partido?` · ${e.partido}`:""}</span>
+                              {e.nroOrdenTN&&<span style={{color:"#4b5563",fontSize:"0.68rem",flexShrink:0}}>#{e.nroOrdenTN}</span>}
+                              {e.importeOverride&&<span style={{color:"#fbbf24",fontSize:"0.68rem",flexShrink:0}}>*</span>}
+                              <span style={{color:"#10b981",fontWeight:600,flexShrink:0}}>{fmt(imp)}</span>
+                            </div>
+                          );
+                        })}
+                        {envPeriodo.length===0&&<div style={{color:"#4b5563",fontSize:"0.75rem",padding:"8px"}}>No se encontraron envíos para este período.</div>}
+                      </div>
+                    </div>
+
+                    {/* Acciones */}
+                    <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
+                      {liq.estado==="pendiente"&&<button onClick={()=>verificar(liq.id)} style={S.btn(false,"#6366f1")}>✓ Verificar</button>}
+                      {liq.estado==="verificado"&&<button onClick={()=>{setModalPago(liq);setPago({monto:liq.montoLogistica||"",fecha:hoy,notas:liq.notas||""});}} style={S.btn(false,"#10b981")}>💳 Registrar pago</button>}
+                      {liq.estado==="pendiente"&&<button onClick={()=>eliminarLiq(liq.id)} style={{...S.btnSm(false),color:"#f87171",borderColor:"#7f1d1d"}}>Eliminar</button>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Modal nueva liquidación */}
+      {modalNueva&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:"1rem"}}>
+          <div style={{background:"#12172a",border:"1px solid #1e2535",borderRadius:"14px",padding:"1.5rem",width:"100%",maxWidth:"560px",maxHeight:"90vh",overflowY:"auto"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
+              <span style={{color:"#e5e7eb",fontWeight:700,fontSize:"1rem"}}>Nueva liquidación</span>
+              <button onClick={()=>{setModalNueva(false);setPreview(null);setNueva({logistica:"",desde:"",hasta:"",montoLogistica:"",notas:""}); }} style={{background:"none",border:"none",color:"#6b7280",cursor:"pointer",fontSize:"1.2rem"}}>✕</button>
+            </div>
+
+            {/* Logística */}
+            <div style={{marginBottom:"0.75rem"}}>
+              <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"6px"}}>Logística</div>
+              <div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>
+                {logActivas.map(l=>(
+                  <button key={l} onClick={()=>{setNueva(p=>({...p,logistica:l}));setPreview(null);}} style={S.chip(nueva.logistica===l,lc[l]?.color||"#6366f1",lc[l]?.bg||"#1e293b")}>{l}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Período */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.6rem",marginBottom:"0.75rem"}}>
+              <div>
+                <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Desde</div>
+                <input type="date" value={nueva.desde} onChange={ev=>{setNueva(p=>({...p,desde:ev.target.value}));setPreview(null);}} style={{...S.input,width:"100%",padding:"5px 8px"}}/>
+              </div>
+              <div>
+                <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Hasta</div>
+                <input type="date" value={nueva.hasta} onChange={ev=>{setNueva(p=>({...p,hasta:ev.target.value}));setPreview(null);}} style={{...S.input,width:"100%",padding:"5px 8px"}}/>
+              </div>
+            </div>
+
+            {/* Botón calcular */}
+            <button onClick={calcularPreview} disabled={!nueva.logistica||!nueva.desde||!nueva.hasta}
+              style={{...S.btn(false,"#6366f1"),width:"100%",marginBottom:"0.75rem",opacity:(!nueva.logistica||!nueva.desde||!nueva.hasta)?0.4:1}}>
+              🔍 Calcular envíos del período
+            </button>
+
+            {/* Preview */}
+            {preview&&(
+              <div style={{background:"#0d1119",border:"1px solid #1e2535",borderRadius:"10px",padding:"0.75rem 1rem",marginBottom:"0.75rem"}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:"6px"}}>
+                  <span style={{color:"#9ca3af",fontSize:"0.8rem"}}>{preview.envios.length} envíos encontrados</span>
+                  <span style={{color:"#10b981",fontWeight:700,fontSize:"0.9rem"}}>{fmt(preview.montoSistema)} sistema</span>
+                </div>
+                <div style={{maxHeight:"140px",overflowY:"auto",display:"flex",flexDirection:"column",gap:"2px"}}>
+                  {preview.envios.map(e=>(
+                    <div key={e.id} style={{display:"flex",gap:"0.5rem",fontSize:"0.72rem",padding:"3px 0",borderBottom:"1px solid #1e2535"}}>
+                      <span style={{color:"#6b7280",flexShrink:0}}>{fmtFecha(e.fecha||e.fechaVenta)}</span>
+                      <span style={{color:"#e5e7eb",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}</span>
+                      <span style={{color:"#10b981",flexShrink:0,fontWeight:600}}>{fmt(e.importeOverride||getImp(e)||0)}</span>
+                    </div>
+                  ))}
+                  {preview.envios.length===0&&<div style={{color:"#4b5563",fontSize:"0.75rem"}}>Sin envíos en ese período para {nueva.logistica}.</div>}
+                </div>
+              </div>
+            )}
+
+            {/* Monto logística */}
+            <div style={{marginBottom:"0.75rem"}}>
+              <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Monto que informó la logística</div>
+              <input type="number" placeholder="0" value={nueva.montoLogistica} onChange={ev=>setNueva(p=>({...p,montoLogistica:ev.target.value}))} style={{...S.input,width:"100%",padding:"6px 10px",fontSize:"0.9rem"}}/>
+              {preview&&nueva.montoLogistica&&(()=>{
+                const dif=parseFloat(nueva.montoLogistica||0)-preview.montoSistema;
+                if(Math.abs(dif)<1)return null;
+                return<div style={{marginTop:"4px",fontSize:"0.72rem",color:dif>0?"#f87171":"#34d399",fontWeight:600}}>
+                  Diferencia: {dif>0?"+":""}{fmt(dif)} ({dif>0?"logística cobró más":"logística cobró menos"})
+                </div>;
+              })()}
+            </div>
+
+            {/* Notas */}
+            <div style={{marginBottom:"1rem"}}>
+              <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Notas (opcional)</div>
+              <textarea value={nueva.notas} onChange={ev=>setNueva(p=>({...p,notas:ev.target.value}))} placeholder="Observaciones..." style={{...S.input,display:"block",width:"100%",height:"56px",resize:"vertical",fontSize:"0.8rem"}}/>
+            </div>
+
+            <div style={{display:"flex",gap:"8px",justifyContent:"flex-end"}}>
+              <button onClick={()=>{setModalNueva(false);setPreview(null);}} style={S.btnSm(false)}>Cancelar</button>
+              <button onClick={crearLiquidacion} disabled={!preview||preview.envios.length===0} style={{...S.btn(false,"#6366f1"),opacity:(!preview||preview.envios.length===0)?0.4:1}}>Guardar liquidación</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal registrar pago */}
+      {modalPago&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:"1rem"}}>
+          <div style={{background:"#12172a",border:"1px solid #1e2535",borderRadius:"14px",padding:"1.5rem",width:"100%",maxWidth:"400px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
+              <span style={{color:"#e5e7eb",fontWeight:700,fontSize:"1rem"}}>Registrar pago — {modalPago.logistica}</span>
+              <button onClick={()=>setModalPago(null)} style={{background:"none",border:"none",color:"#6b7280",cursor:"pointer",fontSize:"1.2rem"}}>✕</button>
+            </div>
+            <div style={{color:"#6b7280",fontSize:"0.72rem",marginBottom:"1rem"}}>
+              Período: {fmtFecha(modalPago.desde)} → {fmtFecha(modalPago.hasta)} · {modalPago.cantEnvios} envíos · Sistema: {fmt(modalPago.montoSistema)}
+            </div>
+            <div style={{marginBottom:"0.75rem"}}>
+              <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Monto pagado</div>
+              <input type="number" autoFocus value={pago.monto} onChange={ev=>setPago(p=>({...p,monto:ev.target.value}))} style={{...S.input,width:"100%",padding:"6px 10px",fontSize:"0.9rem"}}/>
+            </div>
+            <div style={{marginBottom:"0.75rem"}}>
+              <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Fecha de pago</div>
+              <input type="date" value={pago.fecha} onChange={ev=>setPago(p=>({...p,fecha:ev.target.value}))} style={{...S.input,width:"100%",padding:"6px 10px"}}/>
+            </div>
+            <div style={{marginBottom:"1rem"}}>
+              <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Notas</div>
+              <textarea value={pago.notas} onChange={ev=>setPago(p=>({...p,notas:ev.target.value}))} placeholder="Ajustes, descuentos, etc..." style={{...S.input,display:"block",width:"100%",height:"56px",resize:"vertical",fontSize:"0.8rem"}}/>
+            </div>
+            <div style={{display:"flex",gap:"8px",justifyContent:"flex-end"}}>
+              <button onClick={()=>setModalPago(null)} style={S.btnSm(false)}>Cancelar</button>
+              <button onClick={registrarPago} disabled={!pago.monto||!pago.fecha} style={{...S.btn(false,"#10b981"),opacity:(!pago.monto||!pago.fecha)?0.4:1}}>💳 Confirmar pago</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -4166,7 +4507,8 @@ export default function App(){
     {id:"manual",l:"+ Manual"},
     ...(esAdmin?[{id:"tarifas",l:"Tarifas / Log."}]:[]),
     {id:"informe",l:"Informe"},
-    {id:"liquidacion",l:"Liquidacion"},
+    {id:"liquidacion",l:"Cobranzas Log."},
+    {id:"liquidacionlog",l:"Liquidacion Log."},
     {id:"ctasctes",l:"Ctas. Ctes."},
     {id:"localidades",l:"Localidades"},
     ...(esAdmin?[{id:"expedicion",l:"Expedicion"},{id:"usuarios",l:"Usuarios"}]:[]),
@@ -4341,8 +4683,9 @@ export default function App(){
         {tab==="manual"  &&<TabManual   setEnvios={setEnvios} onSuccess={()=>{mostrarToast("Envio agregado");}} lc={lc} enviosExistentes={envios}/>}
         {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZcPersist} lc={lc} setLc={setLcPersist}/>}
         {tab==="informe"     &&<TabInforme     envios={envios} zc={zc} lc={lc}/>}
-        {tab==="liquidacion" &&<TabLiquidacion envios={envios} setEnvios={setEnvios} lc={lc}/>}
-        {tab==="ctasctes"   &&<TabCtasCtes   envios={envios} lc={lc}/>}
+        {tab==="liquidacion"    &&<TabLiquidacion    envios={envios} setEnvios={setEnvios} lc={lc}/>}
+        {tab==="liquidacionlog" &&<TabLiquidacionLog envios={envios} zc={zc} lc={lc}/>}
+        {tab==="ctasctes"       &&<TabCtasCtes       envios={envios} lc={lc}/>}
         {tab==="localidades" &&<TabLocalidades cpExtra={cpExtra} setCpExtra={setCpExtra}/>}
         {tab==="usuarios"   &&esAdmin&&<TabUsuarios lc={lc} setLc={setLcPersist}/>}
         {tab==="expedicion" &&esAdmin&&<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>}
