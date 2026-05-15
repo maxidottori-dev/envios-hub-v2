@@ -1042,13 +1042,15 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
   );
 }
 
-function TabImprimir({envios,zc,lc}){
+function TabImprimir({envios,setEnvios,zc,lc}){
   const hoy=fechaHoy();
   const [fecha,setFecha]=useState(hoy);
   const [trans,setTrans]=useState("TODOS");
   const [turno,setTurno]=useState("TODOS");
   const [filZona,setFilZona]=useState("TODAS");
   const [filOrigen,setFilOrigen]=useState("TODOS"); // TODOS | FLEX | NO_FLEX
+  const [confirmando,setConfirmando]=useState(false);
+  const [guardandoConf,setGuardandoConf]=useState(false);
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const tmap=buildTarifaMap(zc);
   const getImp=e=>calcImp(e,tmap,lc,zc);
@@ -1077,6 +1079,34 @@ function TabImprimir({envios,zc,lc}){
   const totalImp=lista.reduce((s,e)=>s+getImp(e),0);
   const cobTotal=lista.filter(e=>e.cobranza).reduce((s,e)=>s+(e.cobranza||0),0);
   const hayCobro=lista.some(e=>e.cobranza!==null&&e.cobranza>0);
+
+  // Envíos sin confirmar dentro del filtro actual (solo si hay logística específica)
+  const sinConfirmar=lista.filter(e=>!e.estadoPago&&e.trans);
+  const puedeConfirmar=trans!=="TODOS"&&sinConfirmar.length>0;
+
+  const confirmarEntregas=async()=>{
+    if(guardandoConf)return;
+    setGuardandoConf(true);
+    try{
+      const ids=sinConfirmar.map(e=>e.id);
+      const hoyStr=fechaHoy();
+      const CHUNK=400;
+      for(let i=0;i<ids.length;i+=CHUNK){
+        const batch=writeBatch(db);
+        ids.slice(i,i+CHUNK).forEach(id=>{
+          batch.update(doc(db,"envios",id),{estadoPago:"confirmado",estadoPagoFecha:hoyStr});
+        });
+        await batch.commit();
+      }
+      setEnvios(prev=>prev.map(e=>ids.includes(e.id)?{...e,estadoPago:"confirmado",estadoPagoFecha:hoyStr}:e));
+      setConfirmando(false);
+    }catch(err){
+      console.error("Error confirmando entregas:",err);
+      setConfirmando(false);
+    }finally{
+      setGuardandoConf(false);
+    }
+  };
 
   const [pdfOrient,setPdfOrient]=useState("landscape");
   const [pdfFontSize,setPdfFontSize]=useState(11);
@@ -1184,7 +1214,25 @@ function TabImprimir({envios,zc,lc}){
         <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["TODAS",...ZONAS_ML_LIST].map(z=><button key={z} onClick={()=>setFilZona(z)} style={S.btnSm(filZona===z,ZONA_ML_COLOR[z]||"#6366f1")}>{z}</button>)}</div>
         <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
         <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["TODOS",...TURNOS].map(t =><button key={t} onClick={()=>setTurno(t)} style={S.btnSm(turno===t,"#8b5cf6")}>{t}</button>)}</div>
-        <div style={{marginLeft:"auto",display:"flex",gap:"6px"}}>
+        <div style={{marginLeft:"auto",display:"flex",gap:"6px",alignItems:"center"}}>
+          {/* Botón confirmar entregas — solo si hay logística específica seleccionada */}
+          {puedeConfirmar&&!confirmando&&(
+            <button onClick={()=>setConfirmando(true)} style={{...S.btn(false),border:"1px solid #10b981",color:"#10b981",padding:"0.4rem 0.9rem",fontSize:"0.78rem"}}>
+              ✓ Confirmar {sinConfirmar.length} entregas
+            </button>
+          )}
+          {confirmando&&(
+            <div style={{display:"flex",gap:"6px",alignItems:"center",background:"#041f14",border:"1px solid #065f46",borderRadius:"8px",padding:"4px 10px"}}>
+              <span style={{color:"#34d399",fontSize:"0.75rem"}}>¿Confirmar {sinConfirmar.length} envíos de {trans}?</span>
+              <button onClick={confirmarEntregas} disabled={guardandoConf} style={{...S.btnSm(true,"#10b981"),padding:"4px 10px",fontSize:"0.72rem",opacity:guardandoConf?0.5:1}}>
+                {guardandoConf?"...":"Sí"}
+              </button>
+              <button onClick={()=>setConfirmando(false)} style={{...S.btnSm(false),padding:"4px 8px",fontSize:"0.72rem"}}>No</button>
+            </div>
+          )}
+          {trans!=="TODOS"&&sinConfirmar.length===0&&lista.length>0&&(
+            <span style={{color:"#10b981",fontSize:"0.72rem",padding:"0.4rem 0"}}>✓ Todos confirmados</span>
+          )}
           <button onClick={()=>{
             const filas=lista.map((e,i)=>{
               const esFlex=e.origen==="ML";
@@ -4744,7 +4792,7 @@ export default function App(){
         {tab==="tablero" &&<TabTablero envios={envios} lc={lc} zc={zc}/>}
         {tab==="envios"  &&<TabEnvios   envios={envios.filter(e=>e.origen!=="ML")} setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin}/>}
         {tab==="flex"    &&<TabEnvios   envios={envios.filter(e=>e.origen==="ML")}  setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin}/>}
-        {tab==="imprimir"&&<TabImprimir envios={envios} zc={zc} lc={lc}/>}
+        {tab==="imprimir"&&<TabImprimir envios={envios} setEnvios={setEnvios} zc={zc} lc={lc}/>}
         {tab==="manual"  &&<TabManual   setEnvios={setEnvios} onSuccess={()=>{mostrarToast("Envio agregado");}} lc={lc} enviosExistentes={envios}/>}
         {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZcPersist} lc={lc} setLc={setLcPersist}/>}
         {tab==="informe"     &&<TabInforme     envios={envios} zc={zc} lc={lc}/>}
