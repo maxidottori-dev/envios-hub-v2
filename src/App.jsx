@@ -3046,7 +3046,14 @@ function ModalRegistrarPago({clienteKey,clienteNombre,saldoPendiente,onClose,env
 
   // Calcular saldo pendiente por envio (descontando pagos ya registrados)
   const saldoEnvio=(e)=>{
-    const pagEnvio=pagos.filter(p=>p.envioIds?.includes(e.id)).reduce((s,p)=>s+(p.monto||0),0);
+    const pagEnvio=pagos.filter(p=>p.envioIds?.includes(e.id)).reduce((s,p)=>{
+      // Nuevo formato: monto por envio guardado explicitamente
+      if(p.montosPorEnvio) return s+(p.montosPorEnvio[e.id]||0);
+      // Pago de un solo envio (formato viejo, compatibilidad)
+      if((p.envioIds?.length||0)===1) return s+(p.monto||0);
+      // Pago generico con multiples envioIds (formato viejo bugueado): ignorar a nivel individual
+      return s;
+    },0);
     return Math.max(0,(getDeudaEnvio(e)?.monto||0)-pagEnvio);
   };
 
@@ -3062,16 +3069,33 @@ function ModalRegistrarPago({clienteKey,clienteNombre,saldoPendiente,onClose,env
   };
 
   const montoSeleccionado=Object.values(seleccion).reduce((s,v)=>s+v,0);
-  const enviosIds=Object.keys(seleccion).length>0?Object.keys(seleccion):envios.map(e=>e.id);
+  const haySeleccion=Object.keys(seleccion).length>0;
 
   const guardar=async()=>{
     const m=parseFloat(monto);
     if(!m||m<=0){alert("Ingresa un monto valido.");return;}
     setGuardando(true);
+    // Construir montosPorEnvio: distribuir el monto ingresado respetando el saldo de cada envio seleccionado
+    let montosPorEnvio=null;
+    let enviosIds=[];
+    if(haySeleccion){
+      enviosIds=Object.keys(seleccion);
+      // Distribuir: llenar cada envio en orden hasta agotar el monto
+      let restante=m;
+      montosPorEnvio={};
+      for(const id of enviosIds){
+        const cap=seleccion[id];
+        const asignado=Math.min(cap,restante);
+        montosPorEnvio[id]=asignado;
+        restante-=asignado;
+        if(restante<=0)break;
+      }
+    }
     try{
       await addDoc(collection(db,"pagosCC"),{
         clienteKey,clienteNombre,monto:m,nota:nota.trim(),
         envioIds:enviosIds,
+        ...(montosPorEnvio?{montosPorEnvio}:{}),
         fechaCobro,
         creadoEn:serverTimestamp(),
       });
@@ -3111,8 +3135,8 @@ function ModalRegistrarPago({clienteKey,clienteNombre,saldoPendiente,onClose,env
               );
             })}
           </div>
-          {Object.keys(seleccion).length>0&&<div style={{fontSize:"0.7rem",color:"#10b981",marginTop:"5px",textAlign:"right"}}>Seleccionado: {fmt(montoSeleccionado)}</div>}
-          {Object.keys(seleccion).length===0&&<div style={{fontSize:"0.68rem",color:"#4b5563",marginTop:"4px"}}>Sin seleccion — el pago se aplica al cliente en general</div>}
+          {haySeleccion&&<div style={{fontSize:"0.7rem",color:"#10b981",marginTop:"5px",textAlign:"right"}}>Seleccionado: {fmt(montoSeleccionado)}</div>}
+          {!haySeleccion&&<div style={{fontSize:"0.68rem",color:"#f59e0b",marginTop:"4px"}}>⚠ Sin seleccion — el pago se registra solo a nivel cliente, no descuenta deuda de pedidos individuales</div>}
         </div>
 
         {/* Monto */}
