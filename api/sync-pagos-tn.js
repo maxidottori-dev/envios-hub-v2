@@ -15,8 +15,11 @@ export default async function handler(req, res) {
       .where("origen", "==", "Tienda Nube")
       .get();
 
-    // 3a. CC: pagoEstado === "cuenta_corriente"
-    const docsCC = snap.docs.filter(d => d.data().pagoEstado === "cuenta_corriente");
+    // 3a. CC: pagoEstado === "cuenta_corriente" O esCC === true (manual CC override)
+    const docsCC = snap.docs.filter(d => {
+      const data = d.data();
+      return data.pagoEstado === "cuenta_corriente" || data.esCC === true;
+    });
 
     // 3b. Efectivo: cobranza > 0 y aun no marcado como pagado
     const docsEfectivo = snap.docs.filter(d => {

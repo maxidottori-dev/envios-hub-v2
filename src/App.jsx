@@ -2744,7 +2744,7 @@ function TabCtasCtes({envios,lc}){
     if(e.estado==="cancelado")return null;
     if(e.pagoEstado==="cuenta_corriente"&&e.importeOrden>0){const monto=e.cobranza>0?e.cobranza:e.importeOrden;return{monto,tipo:"TN CC",logistica:e.trans||""};}
     if(e.cobranza>0&&e.pagoEstado!=="pagado"&&!e.cobranzaRecibida)return{monto:e.cobranza,tipo:"Efectivo",logistica:e.trans||""};
-    if(e.esCC&&e.importeCC>0)return{monto:e.importeCC,tipo:"Manual CC",logistica:e.trans||""};
+    if(e.esCC&&e.importeCC>0&&e.pagoEstado!=="pagado")return{monto:e.importeCC,tipo:"Manual CC",logistica:e.trans||""};
     return null;
   };
 
