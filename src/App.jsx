@@ -1879,6 +1879,7 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
   const [selIds,setSelIds]=useState(new Set());
   const [modalPago,setModalPago]=useState(null);
   const [pago,setPago]=useState({monto:"",fecha:hoy,notas:""});
+  const [guardandoPago,setGuardandoPago]=useState(false);
   const [historial,setHistorial]=useState([]);
   const [vista,setVista]=useState("envios"); // "envios" | "confirmar" | "historial"
   const [confDesde,setConfDesde]=useState("");
@@ -1967,7 +1968,8 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
   };
 
   const registrarPago=async()=>{
-    if(!modalPago)return;
+    if(!modalPago||guardandoPago)return;
+    setGuardandoPago(true);
     const monto=parseFloat((pago.monto||"").toString().replace(",","."))||0;
     const ids=modalPago.envios.map(e=>e.id);
     setEnvios(prev=>prev.map(e=>ids.includes(e.id)?{...e,estadoPago:"abonado",estadoPagoFecha:hoy}:e));
@@ -1981,6 +1983,7 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
       notas:pago.notas,
       creadoEn:serverTimestamp(),
     });
+    setGuardandoPago(false);
     setModalPago(null);
   };
 
@@ -2204,7 +2207,7 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
             </div>
             <div style={{display:"flex",gap:"8px",justifyContent:"flex-end"}}>
               <button onClick={()=>setModalPago(null)} style={S.btnSm(false)}>Cancelar</button>
-              <button onClick={registrarPago} disabled={!pago.monto||!pago.fecha} style={{...S.btn(false,"#10b981"),opacity:(!pago.monto||!pago.fecha)?0.4:1}}>💳 Confirmar pago</button>
+              <button onClick={registrarPago} disabled={!pago.monto||!pago.fecha||guardandoPago} style={{...S.btn(false,"#10b981"),opacity:(!pago.monto||!pago.fecha||guardandoPago)?0.4:1}}>{guardandoPago?"Guardando...":"💳 Confirmar pago"}</button>
             </div>
           </div>
         </div>
