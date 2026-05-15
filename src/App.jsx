@@ -2211,7 +2211,7 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
       {vista==="envios"&&(
         Object.keys(porLog).length===0?(
           <div style={{...S.card,padding:"2rem",textAlign:"center",color:"#4b5563"}}>
-            {envRelevantes.length===0?"Ningún envío confirmado aún. Confirmá entregas desde el panel de edición de cada envío.":filVista==="pendiente"?"No hay envíos confirmados sin abonar en este filtro":"Sin envíos en este filtro"}
+            {envRelevantes.length===0?"Ningún envío confirmado aún. Confirmá envíos desde el tab Imprimir.":filVista==="pendiente"?"No hay envíos confirmados sin abonar en este filtro":"Sin envíos en este filtro"}
           </div>
         ):(
           <div style={{display:"flex",flexDirection:"column",gap:"0.75rem"}}>
