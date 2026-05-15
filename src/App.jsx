@@ -797,7 +797,7 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
         <button onClick={onClose} style={S.btn(false)}>Cancelar</button>
         {!bloqueado&&<button onClick={handleSave} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)"}}>Guardar</button>}
         {!confirmado&&e.trans&&e.estado!=="cancelado"&&(
-          <button onClick={handleConfirmar} style={{...S.btn(true),background:"linear-gradient(135deg,#059669,#10b981)"}}>✓ Confirmar entrega</button>
+          <button onClick={handleConfirmar} style={{...S.btn(true),background:"linear-gradient(135deg,#059669,#10b981)"}}>✓ Confirmar envío</button>
         )}
       </div>
     </div>
@@ -1215,10 +1215,10 @@ function TabImprimir({envios,setEnvios,zc,lc}){
         <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
         <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["TODOS",...TURNOS].map(t =><button key={t} onClick={()=>setTurno(t)} style={S.btnSm(turno===t,"#8b5cf6")}>{t}</button>)}</div>
         <div style={{marginLeft:"auto",display:"flex",gap:"6px",alignItems:"center"}}>
-          {/* Botón confirmar entregas — solo si hay logística específica seleccionada */}
+          {/* Botón confirmar envíos — solo si hay logística específica seleccionada */}
           {puedeConfirmar&&!confirmando&&(
             <button onClick={()=>setConfirmando(true)} style={{...S.btn(false),border:"1px solid #10b981",color:"#10b981",padding:"0.4rem 0.9rem",fontSize:"0.78rem"}}>
-              ✓ Confirmar {sinConfirmar.length} entregas
+              ✓ Confirmar {sinConfirmar.length} envíos
             </button>
           )}
           {confirmando&&(
@@ -2100,7 +2100,7 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
       {/* Barra principal de vistas */}
       <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"4px",flexWrap:"wrap",alignItems:"center"}}>
         <button onClick={()=>setVista("envios")} style={S.btn(vista==="envios","#6366f1")}>Envíos</button>
-        <button onClick={()=>{setVista("confirmar");setConfSel(new Set());}} style={S.btn(vista==="confirmar","#f59e0b")}>✓ Confirmar entregas{envios.filter(e=>e.trans&&e.estado!=="cancelado"&&!e.estadoPago).length>0?` (${envios.filter(e=>e.trans&&e.estado!=="cancelado"&&!e.estadoPago).length})`:""}</button>
+        <button onClick={()=>{setVista("confirmar");setConfSel(new Set());}} style={S.btn(vista==="confirmar","#f59e0b")}>✓ Confirmar envíos{envios.filter(e=>e.trans&&e.estado!=="cancelado"&&!e.estadoPago).length>0?` (${envios.filter(e=>e.trans&&e.estado!=="cancelado"&&!e.estadoPago).length})`:""}</button>
         <button onClick={()=>setVista("historial")} style={S.btn(vista==="historial","#10b981")}>Historial pagos</button>
         {vista==="envios"&&<>
           <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
@@ -2128,7 +2128,7 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
         </>}
       </div>
 
-      {/* Vista: Confirmar entregas */}
+      {/* Vista: Confirmar envíos */}
       {vista==="confirmar"&&(
         <div style={{display:"flex",flexDirection:"column",gap:"0.75rem"}}>
           {confSel.size>0&&(
