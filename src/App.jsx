@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import * as XLSXLib from "xlsx";
 import { db } from "./firebase.js";
-import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, updateDoc, query, where, getDocs, addDoc, serverTimestamp, limit } from "firebase/firestore";
+import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, updateDoc, query, where, getDocs, addDoc, serverTimestamp, limit, writeBatch } from "firebase/firestore";
 
 const VERSION = "2.1";
 
@@ -1989,12 +1989,30 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
   };
 
   const eliminarPago=async(h)=>{
-    // Revertir envíos de abonado → confirmado
-    if(h.enviosIds?.length){
-      setEnvios(prev=>prev.map(e=>h.enviosIds.includes(e.id)?{...e,estadoPago:"confirmado",estadoPagoFecha:null}:e));
+    if(guardandoPago)return;
+    setGuardandoPago(true);
+    try{
+      // Revertir estadoPago en Firestore (batch, máx 400 por batch)
+      if(h.enviosIds?.length){
+        const CHUNK=400;
+        for(let i=0;i<h.enviosIds.length;i+=CHUNK){
+          const batch=writeBatch(db);
+          h.enviosIds.slice(i,i+CHUNK).forEach(id=>{
+            batch.update(doc(db,"envios",id),{estadoPago:null,estadoPagoFecha:null});
+          });
+          await batch.commit();
+        }
+        // Actualizar estado local para reflejo inmediato
+        setEnvios(prev=>prev.map(e=>h.enviosIds.includes(e.id)?{...e,estadoPago:null,estadoPagoFecha:null}:e));
+      }
+      await deleteDoc(doc(db,"pagosLogistica",h.id));
+      setConfirmEliminarPago(null);
+    }catch(err){
+      console.error("Error eliminando pago:",err);
+      setConfirmEliminarPago(null); // cierra el confirm aunque falle
+    }finally{
+      setGuardandoPago(false);
     }
-    await deleteDoc(doc(db,"pagosLogistica",h.id));
-    setConfirmEliminarPago(null);
   };
 
   const toggleSel=id=>setSelIds(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
