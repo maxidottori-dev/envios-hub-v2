@@ -432,7 +432,10 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc,envios=
   borrador.forEach(e=>{const key=modo==="zona"?(getZonaML(e.partido)||"Otra"):(e.partido||"Sin partido");if(!grupos[key])grupos[key]=[];grupos[key].push(e);});
   const grupoKeys=modo==="zona"?[...ZONAS_ML_LIST,"Otra"].filter(k =>grupos[k]):Object.keys(grupos).sort();
   const totalAsig=borrador.filter(e=>getA(e.id).trans).length;
-  const confirmar=()=>onConfirmar(borrador.map(e=>({...e,...getA(e.id),estado:getA(e.id).trans?"asignado":"sin_asignar"})));
+  // Envíos con solo uno de los dos campos — no se puede confirmar hasta resolverlos
+  const incompletos=borrador.filter(e=>{const a=getA(e.id);return(a.trans&&!a.turno)||(!a.trans&&a.turno);});
+  const puedeConfirmar=incompletos.length===0;
+  const confirmar=()=>{if(!puedeConfirmar)return;onConfirmar(borrador.map(e=>({...e,...getA(e.id),estado:getA(e.id).trans?"asignado":"sin_asignar"})));};
 
   // === Resumen flotante: FLEX hoy ya en sistema + borrador en curso ===
   const flexHoy=envios.filter(e=>e.origen==="ML"&&e.trans&&e.estado!=="cancelado"&&(e.fecha||e.fechaVenta||"")===hoy);
@@ -481,6 +484,12 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc,envios=
         </div>
       </div>
       <div style={{padding:"1rem",maxWidth:"980px",margin:"0 auto"}}>
+        {incompletos.length>0&&(
+          <div style={{background:"#1c0a00",border:"1px solid #92400e",borderRadius:"8px",padding:"8px 14px",marginBottom:"0.75rem",display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
+            <span style={{color:"#fbbf24",fontSize:"0.78rem",fontWeight:700}}>⚠ {incompletos.length} envío{incompletos.length>1?"s":""} con logística o turno incompleto</span>
+            <span style={{color:"#78350f",fontSize:"0.72rem"}}>Asigná los dos campos o dejá ambos vacíos para continuar</span>
+          </div>
+        )}
         {grupoKeys.map(key=>{
           const grupo=grupos[key];const ids=grupo.map(e=>e.id);
           const gT=getGrupo(ids,"trans"),gF=getGrupo(ids,"fecha"),gTu=getGrupo(ids,"turno");
@@ -514,8 +523,9 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc,envios=
               </div>
               {grupo.map((e,i)=>{
                 const a=getA(e.id);
+                const incompleto=(a.trans&&!a.turno)||(!a.trans&&a.turno);
                 return(
-                  <div key={e.id} style={{padding:"0.45rem 1rem",borderBottom:i<grupo.length-1?"1px solid #1a1f2e":"none",display:"flex",alignItems:"center",gap:"0.6rem",flexWrap:"wrap"}}>
+                  <div key={e.id} style={{padding:"0.45rem 1rem",borderBottom:i<grupo.length-1?"1px solid #1a1f2e":"none",display:"flex",alignItems:"center",gap:"0.6rem",flexWrap:"wrap",background:incompleto?"#1c0a00":undefined,borderLeft:incompleto?"3px solid #f59e0b":"3px solid transparent"}}>
                     <div style={{flex:1,minWidth:"140px"}}>
                       <div style={{color:"#d1d5db",fontSize:"0.78rem"}}>{e.direccion.slice(0,68)}{e.direccion.length>68?"...":""}</div>
                       <div style={{color:"#4b5563",fontSize:"0.66rem",marginTop:"1px"}}>CP {e.cp} · {e.partido} · ...{e.id.slice(-8)}</div>
@@ -535,7 +545,7 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc,envios=
         <div style={{display:"flex",justifyContent:"flex-end",gap:"0.75rem",marginTop:"1rem",paddingBottom:"5rem"}}>
           <button onClick={imprimirLote} disabled={totalAsig===0} style={{...S.btn(false),color:totalAsig>0?"#84cc16":"#4b5563",borderColor:totalAsig>0?"#84cc16":"#252d40",opacity:totalAsig>0?1:0.5}}>Imprimir lote</button>
           <button onClick={onCancelar} style={S.btn(false)}>Cancelar</button>
-          <button onClick={confirmar} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.55rem 1.4rem"}}>Confirmar ({totalAsig}/{borrador.length})</button>
+          <button onClick={confirmar} disabled={!puedeConfirmar} title={!puedeConfirmar?`${incompletos.length} envíos incompletos`:""} style={{...S.btn(true),background:puedeConfirmar?"linear-gradient(135deg,#6366f1,#8b5cf6)":"#1e2535",color:puedeConfirmar?"#fff":"#4b5563",border:puedeConfirmar?"none":"1px solid #374151",padding:"0.55rem 1.4rem",cursor:puedeConfirmar?"pointer":"not-allowed",opacity:1}}>Confirmar ({totalAsig}/{borrador.length}){!puedeConfirmar&&<span style={{fontSize:"0.68rem",marginLeft:"5px",color:"#f59e0b"}}>⚠ {incompletos.length}</span>}</button>
         </div>
       </div>
 
