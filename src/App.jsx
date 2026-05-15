@@ -418,10 +418,11 @@ function PantallaLogin({onLogin}){
   );
 }
 
-function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc}){
+function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc,envios=[]}){
   const hoy=fechaHoy();
   const [asig,setAsig]=useState({});
   const [modo,setModo]=useState("zona");
+  const [flotanteOpen,setFlotanteOpen]=useState(true);
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const getA=id=>asig[id]||{trans:"",fecha:hoy,turno:""};
   const setA=(id,k,v)=>setAsig(p=>({...p,[id]:{...getA(id),[k]:v}}));
@@ -432,6 +433,16 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc}){
   const grupoKeys=modo==="zona"?[...ZONAS_ML_LIST,"Otra"].filter(k =>grupos[k]):Object.keys(grupos).sort();
   const totalAsig=borrador.filter(e=>getA(e.id).trans).length;
   const confirmar=()=>onConfirmar(borrador.map(e=>({...e,...getA(e.id),estado:getA(e.id).trans?"asignado":"sin_asignar"})));
+
+  // === Resumen flotante: FLEX hoy ya en sistema + borrador en curso ===
+  const flexHoy=envios.filter(e=>e.origen==="ML"&&e.trans&&e.estado!=="cancelado"&&(e.fecha||e.fechaVenta||"")===hoy);
+  const borradorHoy=borrador.filter(e=>{const a=getA(e.id);return a.trans&&(a.fecha||hoy)===hoy;});
+  const resumen={};
+  logActivas.forEach(l=>{resumen[l]={};[...TURNOS,"—"].forEach(t=>{resumen[l][t]={ex:0,nc:0};});});
+  flexHoy.forEach(e=>{const t=e.turno||"—";if(resumen[e.trans]&&resumen[e.trans][t]!==undefined)resumen[e.trans][t].ex++;});
+  borradorHoy.forEach(e=>{const a=getA(e.id);const t=a.turno||"—";if(resumen[a.trans]&&resumen[a.trans][t]!==undefined)resumen[a.trans][t].nc++;});
+  const logsConDatos=logActivas.filter(l=>[...TURNOS,"—"].some(t=>resumen[l][t].ex+resumen[l][t].nc>0));
+
   const imprimirLote=()=>{
     const asignados=borrador.filter(e=>getA(e.id).trans).map(e=>({...e,...getA(e.id)}));
     if(!asignados.length){alert("No hay envios asignados para imprimir.");return;}
@@ -521,11 +532,77 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc}){
             </div>
           );
         })}
-        <div style={{display:"flex",justifyContent:"flex-end",gap:"0.75rem",marginTop:"1rem",paddingBottom:"2rem"}}>
+        <div style={{display:"flex",justifyContent:"flex-end",gap:"0.75rem",marginTop:"1rem",paddingBottom:"5rem"}}>
           <button onClick={imprimirLote} disabled={totalAsig===0} style={{...S.btn(false),color:totalAsig>0?"#84cc16":"#4b5563",borderColor:totalAsig>0?"#84cc16":"#252d40",opacity:totalAsig>0?1:0.5}}>Imprimir lote</button>
           <button onClick={onCancelar} style={S.btn(false)}>Cancelar</button>
           <button onClick={confirmar} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.55rem 1.4rem"}}>Confirmar ({totalAsig}/{borrador.length})</button>
         </div>
+      </div>
+
+      {/* FLOTANTE — resumen FLEX hoy por logística y turno */}
+      <div style={{position:"fixed",bottom:"16px",right:"16px",zIndex:200,width:flotanteOpen?"360px":"auto",background:"#0f1420",border:"1px solid #252d40",borderRadius:"12px",boxShadow:"0 4px 24px rgba(0,0,0,0.6)",overflow:"hidden"}}>
+        {/* Header */}
+        <div onClick={()=>setFlotanteOpen(p=>!p)} style={{padding:"8px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",background:"#12172a",borderBottom:flotanteOpen?"1px solid #252d40":"none"}}>
+          <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+            <span style={{fontSize:"0.72rem",fontWeight:700,color:"#e5e7eb"}}>FLEX hoy</span>
+            <span style={{background:"#1a1f2e",border:"1px solid #252d40",borderRadius:"5px",padding:"1px 7px",fontSize:"0.68rem",color:"#9ca3af"}}>{flexHoy.length} exist · <span style={{color:"#818cf8"}}>{borradorHoy.length} asig</span></span>
+          </div>
+          <span style={{color:"#6b7280",fontSize:"0.75rem"}}>{flotanteOpen?"▼":"▲"}</span>
+        </div>
+        {/* Tabla */}
+        {flotanteOpen&&(
+          <div style={{padding:"8px 10px",overflowY:"auto",maxHeight:"340px"}}>
+            {logsConDatos.length===0&&<div style={{color:"#4b5563",fontSize:"0.72rem",textAlign:"center",padding:"8px"}}>Sin envíos FLEX hoy aún</div>}
+            {logsConDatos.length>0&&(
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.72rem"}}>
+                <thead>
+                  <tr style={{borderBottom:"1px solid #1a1f2e"}}>
+                    <th style={{textAlign:"left",padding:"3px 6px",color:"#4b5563",fontWeight:600}}>Log.</th>
+                    {TURNOS.map(t=><th key={t} style={{textAlign:"center",padding:"3px 5px",color:"#4b5563",fontWeight:600,width:"44px"}}>{t}</th>)}
+                    <th style={{textAlign:"center",padding:"3px 5px",color:"#4b5563",fontWeight:600,width:"40px"}}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {logsConDatos.map(l=>{
+                    const lcol=lc[l]?.color||"#6366f1";
+                    const totalEx=[...TURNOS,"—"].reduce((s,t)=>s+resumen[l][t].ex,0);
+                    const totalNc=[...TURNOS,"—"].reduce((s,t)=>s+resumen[l][t].nc,0);
+                    return(
+                      <tr key={l} style={{borderBottom:"1px solid #1a1f2e"}}>
+                        <td style={{padding:"4px 6px",fontWeight:700,color:lcol}}>{l}</td>
+                        {TURNOS.map(t=>{
+                          const ex=resumen[l][t].ex;
+                          const nc=resumen[l][t].nc;
+                          return(
+                            <td key={t} style={{textAlign:"center",padding:"4px 2px"}}>
+                              {(ex+nc)===0?<span style={{color:"#1e2535"}}>—</span>:(
+                                <span>
+                                  {ex>0&&<span style={{color:"#6b7280"}}>{ex}</span>}
+                                  {ex>0&&nc>0&&<span style={{color:"#374151"}}>+</span>}
+                                  {nc>0&&<span style={{color:"#818cf8",fontWeight:700}}>{nc}</span>}
+                                </span>
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td style={{textAlign:"center",padding:"4px 5px",fontWeight:700}}>
+                          {totalEx>0&&<span style={{color:"#9ca3af"}}>{totalEx}</span>}
+                          {totalEx>0&&totalNc>0&&<span style={{color:"#374151"}}>+</span>}
+                          {totalNc>0&&<span style={{color:"#818cf8"}}>{totalNc}</span>}
+                          {totalEx===0&&totalNc===0&&<span style={{color:"#1e2535"}}>—</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+            <div style={{marginTop:"6px",fontSize:"0.62rem",color:"#374151",display:"flex",gap:"10px"}}>
+              <span><span style={{color:"#6b7280"}}>■</span> ya en sistema</span>
+              <span><span style={{color:"#818cf8"}}>■</span> asignando ahora</span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -4607,7 +4684,7 @@ export default function App(){
   }
   if(sesion.rol==="expedicion")return<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>;
 
-  if(pantalla==="asignacion"){return<PantallaAsignacion borrador={borrador} fileName={fileName} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc}/>;}
+  if(pantalla==="asignacion"){return<PantallaAsignacion borrador={borrador} fileName={fileName} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc} envios={envios}/>;}
   if(pantalla==="asignacion-tn"){return<PantallaAsignacionTN borrador={borrador} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc}/>;}
 
   const esAdmin=sesion?.rol==="admin";
