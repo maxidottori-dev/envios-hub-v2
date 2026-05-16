@@ -1142,6 +1142,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
   const [turno,setTurno]=useState("TODOS");
   const [filZona,setFilZona]=useState("TODAS");
   const [filOrigen,setFilOrigen]=useState("TODOS"); // TODOS | FLEX | NO_FLEX
+  const [filConfirm,setFilConfirm]=useState("TODOS"); // TODOS | PENDIENTE | CONFIRMADO
   const [confirmando,setConfirmando]=useState(false);
   const [guardandoConf,setGuardandoConf]=useState(false);
   const [busqueda,setBusqueda]=useState("");
@@ -1156,6 +1157,8 @@ function TabImprimir({envios,setEnvios,zc,lc}){
     if(filZona!=="TODAS"&&getZonaML(e.partido)!==filZona)return false;
     if(filOrigen==="FLEX"&&e.origen!=="ML")return false;
     if(filOrigen==="NO_FLEX"&&e.origen==="ML")return false;
+    if(filConfirm==="PENDIENTE"&&(e.estadoPago||!e.trans))return false;
+    if(filConfirm==="CONFIRMADO"&&!e.estadoPago)return false;
     if(busqueda){const s=busqueda.toLowerCase();if(!(e.direccion?.toLowerCase().includes(s)||(e.partido||"").toLowerCase().includes(s)||(e.clienteNombre||"").toLowerCase().includes(s)||(e.nroOrdenTN||"").includes(s)||(e.nroSeguimiento||"").includes(s)))return false;}
     return e.estado!=="cancelado";
   }).sort((a,b)=>{
@@ -1309,6 +1312,12 @@ function TabImprimir({envios,setEnvios,zc,lc}){
         <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["TODAS",...ZONAS_ML_LIST].map(z=><button key={z} onClick={()=>setFilZona(z)} style={S.btnSm(filZona===z,ZONA_ML_COLOR[z]||"#6366f1")}>{z}</button>)}</div>
         <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
         <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["TODOS",...TURNOS].map(t =><button key={t} onClick={()=>setTurno(t)} style={S.btnSm(turno===t,"#8b5cf6")}>{t}</button>)}</div>
+        <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
+        <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
+          {[{k:"TODOS",l:"Todos"},{k:"PENDIENTE",l:"⏳ Pendiente"},{k:"CONFIRMADO",l:"✓ Confirmado"}].map(o=>(
+            <button key={o.k} onClick={()=>setFilConfirm(o.k)} style={S.btnSm(filConfirm===o.k,o.k==="PENDIENTE"?"#f59e0b":o.k==="CONFIRMADO"?"#10b981":"#6366f1")}>{o.l}</button>
+          ))}
+        </div>
         <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar..." style={{...S.input,width:"160px",padding:"0.3rem 0.65rem",fontSize:"0.78rem"}}/>
         <div style={{marginLeft:"auto",display:"flex",gap:"6px",alignItems:"center"}}>
           {/* Botón confirmar envíos — solo si hay logística específica seleccionada */}
@@ -4752,7 +4761,7 @@ export default function App(){
     {id:"tablero",l:"📊 Tablero"},
     {id:"envios",l:"NO FLEX"},
     {id:"flex",l:"FLEX"},
-    {id:"imprimir",l:"Imprimir"},
+    {id:"imprimir",l:"Despacho"},
     {id:"manual",l:"+ Manual"},
     ...(esAdmin?[{id:"tarifas",l:"Tarifas / Log."}]:[]),
     {id:"informe",l:"Informe"},
