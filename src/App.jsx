@@ -434,7 +434,9 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc,envios=
   const totalAsig=borrador.filter(e=>getA(e.id).trans).length;
   // Envíos con solo uno de los dos campos — no se puede confirmar hasta resolverlos
   const incompletos=borrador.filter(e=>{const a=getA(e.id);return(a.trans&&!a.turno)||(!a.trans&&a.turno);});
-  const puedeConfirmar=incompletos.length===0;
+  // Envíos sin partido — bloquean la confirmación porque el costo no se puede calcular
+  const sinPartido=borrador.filter(e=>!e.partido);
+  const puedeConfirmar=incompletos.length===0&&sinPartido.length===0;
   const confirmar=()=>{if(!puedeConfirmar)return;onConfirmar(borrador.map(e=>({...e,...getA(e.id),estado:getA(e.id).trans?"asignado":"sin_asignar"})));};
 
   // === Resumen flotante: FLEX hoy ya en sistema + borrador en curso ===
@@ -488,6 +490,12 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc,envios=
           <div style={{background:"#1c0a00",border:"1px solid #92400e",borderRadius:"8px",padding:"8px 14px",marginBottom:"0.75rem",display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
             <span style={{color:"#fbbf24",fontSize:"0.78rem",fontWeight:700}}>⚠ {incompletos.length} envío{incompletos.length>1?"s":""} con logística o turno incompleto</span>
             <span style={{color:"#78350f",fontSize:"0.72rem"}}>Asigná los dos campos o dejá ambos vacíos para continuar</span>
+          </div>
+        )}
+        {sinPartido.length>0&&(
+          <div style={{background:"#1c0a00",border:"1px solid #b45309",borderRadius:"8px",padding:"8px 14px",marginBottom:"0.75rem",display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
+            <span style={{color:"#fb923c",fontSize:"0.78rem",fontWeight:700}}>⚠ {sinPartido.length} envío{sinPartido.length>1?"s":""} sin partido definido</span>
+            <span style={{color:"#78350f",fontSize:"0.72rem"}}>El costo logístico se calcula por partido — completá el campo antes de confirmar</span>
           </div>
         )}
         {grupoKeys.map(key=>{
@@ -545,7 +553,7 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc,envios=
         <div style={{display:"flex",justifyContent:"flex-end",gap:"0.75rem",marginTop:"1rem",paddingBottom:"5rem"}}>
           <button onClick={imprimirLote} disabled={totalAsig===0} style={{...S.btn(false),color:totalAsig>0?"#84cc16":"#4b5563",borderColor:totalAsig>0?"#84cc16":"#252d40",opacity:totalAsig>0?1:0.5}}>Imprimir lote</button>
           <button onClick={onCancelar} style={S.btn(false)}>Cancelar</button>
-          <button onClick={confirmar} disabled={!puedeConfirmar} title={!puedeConfirmar?`${incompletos.length} envíos incompletos`:""} style={{...S.btn(true),background:puedeConfirmar?"linear-gradient(135deg,#6366f1,#8b5cf6)":"#1e2535",color:puedeConfirmar?"#fff":"#4b5563",border:puedeConfirmar?"none":"1px solid #374151",padding:"0.55rem 1.4rem",cursor:puedeConfirmar?"pointer":"not-allowed",opacity:1}}>Confirmar ({totalAsig}/{borrador.length}){!puedeConfirmar&&<span style={{fontSize:"0.68rem",marginLeft:"5px",color:"#f59e0b"}}>⚠ {incompletos.length}</span>}</button>
+          <button onClick={confirmar} disabled={!puedeConfirmar} title={!puedeConfirmar?[incompletos.length>0&&`${incompletos.length} incompletos`,sinPartido.length>0&&`${sinPartido.length} sin partido`].filter(Boolean).join(" · "):""} style={{...S.btn(true),background:puedeConfirmar?"linear-gradient(135deg,#6366f1,#8b5cf6)":"#1e2535",color:puedeConfirmar?"#fff":"#4b5563",border:puedeConfirmar?"none":"1px solid #374151",padding:"0.55rem 1.4rem",cursor:puedeConfirmar?"pointer":"not-allowed",opacity:1}}>Confirmar ({totalAsig}/{borrador.length}){!puedeConfirmar&&<span style={{fontSize:"0.68rem",marginLeft:"5px",color:"#f59e0b"}}>⚠ {incompletos.length+sinPartido.length}</span>}</button>
         </div>
       </div>
 
@@ -1053,7 +1061,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
           const esTN=e.origen==="Tienda Nube";
           return(
             <div key={e.id} style={{width:"100%",minWidth:0,overflow:"hidden"}}>
-              <div style={{...S.card,padding:"0.55rem 0.75rem",display:"flex",alignItems:"flex-start",gap:"0.5rem",opacity:getEstado(e)==="cancelado"?0.45:1,borderColor:isEdit||isSel?"#6366f1":e.alertaDireccion?"#f59e0b":"#252d40",background:isSel?"#12172a":"#1a1f2e",minWidth:0,overflow:"hidden"}}>
+              <div style={{...S.card,padding:"0.55rem 0.75rem",display:"flex",alignItems:"flex-start",gap:"0.5rem",opacity:getEstado(e)==="cancelado"?0.45:1,borderColor:isEdit||isSel?"#6366f1":e.alertaDireccion||!e.partido?"#f59e0b":"#252d40",background:isSel?"#12172a":"#1a1f2e",minWidth:0,overflow:"hidden"}}>
                 {modoSel?<div style={{paddingTop:"2px"}}><Chk checked={isSel} onChange={()=>toggleSel(e.id)}/></div>:<span style={{color:"#374151",fontSize:"0.65rem",minWidth:"20px",textAlign:"right",paddingTop:"3px"}}>{i+1}</span>}
                 <div style={{flex:1,cursor:"pointer",minWidth:0}} onClick={()=>{if(modoSel)toggleSel(e.id);else setEditId(isEdit?null:e.id);}}>
                   <div style={{display:"flex",gap:"3px",flexWrap:"wrap",alignItems:"center",marginBottom:"3px"}}>
@@ -1069,6 +1077,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
                     {e.cambio!==null&&<Bdg label="Cambio" bg="#1c0514" t="#ec4899"/>}
                     {e.retiro!==null&&<Bdg label="Retiro" bg="#1c1000" t="#f97316"/>}
                     {e.alertaDireccion&&<Bdg label="Sin CP/Dir" bg="#1c0a00" t="#fb923c"/>}
+                    {!e.partido&&getEstado(e)!=="cancelado"&&<Bdg label="Sin partido" bg="#1c0a00" t="#fb923c"/>}
                     {e.estadoLiq==="cancelado_liq"&&<Bdg label="Canc. liquidacion" bg="#1c0a0a" t="#f87171" style={{border:"1px solid #f87171"}}/>}
                     {e.estadoLiq==="no_abonado"&&<Bdg label="No abonado" bg="#1c1400" t="#f59e0b" style={{border:"1px solid #f59e0b"}}/>}
                     {getPagoEstado(e)==="pendiente"&&<Bdg label="Pago pendiente" bg="#1c0a00" t="#fb923c" style={{border:"1px solid #fb923c"}}/>}
@@ -2695,6 +2704,14 @@ function TabCtasCtes({envios,lc}){
   const [limites,setLimites]=useState({});
   const [loadingLim,setLoadingLim]=useState(true);
   const [syncPagos,setSyncPagos]=useState(null); // null | "confirm" | "cargando" | {actualizados, pendientes, errores}
+  const [borrandoPago,setBorrandoPago]=useState(null);
+
+  const eliminarPago=async(id)=>{
+    if(!window.confirm("¿Eliminar este pago? No se puede deshacer."))return;
+    setBorrandoPago(id);
+    try{await deleteDoc(doc(db,"pagosCC",id));}catch(e){alert("Error al eliminar el pago.");}
+    setBorrandoPago(null);
+  };
 
   const sincronizarPagosTN=async()=>{
     setSyncPagos("confirm");
@@ -2858,7 +2875,11 @@ function TabCtasCtes({envios,lc}){
         <div style={{...S.card,marginBottom:"1rem",overflow:"hidden"}}>
           <div style={{padding:"0.6rem 1rem",background:"#12172a",borderBottom:"1px solid #1e2535",fontSize:"0.72rem",fontWeight:700,color:"#6b7280",textTransform:"uppercase"}}>Pedidos con deuda</div>
           {c.envios.map((e,i)=>{
-            const pagEnvio=pagos.filter(p=>p.envioIds?.includes(e.id)).reduce((s,p)=>s+(p.monto||0),0);
+            const pagEnvio=pagos.filter(p=>p.envioIds?.includes(e.id)).reduce((s,p)=>{
+              if(p.montosPorEnvio)return s+(p.montosPorEnvio[e.id]||0);
+              if((p.envioIds?.length||0)===1)return s+(p.monto||0);
+              return s;
+            },0);
             const saldoEnvio=Math.max(0,(e._deuda.monto||0)-pagEnvio);
             return(
               <div key={e.id} style={{padding:"0.65rem 1rem",borderBottom:i<c.envios.length-1?"1px solid #1a1f2e":"none",display:"flex",gap:"0.75rem",alignItems:"center",flexWrap:"wrap"}}>
@@ -2893,8 +2914,12 @@ function TabCtasCtes({envios,lc}){
                 <div>
                   <div style={{fontSize:"0.82rem",color:"#10b981",fontWeight:700}}>{fmt(p.monto)}</div>
                   {p.nota&&<div style={{fontSize:"0.7rem",color:"#6b7280",marginTop:"1px"}}>{p.nota}</div>}
+                  {p.envioIds?.length>0&&<div style={{fontSize:"0.65rem",color:"#4b5563",marginTop:"1px"}}>{p.envioIds.length} pedido{p.envioIds.length!==1?"s":""}</div>}
                 </div>
-                <div style={{fontSize:"0.72rem",color:"#4b5563"}}>{p.creadoEn?.toDate?.()?.toLocaleDateString("es-AR")||"—"}</div>
+                <div style={{display:"flex",gap:"0.5rem",alignItems:"center"}}>
+                  <div style={{fontSize:"0.72rem",color:"#4b5563"}}>{p.fechaCobro||p.creadoEn?.toDate?.()?.toLocaleDateString("es-AR")||"—"}</div>
+                  <button onClick={()=>eliminarPago(p._id)} disabled={borrandoPago===p._id} style={{background:"transparent",border:"1px solid #7f1d1d",borderRadius:"5px",color:"#ef4444",fontSize:"0.7rem",padding:"2px 7px",cursor:"pointer",opacity:borrandoPago===p._id?0.5:1}}>{borrandoPago===p._id?"...":"✕"}</button>
+                </div>
               </div>
             ))}
           </div>
