@@ -1182,6 +1182,29 @@ function TabImprimir({envios,setEnvios,zc,lc}){
   const cobTotal=lista.filter(e=>e.cobranza).reduce((s,e)=>s+(e.cobranza||0),0);
   const hayCobro=lista.some(e=>e.cobranza!==null&&e.cobranza>0);
 
+  // WhatsApp: generar mensaje de texto y abrir grupo
+  const [waCopied,setWaCopied]=useState(false);
+  const notificarWA=()=>{
+    const cfg=lc[trans];
+    const fechaStr=fecha?new Date(fecha+"T00:00:00").toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long"}):"hoy";
+    const lineas=lista.map((e,i)=>{
+      const dir=[e.direccion,e.localidad&&!/referencia/i.test(e.localidad)?e.localidad:"",e.partido,e.cp].filter(Boolean).join(" · ");
+      const ref=e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,15))?" ("+e.referencia+")":"";
+      const turnoStr=e.turno?"⏰ "+e.turno:"";
+      const bultosStr=(e.bultos||1)>1?"📦 "+(e.bultos)+" bultos":"📦 1 bulto";
+      const cobStr=e.cobranza>0?"💰 $"+Number(e.cobranza).toLocaleString("es-AR"):"";
+      const nroStr=e.nroOrdenTN?"#"+e.nroOrdenTN:e.nroSeguimiento?"📮 "+e.nroSeguimiento:"";
+      const detalles=[turnoStr,bultosStr,cobStr].filter(Boolean).join(" · ");
+      return`${i+1}. ${dir}${ref}${nroStr?"\n   "+nroStr:""}${detalles?"\n   "+detalles:""}`;
+    }).join("\n\n");
+    const msg=`🛵 *${trans} — ${fechaStr}*\n📋 ${lista.length} envío${lista.length!==1?"s":""}\n\n${lineas}\n\n_Enviado desde EnviosHub_`;
+    navigator.clipboard.writeText(msg).catch(()=>{});
+    setWaCopied(true);
+    setTimeout(()=>setWaCopied(false),3000);
+    if(cfg?.waGroup)window.open(cfg.waGroup,"_blank");
+  };
+  const puedeWA=trans!=="TODOS"&&lista.length>0&&lc[trans]?.waGroup;
+
   // Envíos sin confirmar dentro del filtro actual (solo si hay logística específica)
   const sinConfirmar=lista.filter(e=>!e.estadoPago&&e.trans);
   const puedeConfirmar=trans!=="TODOS"&&sinConfirmar.length>0;
@@ -1369,6 +1392,9 @@ function TabImprimir({envios,setEnvios,zc,lc}){
             </select>
           </div>
           <button onClick={generarPDF} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.5rem 1.1rem"}}>Generar PDF</button>
+          {puedeWA&&<button onClick={notificarWA} style={{...S.btn(true),background:waCopied?"linear-gradient(135deg,#059669,#047857)":"linear-gradient(135deg,#25d366,#128c7e)",padding:"0.5rem 1.1rem",border:"none"}}>
+            {waCopied?"✓ Mensaje copiado":"📲 Notificar WA"}
+          </button>}
         </div>
       </div>
       <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.9rem",display:"flex",gap:"1.5rem",flexWrap:"wrap"}}>
@@ -1667,6 +1693,10 @@ function TabTarifas({zc,setZc,lc,setLc}){
                     <div style={{position:"absolute",top:"2px",left:v.mostrarImporteLg?"14px":"2px",width:"14px",height:"14px",borderRadius:"50%",background:"white",transition:"left 0.2s"}}/>
                   </div>
                   <span style={{color:"#6b7280",fontSize:"0.7rem"}}>Mostrar importe a logistica</span>
+                </div>}
+                {v.activa&&<div>
+                  <div style={{fontSize:"0.62rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Grupo WhatsApp</div>
+                  <input value={v.waGroup||""} onChange={ev=>setLc(p=>({...p,[k]:{...p[k],waGroup:ev.target.value.trim()}}))} placeholder="https://chat.whatsapp.com/..." style={{...S.input,width:"100%",fontSize:"0.7rem",padding:"4px 8px"}}/>
                 </div>}
               </div>
             </div>
