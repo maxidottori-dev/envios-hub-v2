@@ -313,29 +313,33 @@ function calcImp(e,tmap,lc,zc){
   const cfg=lc[e.trans];
   const fechaEnvio=e.fecha||e.fechaVenta||fechaHoy();
   const esFlex=e.origen==="ML";
-  if(zc){
-    const zona=getZonaLogistica(zc,e.trans,e.partido);
-    if(zona){
-      let bk=bultos;
-      if(bultos>=4&&bultos<=10)bk=10;
-      else if(bultos>=11)bk=11;
-      // 1. Intentar matriz FLEX si corresponde
-      if(esFlex&&cfg?.tarifaMatrixFlex){
-        const mxF=cfg.tarifaMatrixFlex[zona.id]||{};
-        const pF=mxF[String(bk)];
-        if(pF!==undefined&&pF>0)return pF;
-      }
-      // 2. Matriz NO FLEX (con vigencia)
-      const mx=getMatrizVigente(cfg,fechaEnvio);
-      if(mx){
-        const mxZ=mx[zona.id]||{};
-        const p=mxZ[String(bk)];
-        if(p!==undefined&&p>0)return p;
+  // Helper: intentar calcular desde un partido dado
+  const calcDesdePartido=(partido)=>{
+    if(!partido)return 0;
+    if(zc){
+      const zona=getZonaLogistica(zc,e.trans,partido);
+      if(zona){
+        let bk=bultos;
+        if(bultos>=4&&bultos<=10)bk=10;
+        else if(bultos>=11)bk=11;
+        if(esFlex&&cfg?.tarifaMatrixFlex){const mxF=cfg.tarifaMatrixFlex[zona.id]||{};const pF=mxF[String(bk)];if(pF!==undefined&&pF>0)return pF;}
+        const mx=getMatrizVigente(cfg,fechaEnvio);
+        if(mx){const mxZ=mx[zona.id]||{};const p=mxZ[String(bk)];if(p!==undefined&&p>0)return p;}
       }
     }
+    if(cfg&&bultos>1){const pb=cfg.preciosBultos?.find(x =>x.b===bultos);if(pb&&pb.p>0)return pb.p;}
+    return tmap[partido]?.[e.trans]||0;
+  };
+  // 1. Intentar con el partido guardado
+  const r1=calcDesdePartido(e.partido);
+  if(r1>0)return r1;
+  // 2. Fallback: derivar partido desde CP (cubre casos donde el partido guardado es una localidad)
+  const partidoCP=e.cp?cpAPartido(String(e.cp)):"";
+  if(partidoCP&&partidoCP!==e.partido){
+    const r2=calcDesdePartido(partidoCP);
+    if(r2>0)return r2;
   }
-  if(cfg&&bultos>1){const pb=cfg.preciosBultos?.find(x =>x.b===bultos);if(pb&&pb.p>0)return pb.p;}
-  return tmap[e.partido]?.[e.trans]||0;
+  return 0;
 }
 
 function getWeekNum(ds){const d=new Date(ds+"T00:00:00"),day=d.getDay()||7;d.setDate(d.getDate()+4-day);const y=new Date(d.getFullYear(),0,1);return{w:Math.ceil((((d-y)/86400000)+1)/7),y:d.getFullYear()};}
