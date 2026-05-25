@@ -170,6 +170,7 @@ function fechaAyer()   { const d=new Date();d.setDate(d.getDate()-1);return new 
 function fechaManana() { const d=new Date();d.setDate(d.getDate()+1);return d.toISOString().split("T")[0]; }
 function fechaInicioSemana() { const d=new Date();d.setDate(d.getDate()-((d.getDay()||7)-1));return d.toISOString().split("T")[0]; }
 function fmtCorta(ds) { if(!ds)return"";const[,m,d]=ds.split("-");return d+"/"+m; }
+const norm=s=>s?String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase():"";
 const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
 function parseFechaES(str){const m=String(str||"").toLowerCase().match(/(\d+)\s+de\s+(\w+)\s+de\s+(\d{4})/);if(!m)return"";const mes=MESES[m[2]];if(!mes)return"";return m[3]+"-"+String(mes).padStart(2,"0")+"-"+String(m[1]).padStart(2,"0");}
 
@@ -941,7 +942,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
       const origenVal=e.origen==="Tienda Nube"?"TN":e.origen==="ML"?"FLEX":"Manual";
       if(origenVal!==filOrigen)return false;
     }
-    if(busqueda){const srch=busqueda.toLowerCase();return e.direccion.toLowerCase().includes(srch)||e.id.includes(srch)||e.partido.toLowerCase().includes(srch)||(e.nroSeguimiento||"").includes(srch)||(e.clienteNombre||"").toLowerCase().includes(srch)||(e.nroOrdenTN||"").includes(srch);}
+    if(busqueda){const srch=norm(busqueda);return norm(e.direccion).includes(srch)||e.id.includes(srch)||norm(e.partido).includes(srch)||(e.nroSeguimiento||"").includes(srch)||norm(e.clienteNombre).includes(srch)||(e.nroOrdenTN||"").includes(srch);}
     return true;
   });
   const activos=filtrados.filter(e=>getEstado(e)!=="cancelado");
@@ -1163,7 +1164,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
     if(filOrigen==="NO_FLEX"&&e.origen==="ML")return false;
     if(filConfirm==="PENDIENTE"&&(e.estadoPago||!e.trans))return false;
     if(filConfirm==="CONFIRMADO"&&!e.estadoPago)return false;
-    if(busqueda){const s=busqueda.toLowerCase();if(!(e.direccion?.toLowerCase().includes(s)||(e.partido||"").toLowerCase().includes(s)||(e.clienteNombre||"").toLowerCase().includes(s)||(e.nroOrdenTN||"").includes(s)||(e.nroSeguimiento||"").includes(s)))return false;}
+    if(busqueda){const s=norm(busqueda);if(!(norm(e.direccion).includes(s)||norm(e.partido).includes(s)||norm(e.clienteNombre).includes(s)||(e.nroOrdenTN||"").includes(s)||(e.nroSeguimiento||"").includes(s)))return false;}
     return e.estado!=="cancelado";
   }).sort((a,b)=>{
     // NO FLEX primero, FLEX después
@@ -1471,7 +1472,7 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes}){
     return[...nombres].sort((a,b)=>a.localeCompare(b));
   },[enviosExistentes]);
   const sugerencias=sugsVisible&&f.clienteNombre.length>=2
-    ?clientesExistentes.filter(n=>n.toLowerCase().includes(f.clienteNombre.toLowerCase())&&n.toLowerCase()!==f.clienteNombre.toLowerCase()).slice(0,8)
+    ?clientesExistentes.filter(n=>norm(n).includes(norm(f.clienteNombre))&&norm(n)!==norm(f.clienteNombre)).slice(0,8)
     :[];
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   useEffect(()=>{const p=cpAPartido(f.cp);if(p)set("partido",p);},[f.cp]);
@@ -2475,11 +2476,11 @@ function TabLiquidacion({ envios, setEnvios, lc }) {
     if (filFecha === "ayer" && fEnv !== fechaAyer()) return false;
     if (filFecha === "rango" && (fEnv < rangoD || fEnv > rangoH)) return false;
     if (busqueda) {
-      const srch = busqueda.toLowerCase();
-      return (e.direccion||"").toLowerCase().includes(srch) ||
+      const srch = norm(busqueda);
+      return norm(e.direccion).includes(srch) ||
              (e.nroOrdenTN||"").includes(srch) ||
              (e.id||"").includes(srch) ||
-             (e.clienteNombre||"").toLowerCase().includes(srch);
+             norm(e.clienteNombre).includes(srch);
     }
     return true;
   }).sort((a, b) => {
@@ -2566,6 +2567,12 @@ function TabLiquidacion({ envios, setEnvios, lc }) {
               Estado:recibido?"Recibido":"Pendiente",FechaRecibido:fechaR||"",
             };
           });
+          if(seccion==="cobranzas"){
+            const totalMonto=lista.reduce((s,e)=>s+(e.cobranza||0),0);
+            const totalPend=lista.filter(e=>!e.cobranzaRecibida).reduce((s,e)=>s+(e.cobranza||0),0);
+            filas.push({"#":"","Logistica":"","Direccion":"","Partido":"","NroOrden":"","Fecha":"","Turno":"","Monto":"","Detalle":"","Estado":"","FechaRecibido":""});
+            filas.push({"#":"TOTAL","Logistica":lista.length+" registros","Direccion":"","Partido":"","NroOrden":"","Fecha":"","Turno":"","Monto":totalMonto,"Detalle":"","Estado":"Pendiente: $"+totalPend.toLocaleString("es-AR"),"FechaRecibido":""});
+          }
           exportarXLSX(filas,"liquidacion_"+seccion+"_"+fechaHoy());
         }} style={{...S.btnSm(false),color:"#10b981",border:"1px solid #10b981",padding:"3px 10px",fontSize:"0.72rem"}}>⬇ Excel</button>
         <button onClick={()=>{
@@ -2578,7 +2585,10 @@ function TabLiquidacion({ envios, setEnvios, lc }) {
             const detalle=seccion==="retiros"?(e.cambio||e.retiro||"-"):"-";
             return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}"><td style="padding:3px 6px;border-bottom:0.5px solid #ddd;">${i+1}</td><td style="padding:3px 6px;border-bottom:0.5px solid #ddd;font-weight:500;">${e.direccion}</td><td style="padding:3px 6px;border-bottom:0.5px solid #ddd;font-family:monospace;font-size:9px;">${e.nroOrdenTN?"#"+e.nroOrdenTN:e.id.slice(-8)}</td><td style="padding:3px 6px;border-bottom:0.5px solid #ddd;">${e.trans||"-"}</td><td style="padding:3px 6px;border-bottom:0.5px solid #ddd;">${e.fecha?fmtCorta(e.fecha):"-"}</td><td style="padding:3px 6px;border-bottom:0.5px solid #ddd;font-weight:600;color:${seccion==="cobranzas"?"#b45309":"#555"};">${monto}</td><td style="padding:3px 6px;border-bottom:0.5px solid #ddd;color:${recibido?"#15803d":"#b45309"};font-weight:600;">${recibido?"Recibido":"Pendiente"}</td></tr>`;
           }).join("");
-          const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Liquidacion</title><style>@page{size:A4;margin:10mm;}body{font-family:Arial,sans-serif;font-size:10px;color:#111;}table{width:100%;border-collapse:collapse;}th{background:#e8e8e8;padding:3px 6px;text-align:left;font-size:8px;text-transform:uppercase;font-weight:700;border-bottom:1.5px solid #333;}@media print{button{display:none!important;}}</style></head><body><div style="display:flex;justify-content:space-between;margin-bottom:4px;"><strong style="font-size:12px;">Liquidacion — ${seccion==="cobranzas"?"Cobranzas":"Cambios y Retiros"}</strong><span style="font-size:8px;color:#888;">Impreso: ${ts}</span></div><table><thead><tr><th style="width:20px;">#</th><th>Direccion</th><th style="width:80px;">Nro orden</th><th style="width:60px;">Logistica</th><th style="width:48px;">Fecha</th><th style="width:70px;">${seccion==="cobranzas"?"Monto":"-"}</th><th style="width:65px;">Estado</th></tr></thead><tbody>${rows}</tbody></table><div style="border-top:1.5px solid #333;margin-top:4px;padding-top:3px;font-size:8px;color:#555;">${lista.length} registros</div><script>window.onload=function(){window.print();}<\/script></body></html>`;
+          const totalPDF=seccion==="cobranzas"?lista.reduce((s,e)=>s+(e.cobranza||0),0):0;
+          const totalPendPDF=seccion==="cobranzas"?lista.filter(e=>!e.cobranzaRecibida).reduce((s,e)=>s+(e.cobranza||0),0):0;
+          const footerExtra=seccion==="cobranzas"?`<span style="margin-left:16px;font-weight:700;">Total: $${totalPDF.toLocaleString("es-AR")}</span><span style="margin-left:12px;color:#b45309;">Pendiente: $${totalPendPDF.toLocaleString("es-AR")}</span>`:"";
+          const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Liquidacion</title><style>@page{size:A4;margin:10mm;}body{font-family:Arial,sans-serif;font-size:10px;color:#111;}table{width:100%;border-collapse:collapse;}th{background:#e8e8e8;padding:3px 6px;text-align:left;font-size:8px;text-transform:uppercase;font-weight:700;border-bottom:1.5px solid #333;}@media print{button{display:none!important;}}</style></head><body><div style="display:flex;justify-content:space-between;margin-bottom:4px;"><strong style="font-size:12px;">Liquidacion — ${seccion==="cobranzas"?"Cobranzas":"Cambios y Retiros"}</strong><span style="font-size:8px;color:#888;">Impreso: ${ts}</span></div><table><thead><tr><th style="width:20px;">#</th><th>Direccion</th><th style="width:80px;">Nro orden</th><th style="width:60px;">Logistica</th><th style="width:48px;">Fecha</th><th style="width:70px;">${seccion==="cobranzas"?"Monto":"-"}</th><th style="width:65px;">Estado</th></tr></thead><tbody>${rows}</tbody></table><div style="border-top:1.5px solid #333;margin-top:4px;padding-top:3px;font-size:8px;color:#555;">${lista.length} registros${footerExtra}</div><script>window.onload=function(){window.print();}<\/script></body></html>`;
           const w=window.open("","_blank");if(!w){alert("Permite ventanas emergentes.");return;}w.document.write(html);w.document.close();
         }} style={{...S.btn(true),background:"#0f1420",border:"1px solid #252d40",marginLeft:"auto",padding:"0.3rem 0.8rem",fontSize:"0.72rem"}}>🖨️ Imprimir</button>
       </div>
@@ -2866,7 +2876,7 @@ function TabCtasCtes({envios,lc}){
     if(filtro==="deuda"&&c.saldo===0)return false;
     if(filtro==="vencidos"&&c.dias<c.limite)return false;
     if(filtro==="saldados"&&c.saldo>0)return false;
-    if(busqueda){const s=busqueda.toLowerCase();const ok=c.nombre.toLowerCase().includes(s)||c.envios.some(e=>(e.direccion||"").toLowerCase().includes(s)||(e.nroOrdenTN||"").includes(s)||(e.nroSeguimiento||"").includes(s));if(!ok)return false;}
+    if(busqueda){const s=norm(busqueda);const ok=norm(c.nombre).includes(s)||c.envios.some(e=>norm(e.direccion).includes(s)||(e.nroOrdenTN||"").includes(s)||(e.nroSeguimiento||"").includes(s));if(!ok)return false;}
     return true;
   }).sort((a,b)=>{
     const {col,dir}=sortCC;
@@ -3336,8 +3346,8 @@ function TabLocalidades({cpExtra,setCpExtra}) {
   const filas = Object.entries(tabla)
     .filter(([cp, p]) => {
       if (!busqueda) return true;
-      const srch = busqueda.toLowerCase();
-      return cp.includes(srch) || p.toLowerCase().includes(srch);
+      const srch = norm(busqueda);
+      return cp.includes(srch) || norm(p).includes(srch);
     })
     .sort(([a], [b]) => parseInt(a) - parseInt(b));
 
@@ -3671,7 +3681,7 @@ function VistaLogistica({envios,sesion,lc}){
     if(filTurno==="SIN_TURNO"){if(e.turno)return false;}else if(filTurno!=="TODOS"&&e.turno!==filTurno)return false;
     if(filTipo==="FLEX"&&e.origen!=="ML")return false;
     if(filTipo==="NOFLEX"&&e.origen==="ML")return false;
-    if(busqueda){const srch=busqueda.toLowerCase();return e.direccion.toLowerCase().includes(srch)||e.partido.toLowerCase().includes(srch)||(e.clienteNombre||"").toLowerCase().includes(srch)||(e.nroOrdenTN||"").includes(srch);}
+    if(busqueda){const srch=norm(busqueda);return norm(e.direccion).includes(srch)||norm(e.partido).includes(srch)||norm(e.clienteNombre).includes(srch)||(e.nroOrdenTN||"").includes(srch);}
     return true;
   }).sort((a,b)=>{
     const la=a.loteImportacion||"9";const lb=b.loteImportacion||"9";
@@ -4329,7 +4339,7 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
     if(filTipo==="FLEX"&&e.origen!=="ML")return false;
     if(filTipo==="NOFLEX"&&e.origen==="ML")return false;
     if(soloPendientes&&e.preparado)return false;
-    if(busqueda){const s=busqueda.toLowerCase();return e.direccion.toLowerCase().includes(s)||(e.nroOrdenTN||"").includes(s)||(e.nroSeguimiento||"").includes(s)||e.partido.toLowerCase().includes(s);}
+    if(busqueda){const s=norm(busqueda);return norm(e.direccion).includes(s)||(e.nroOrdenTN||"").includes(s)||(e.nroSeguimiento||"").includes(s)||norm(e.partido).includes(s);}
     return true;
   }).sort((a,b)=>{
     if(a.trans!==b.trans)return (a.trans||"").localeCompare(b.trans||"");
