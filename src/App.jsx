@@ -4722,6 +4722,339 @@ function ScrollTop(){
   );
 }
 
+// ─── TAB CONCILIACION ────────────────────────────────────────────────────────
+function TabConciliacion({envios,lc,zc}){
+  const tmap=buildTarifaMap(zc);
+  const getImp=e=>calcImp(e,tmap,lc,zc);
+  const logActivas=Object.keys(lc).filter(k=>lc[k]?.activa);
+
+  const [logSel,setLogSel]=useState("");
+  const [filasLiq,setFilasLiq]=useState(null);   // rows from uploaded file
+  const [headers,setHeaders]=useState([]);
+  const [colMap,setColMap]=useState({nroOrden:"",monto:"",fecha:"",direccion:""});
+  const [resultado,setResultado]=useState(null);
+  const [filFlexType,setFilFlexType]=useState("TODOS");
+  const [filEstado,setFilEstado]=useState("TODOS");
+  const [procesando,setProcesando]=useState(false);
+
+  const fmt=n=>"$"+Math.round(n||0).toLocaleString("es-AR");
+  const fmtDiff=n=>{const abs=Math.abs(Math.round(n));const sign=n>0?"+":"-";return sign+"$"+abs.toLocaleString("es-AR");};
+
+  // ── Cargar archivo ──────────────────────────────────────────────────────────
+  const cargarArchivo=async(file)=>{
+    const XLSX=await cargarXLSX();
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(new Uint8Array(buf),{type:"array",raw:false});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
+    if(!rows.length){alert("El archivo está vacío.");return;}
+    // Encontrar fila de encabezado (primera con >2 celdas no vacías)
+    let hIdx=0;
+    for(let i=0;i<Math.min(10,rows.length);i++){
+      if(rows[i].filter(c=>c!=="").length>2){hIdx=i;break;}
+    }
+    const hdrs=rows[hIdx].map(String);
+    const dataRows=rows.slice(hIdx+1).filter(r=>r.some(c=>c!=="")).map(r=>{
+      const obj={};hdrs.forEach((h,i)=>obj[h]=r[i]??"");return obj;
+    });
+    setHeaders(hdrs);
+    setFilasLiq(dataRows);
+    // Auto-detectar columnas
+    const detect=(keywords)=>hdrs.find(h=>keywords.some(k=>norm(h).includes(k)))||"";
+    setColMap({
+      nroOrden: detect(["orden","nro","seguimiento","tracking","remito","envio","numero"]),
+      monto:    detect(["monto","importe","precio","total","costo","valor","cobr"]),
+      fecha:    detect(["fecha","date","dia"]),
+      direccion:detect(["dir","domicilio","destino","calle","address"]),
+    });
+    setResultado(null);
+  };
+
+  // ── Normalizar nro de orden para matching ──────────────────────────────────
+  const normNro=s=>String(s||"").replace(/[#\s]/g,"").toUpperCase();
+
+  // ── Conciliar ──────────────────────────────────────────────────────────────
+  const conciliar=()=>{
+    if(!filasLiq||!logSel){alert("Seleccioná una logística y cargá el archivo.");return;}
+    if(!colMap.monto){alert("Mapeá al menos la columna de Monto.");return;}
+    setProcesando(true);
+
+    // Envíos de esta logística en la DB (no cancelados)
+    const enviosLog=envios.filter(e=>e.trans===logSel&&e.estado!=="cancelado");
+    const matchados=new Set(); // ids de envíos DB ya matchados
+
+    // Parsear monto: soporta "$ 1.234,56" o "1234.56"
+    const parseMonto=v=>{
+      if(v===undefined||v===""||v===null)return 0;
+      const s=String(v).replace(/\$/g,"").replace(/\./g,"").replace(",",".").trim();
+      return parseFloat(s)||0;
+    };
+
+    // Extraer rango de fechas de la liquidación
+    let fechaMin="9999-99",fechaMax="0000-00";
+    filasLiq.forEach(r=>{
+      const fRaw=colMap.fecha?String(r[colMap.fecha]||""):"";
+      // Intentar parsear fecha dd/mm/yyyy o yyyy-mm-dd
+      let fISO="";
+      if(/\d{4}-\d{2}-\d{2}/.test(fRaw))fISO=fRaw.slice(0,10);
+      else if(/\d{2}\/\d{2}\/\d{4}/.test(fRaw)){const[d,m,y]=fRaw.split("/");fISO=`${y}-${m}-${d}`;}
+      if(fISO){if(fISO<fechaMin)fechaMin=fISO;if(fISO>fechaMax)fechaMax=fISO;}
+    });
+    const hayRango=fechaMin<fechaMax;
+
+    // Matching por fila de liquidación
+    const filasResultado=filasLiq.map(r=>{
+      const nroRaw=colMap.nroOrden?String(r[colMap.nroOrden]||""):"";
+      const montoLiq=parseMonto(colMap.monto?r[colMap.monto]:"");
+      const dirLiq=norm(colMap.direccion?String(r[colMap.direccion]||""):"");
+      const fRaw=colMap.fecha?String(r[colMap.fecha]||""):"";
+
+      // Buscar envío: 1° por nro de orden/seguimiento, 2° por dirección
+      const nroNorm=normNro(nroRaw);
+      let envMatch=null;
+      if(nroNorm){
+        envMatch=enviosLog.find(e=>{
+          const n1=normNro(e.nroOrdenTN);
+          const n2=normNro(e.nroSeguimiento);
+          return(n1&&(n1===nroNorm||nroNorm.endsWith(n1)||n1.endsWith(nroNorm)))||
+                 (n2&&(n2===nroNorm||nroNorm.endsWith(n2)||n2.endsWith(nroNorm)));
+        });
+      }
+      if(!envMatch&&dirLiq.length>8){
+        envMatch=enviosLog.find(e=>!matchados.has(e.id)&&norm(e.direccion).includes(dirLiq.slice(0,18)));
+      }
+
+      if(envMatch){
+        matchados.add(envMatch.id);
+        const montoDB=getImp(envMatch);
+        const diff=montoLiq-montoDB;
+        const esFlex=envMatch.origen==="ML";
+        const estado=Math.abs(diff)<=1?"OK":"DIFERENCIA";
+        return{tipo:"LIQ",estado,esFlex,nroRaw,dirLiq:colMap.direccion?r[colMap.direccion]:"",
+          montoLiq,montoDB,diff,env:envMatch,fRaw};
+      }else{
+        return{tipo:"LIQ",estado:"NO_ENCONTRADO",esFlex:null,nroRaw,
+          dirLiq:colMap.direccion?r[colMap.direccion]:"",montoLiq,montoDB:0,diff:montoLiq,env:null,fRaw};
+      }
+    });
+
+    // Envíos en DB no encontrados en liquidación (SIN_FACTURAR)
+    const sinFacturar=enviosLog
+      .filter(e=>!matchados.has(e.id)&&(!hayRango||(e.fecha&&e.fecha>=fechaMin&&e.fecha<=fechaMax)))
+      .map(e=>({tipo:"DB",estado:"SIN_FACTURAR",esFlex:e.origen==="ML",
+        nroRaw:e.nroOrdenTN||e.nroSeguimiento||"",dirLiq:e.direccion,
+        montoLiq:0,montoDB:getImp(e),diff:-getImp(e),env:e,fRaw:e.fecha||""}));
+
+    setResultado([...filasResultado,...sinFacturar]);
+    setProcesando(false);
+  };
+
+  // ── Filtros sobre resultado ────────────────────────────────────────────────
+  const filasFiltradas=(resultado||[]).filter(r=>{
+    if(filFlexType==="FLEX"&&r.esFlex===false)return false;
+    if(filFlexType==="NOFLEX"&&r.esFlex!==false&&r.esFlex!==null)return false;
+    if(filEstado!=="TODOS"&&r.estado!==filEstado)return false;
+    return true;
+  });
+
+  // ── Totales ────────────────────────────────────────────────────────────────
+  const totales=resultado?{
+    ok:     resultado.filter(r=>r.estado==="OK").length,
+    dif:    resultado.filter(r=>r.estado==="DIFERENCIA").length,
+    noEnc:  resultado.filter(r=>r.estado==="NO_ENCONTRADO").length,
+    sinFac: resultado.filter(r=>r.estado==="SIN_FACTURAR").length,
+    montoLiq:resultado.filter(r=>r.estado!=="SIN_FACTURAR").reduce((s,r)=>s+r.montoLiq,0),
+    montoDB: resultado.filter(r=>r.estado!=="NO_ENCONTRADO").reduce((s,r)=>s+r.montoDB,0),
+    difTotal:resultado.reduce((s,r)=>s+(r.estado==="DIFERENCIA"||r.estado==="NO_ENCONTRADO"||r.estado==="SIN_FACTURAR"?r.diff:0),0),
+  }:null;
+
+  const ESTADO_INFO={
+    OK:           {l:"✓ OK",          bg:"#052e16",border:"#166534",c:"#4ade80"},
+    DIFERENCIA:   {l:"⚠ Diferencia",  bg:"#1c1400",border:"#92400e",c:"#fbbf24"},
+    NO_ENCONTRADO:{l:"✗ No encontrado",bg:"#1c0a0a",border:"#7f1d1d",c:"#f87171"},
+    SIN_FACTURAR: {l:"○ Sin facturar", bg:"#0c1a2e",border:"#1e40af",c:"#60a5fa"},
+  };
+
+  return(
+    <div>
+      {/* ── CONFIGURACION ── */}
+      <div style={{...S.card,padding:"1rem 1.25rem",marginBottom:"1rem"}}>
+        <div style={{fontWeight:800,fontSize:"0.95rem",color:"#e5e7eb",marginBottom:"0.75rem"}}>⚖️ Conciliación con logística</div>
+        <div style={{display:"flex",gap:"0.75rem",flexWrap:"wrap",alignItems:"flex-end"}}>
+          {/* Logística */}
+          <div>
+            <div style={{fontSize:"0.62rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Logística</div>
+            <select value={logSel} onChange={e=>{setLogSel(e.target.value);setResultado(null);setFilasLiq(null);}}
+              style={{...S.input,minWidth:"130px"}}>
+              <option value="">— Seleccionar —</option>
+              {logActivas.map(l=><option key={l} value={l}>{l}</option>)}
+            </select>
+          </div>
+          {/* Upload */}
+          <div>
+            <div style={{fontSize:"0.62rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Liquidación (.xlsx / .csv)</div>
+            <label style={{cursor:"pointer"}}>
+              <input type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}}
+                onChange={e=>{if(e.target.files[0]){cargarArchivo(e.target.files[0]);e.target.value="";}}}/>
+              <span style={{display:"inline-block",padding:"0.35rem 0.9rem",borderRadius:"6px",
+                background:filasLiq?"#0d2218":"#12172a",border:"1px solid "+(filasLiq?"#10b981":"#252d40"),
+                color:filasLiq?"#10b981":"#9ca3af",fontWeight:700,fontSize:"0.78rem"}}>
+                {filasLiq?`✓ ${filasLiq.length} filas cargadas`:"Subir archivo"}
+              </span>
+            </label>
+          </div>
+        </div>
+
+        {/* ── MAPPER ── */}
+        {filasLiq&&headers.length>0&&(
+          <div style={{marginTop:"0.9rem",padding:"0.75rem 1rem",background:"#0d1119",borderRadius:"8px",border:"1px solid #1e2535"}}>
+            <div style={{fontSize:"0.72rem",fontWeight:700,color:"#6b7280",textTransform:"uppercase",marginBottom:"0.5rem"}}>Mapear columnas del archivo</div>
+            <div style={{display:"flex",gap:"0.75rem",flexWrap:"wrap"}}>
+              {[
+                {k:"nroOrden",l:"Nro orden / seguimiento"},
+                {k:"monto",   l:"Monto cobrado ✱"},
+                {k:"fecha",   l:"Fecha"},
+                {k:"direccion",l:"Dirección"},
+              ].map(({k,l})=>(
+                <div key={k}>
+                  <div style={{fontSize:"0.6rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>{l}</div>
+                  <select value={colMap[k]} onChange={ev=>setColMap(p=>({...p,[k]:ev.target.value}))}
+                    style={{...S.input,fontSize:"0.72rem",minWidth:"150px"}}>
+                    <option value="">— ninguna —</option>
+                    {headers.map(h=><option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+              ))}
+            </div>
+            <button onClick={conciliar} disabled={procesando||!logSel||!colMap.monto}
+              style={{...S.btn(true),marginTop:"0.75rem",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",
+                padding:"0.45rem 1.25rem",opacity:(!logSel||!colMap.monto)?0.4:1}}>
+              {procesando?"Procesando...":"⚖️ Conciliar"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ── RESULTADO ── */}
+      {resultado&&(
+        <>
+          {/* Resumen */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:"8px",marginBottom:"1rem"}}>
+            {[
+              {l:"✓ OK",          v:totales.ok,      c:"#4ade80",bg:"#052e16",brd:"#166534"},
+              {l:"⚠ Diferencias", v:totales.dif,     c:"#fbbf24",bg:"#1c1400",brd:"#92400e"},
+              {l:"✗ No encontrado",v:totales.noEnc,  c:"#f87171",bg:"#1c0a0a",brd:"#7f1d1d"},
+              {l:"○ Sin facturar", v:totales.sinFac,  c:"#60a5fa",bg:"#0c1a2e",brd:"#1e40af"},
+            ].map(m=>(
+              <div key={m.l} onClick={()=>setFilEstado(p=>p===m.l.split(" ").pop()&&m.v>0?"TODOS":
+                m.l.includes("OK")?"OK":m.l.includes("Dif")?"DIFERENCIA":m.l.includes("No enc")?"NO_ENCONTRADO":"SIN_FACTURAR")}
+                style={{background:m.bg,border:"1px solid "+m.brd,borderRadius:"10px",padding:"0.7rem 1rem",cursor:"pointer"}}>
+                <div style={{fontSize:"0.6rem",color:m.c,fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>{m.l}</div>
+                <div style={{fontSize:"1.4rem",fontWeight:800,color:m.c}}>{m.v}</div>
+              </div>
+            ))}
+            <div style={{...S.card,padding:"0.7rem 1rem"}}>
+              <div style={{fontSize:"0.6rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Cobrado por ellos</div>
+              <div style={{fontSize:"1rem",fontWeight:800,color:"#f59e0b"}}>{fmt(totales.montoLiq)}</div>
+            </div>
+            <div style={{...S.card,padding:"0.7rem 1rem"}}>
+              <div style={{fontSize:"0.6rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Según tu tarifa</div>
+              <div style={{fontSize:"1rem",fontWeight:800,color:"#e5e7eb"}}>{fmt(totales.montoDB)}</div>
+            </div>
+            <div style={{background:totales.difTotal>50?"#1c0a0a":totales.difTotal<-50?"#0c1a2e":"#12172a",border:"1px solid "+(totales.difTotal>50?"#7f1d1d":totales.difTotal<-50?"#1e40af":"#1e2535"),borderRadius:"10px",padding:"0.7rem 1rem"}}>
+              <div style={{fontSize:"0.6rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Diferencia neta</div>
+              <div style={{fontSize:"1rem",fontWeight:800,color:totales.difTotal>50?"#f87171":totales.difTotal<-50?"#60a5fa":"#10b981"}}>{fmtDiff(totales.difTotal)}</div>
+            </div>
+          </div>
+
+          {/* Filtros */}
+          <div style={{display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center",marginBottom:"0.75rem"}}>
+            {[{k:"TODOS",l:"Todos"},{k:"FLEX",l:"FLEX"},{k:"NOFLEX",l:"NO FLEX"}].map(f=>(
+              <button key={f.k} onClick={()=>setFilFlexType(f.k)} style={S.btnSm(filFlexType===f.k,"#6366f1")}>{f.l}</button>
+            ))}
+            <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
+            {["TODOS","OK","DIFERENCIA","NO_ENCONTRADO","SIN_FACTURAR"].map(k=>(
+              <button key={k} onClick={()=>setFilEstado(k)}
+                style={{...S.btnSm(filEstado===k, k==="OK"?"#22c55e":k==="DIFERENCIA"?"#f59e0b":k==="NO_ENCONTRADO"?"#ef4444":"#3b82f6"),fontSize:"0.68rem"}}>
+                {k==="TODOS"?"Todos":k==="OK"?"✓ OK":k==="DIFERENCIA"?"Diferencias":k==="NO_ENCONTRADO"?"No encontrado":"Sin facturar"}
+              </button>
+            ))}
+            <span style={{marginLeft:"auto",fontSize:"0.72rem",color:"#6b7280"}}>{filasFiltradas.length} filas</span>
+          </div>
+
+          {/* Tabla */}
+          <div style={{...S.card,overflow:"hidden"}}>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead>
+                <tr style={{background:"#12172a"}}>
+                  {["Estado","FLEX","Nro orden","Dirección","Fecha","Cobrado","Tu tarifa","Diferencia"].map(h=>(
+                    <th key={h} style={{padding:"7px 10px",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",
+                      color:"#6b7280",textAlign:["Cobrado","Tu tarifa","Diferencia"].includes(h)?"right":"left",
+                      borderBottom:"1px solid #1e2535",whiteSpace:"nowrap"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filasFiltradas.length===0&&(
+                  <tr><td colSpan={8} style={{padding:"2rem",textAlign:"center",color:"#4b5563"}}>Sin resultados</td></tr>
+                )}
+                {filasFiltradas.map((r,i)=>{
+                  const ei=ESTADO_INFO[r.estado];
+                  return(
+                    <tr key={i} style={{background:i%2===0?"transparent":"#0d1119",borderBottom:"1px solid #1a1f2e"}}>
+                      <td style={{padding:"7px 10px"}}>
+                        <span style={{fontSize:"0.68rem",padding:"2px 8px",borderRadius:"4px",
+                          background:ei.bg,border:"1px solid "+ei.border,color:ei.c,fontWeight:700,whiteSpace:"nowrap"}}>
+                          {ei.l}
+                        </span>
+                      </td>
+                      <td style={{padding:"7px 10px",textAlign:"center"}}>
+                        {r.esFlex===null?<span style={{color:"#4b5563"}}>—</span>
+                          :r.esFlex
+                            ?<span style={{fontSize:"0.65rem",padding:"1px 6px",background:"#0d2218",color:"#4ade80",borderRadius:"4px",fontWeight:700}}>FLEX</span>
+                            :<span style={{fontSize:"0.65rem",padding:"1px 6px",background:"#12172a",color:"#9ca3af",borderRadius:"4px",fontWeight:700}}>NO FLEX</span>}
+                      </td>
+                      <td style={{padding:"7px 10px",fontFamily:"monospace",fontSize:"0.72rem",color:"#7dd3fc"}}>{r.nroRaw||"—"}</td>
+                      <td style={{padding:"7px 10px",fontSize:"0.75rem",color:"#d1d5db",maxWidth:"220px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={r.dirLiq}>{(r.dirLiq||"—").slice(0,50)}</td>
+                      <td style={{padding:"7px 10px",fontSize:"0.72rem",color:"#6b7280",whiteSpace:"nowrap"}}>{r.fRaw||"—"}</td>
+                      <td style={{padding:"7px 10px",textAlign:"right",fontWeight:700,color:r.estado==="SIN_FACTURAR"?"#4b5563":"#f59e0b"}}>{r.estado==="SIN_FACTURAR"?"—":fmt(r.montoLiq)}</td>
+                      <td style={{padding:"7px 10px",textAlign:"right",color:r.montoDB>0?"#e5e7eb":"#4b5563"}}>{r.montoDB>0?fmt(r.montoDB):"—"}</td>
+                      <td style={{padding:"7px 10px",textAlign:"right",fontWeight:700,
+                        color:r.estado==="OK"?"#4ade80":r.diff>0?"#f87171":r.diff<0?"#60a5fa":"#4b5563"}}>
+                        {r.estado==="OK"?"✓":r.diff!==0?fmtDiff(r.diff):"—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Detalle diferencias */}
+          {filasFiltradas.some(r=>r.estado==="DIFERENCIA")&&(
+            <div style={{...S.card,marginTop:"0.75rem",padding:"0.75rem 1rem"}}>
+              <div style={{fontSize:"0.72rem",fontWeight:700,color:"#fbbf24",textTransform:"uppercase",marginBottom:"0.4rem"}}>
+                Detalle diferencias
+              </div>
+              <div style={{fontSize:"0.72rem",color:"#6b7280"}}>
+                {filasFiltradas.filter(r=>r.estado==="DIFERENCIA").map((r,i)=>(
+                  <div key={i} style={{padding:"3px 0",borderBottom:"1px solid #1a1f2e",display:"flex",gap:"0.75rem",flexWrap:"wrap"}}>
+                    <span style={{color:"#7dd3fc",fontFamily:"monospace"}}>{r.nroRaw}</span>
+                    <span style={{color:"#d1d5db"}}>{(r.dirLiq||"").slice(0,40)}</span>
+                    <span style={{marginLeft:"auto",color:"#f59e0b"}}>Cobrado: {fmt(r.montoLiq)}</span>
+                    <span style={{color:"#9ca3af"}}>Tarifa: {fmt(r.montoDB)}</span>
+                    <span style={{fontWeight:700,color:r.diff>0?"#f87171":"#60a5fa"}}>{fmtDiff(r.diff)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function App(){
   const [sesion,setSesion]=useState(()=>getSession());
   const [pantalla,setPantalla]=useState("dashboard");
@@ -4895,6 +5228,7 @@ export default function App(){
     {id:"liquidacion",l:"Cobranzas Log."},
     {id:"liquidacionlog",l:"Liquidacion Log."},
     {id:"ctasctes",l:"Ctas. Ctes."},
+    {id:"conciliacion",l:"Conciliación"},
     {id:"localidades",l:"Localidades"},
     ...(esAdmin?[{id:"expedicion",l:"Expedicion"},{id:"usuarios",l:"Usuarios"}]:[]),
   ];
@@ -5071,6 +5405,7 @@ export default function App(){
         {tab==="liquidacion"    &&<TabLiquidacion    envios={envios} setEnvios={setEnvios} lc={lc}/>}
         {tab==="liquidacionlog" &&<TabLiquidacionLog envios={envios} setEnvios={setEnvios} zc={zc} lc={lc} esAdmin={esAdmin}/>}
         {tab==="ctasctes"       &&<TabCtasCtes       envios={envios} lc={lc}/>}
+        {tab==="conciliacion"   &&<TabConciliacion   envios={envios} lc={lc} zc={zc}/>}
         {tab==="localidades" &&<TabLocalidades cpExtra={cpExtra} setCpExtra={setCpExtra}/>}
         {tab==="usuarios"   &&esAdmin&&<TabUsuarios lc={lc} setLc={setLcPersist}/>}
         {tab==="expedicion" &&esAdmin&&<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>}
