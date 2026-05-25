@@ -2855,17 +2855,18 @@ function TabCtasCtes({envios,lc}){
     const saldo=Math.max(0,c.deudaTotal-cobrado);
     const dias=diasDeuda(c.fechaMin);
     const limite=limites[c.key]||15;
-    // Cobrado solo de ordenes con saldo pendiente
-    const cobradoConSaldo=c.envios.reduce((sum,e)=>{
+    // Cobrado y count solo de ordenes con saldo pendiente
+    let cobradoConSaldo=0,pendienteCount=0;
+    c.envios.forEach(e=>{
       const pagEnvio=pagos.filter(p=>p.envioIds?.includes(e.id)).reduce((s,p)=>{
         if(p.montosPorEnvio)return s+(p.montosPorEnvio[e.id]||0);
         if((p.envioIds?.length||0)===1)return s+(p.monto||0);
         return s;
       },0);
       const saldoE=Math.max(0,(e._deuda?.monto||0)-pagEnvio);
-      return saldoE>0?sum+((e._deuda?.monto||0)-saldoE):sum;
-    },0);
-    return{...c,cobrado,cobradoConSaldo,saldo,dias,limite,logisticas:[...c.logisticas]};
+      if(saldoE>0){pendienteCount++;cobradoConSaldo+=((e._deuda?.monto||0)-saldoE);}
+    });
+    return{...c,cobrado,cobradoConSaldo,pendienteCount,saldo,dias,limite,logisticas:[...c.logisticas]};
   });
 
   const fmt=(n)=>"$"+Math.round(n).toLocaleString("es-AR");
@@ -2893,13 +2894,14 @@ function TabCtasCtes({envios,lc}){
   });
 
   // Metricas globales
-  const deudaTotal=clientes.reduce((s,c)=>s+c.saldo,0);
-  const vencidosTotal=clientes.filter(c=>c.dias>=c.limite&&c.saldo>0).reduce((s,c)=>s+c.saldo,0);
+  const deudaTotal=clientesFiltrados.reduce((s,c)=>s+c.saldo,0);
+  const vencidosTotal=clientesFiltrados.filter(c=>c.dias>=c.limite&&c.saldo>0).reduce((s,c)=>s+c.saldo,0);
   const cobradoMes=(()=>{
     const inicio=new Date();inicio.setDate(1);inicio.setHours(0,0,0,0);
-    return pagos.filter(p=>{const f=p.creadoEn?.toDate?.();return f&&f>=inicio;}).reduce((s,p)=>s+(p.monto||0),0);
+    const keysFil=new Set(clientesFiltrados.map(c=>c.key));
+    return pagos.filter(p=>{const f=p.creadoEn?.toDate?.();return f&&f>=inicio&&keysFil.has(p.clienteKey);}).reduce((s,p)=>s+(p.monto||0),0);
   })();
-  const clientesActivos=clientes.filter(c=>c.saldo>0).length;
+  const clientesActivos=clientesFiltrados.filter(c=>c.saldo>0).length;
 
   if(loadingPagos||loadingLim)return<div style={{padding:"2rem",color:"#6b7280",textAlign:"center"}}>Cargando cuentas corrientes...</div>;
 
@@ -3160,7 +3162,7 @@ function TabCtasCtes({envios,lc}){
                 <tr key={c.key} style={{background:vencido?"#1c0a0a":i%2===0?"transparent":"#0d1119",borderBottom:"1px solid #1a1f2e"}}>
                   <td style={{padding:"10px 10px"}}>
                     <div style={{fontWeight:600,fontSize:"0.82rem",color:"#e5e7eb"}}>{c.nombre}</div>
-                    <div style={{fontSize:"0.68rem",color:"#4b5563",marginTop:"1px"}}>{c.envios.length} pedido{c.envios.length!==1?"s":""}</div>
+                    <div style={{fontSize:"0.68rem",color:"#4b5563",marginTop:"1px"}}>{c.pendienteCount} pedido{c.pendienteCount!==1?"s":""} pendiente{c.pendienteCount!==1?"s":""}</div>
                   </td>
                   <td style={{padding:"10px 10px"}}>
                     <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
