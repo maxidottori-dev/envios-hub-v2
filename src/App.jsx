@@ -4729,331 +4729,346 @@ function TabConciliacion({envios,lc,zc}){
   const logActivas=Object.keys(lc).filter(k=>lc[k]?.activa);
 
   const [logSel,setLogSel]=useState("");
-  const [filasLiq,setFilasLiq]=useState(null);   // rows from uploaded file
+  const [filasDia,setFilasDia]=useState(null);   // [{fecha,qFlex,mFlex,qBulto,mBulto}]
   const [headers,setHeaders]=useState([]);
-  const [colMap,setColMap]=useState({nroOrden:"",monto:"",fecha:"",direccion:""});
+  const [colMap,setColMap]=useState({fecha:"",qFlex:"",mFlex:"",qBulto:"",mBulto:""});
   const [resultado,setResultado]=useState(null);
   const [filFlexType,setFilFlexType]=useState("TODOS");
-  const [filEstado,setFilEstado]=useState("TODOS");
-  const [procesando,setProcesando]=useState(false);
 
   const fmt=n=>"$"+Math.round(n||0).toLocaleString("es-AR");
-  const fmtDiff=n=>{const abs=Math.abs(Math.round(n));const sign=n>0?"+":"-";return sign+"$"+abs.toLocaleString("es-AR");};
+  const fmtN=n=>Math.round(n||0).toLocaleString("es-AR");
+  const fmtDiff=n=>{if(!n)return"—";const abs=Math.abs(Math.round(n));return(n>0?"+":"-")+"$"+abs.toLocaleString("es-AR");};
 
-  // ── Cargar archivo ──────────────────────────────────────────────────────────
+  // Parsear fecha "11/5/2026" o "2026-05-11T..." a "2026-05-11"
+  const parseFecha=v=>{
+    const s=String(v||"");
+    if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);
+    const m1=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+    if(m1)return`${m1[3]}-${String(m1[2]).padStart(2,"0")}-${String(m1[1]).padStart(2,"0")}`;
+    // Excel serial number
+    if(/^\d+$/.test(s)&&Number(s)>40000){
+      const d=new Date((Number(s)-25569)*86400*1000);
+      return d.toISOString().slice(0,10);
+    }
+    return s;
+  };
+
+  // Parsear monto "$259,600" o "259600" → number
+  const parseMonto=v=>{
+    if(v===undefined||v===null||v==="")return 0;
+    return parseFloat(String(v).replace(/[$\s]/g,"").replace(/\./g,"").replace(",",".").trim())||0;
+  };
+
+  // Cargar archivo
   const cargarArchivo=async(file)=>{
     const XLSX=await cargarXLSX();
     const buf=await file.arrayBuffer();
     const wb=XLSX.read(new Uint8Array(buf),{type:"array",raw:false});
     const ws=wb.Sheets[wb.SheetNames[0]];
     const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
-    if(!rows.length){alert("El archivo está vacío.");return;}
-    // Encontrar fila de encabezado (primera con >2 celdas no vacías)
+    if(!rows.length){alert("Archivo vacío.");return;}
+    // Encontrar fila de header
     let hIdx=0;
-    for(let i=0;i<Math.min(10,rows.length);i++){
-      if(rows[i].filter(c=>c!=="").length>2){hIdx=i;break;}
+    for(let i=0;i<Math.min(8,rows.length);i++){
+      if(rows[i].filter(c=>c!=="").length>=2){hIdx=i;break;}
     }
     const hdrs=rows[hIdx].map(String);
-    const dataRows=rows.slice(hIdx+1).filter(r=>r.some(c=>c!=="")).map(r=>{
-      const obj={};hdrs.forEach((h,i)=>obj[h]=r[i]??"");return obj;
-    });
+    const dataRows=rows.slice(hIdx+1)
+      .filter(r=>r.some(c=>c!=="")&&!String(r[0]||"").toLowerCase().includes("total"))
+      .map(r=>{const o={};hdrs.forEach((h,i)=>o[h]=r[i]??"");return o;});
     setHeaders(hdrs);
-    setFilasLiq(dataRows);
-    // Auto-detectar columnas
-    const detect=(keywords)=>hdrs.find(h=>keywords.some(k=>norm(h).includes(k)))||"";
-    setColMap({
-      nroOrden: detect(["orden","nro","seguimiento","tracking","remito","envio","numero"]),
-      monto:    detect(["monto","importe","precio","total","costo","valor","cobr"]),
-      fecha:    detect(["fecha","date","dia"]),
-      direccion:detect(["dir","domicilio","destino","calle","address"]),
-    });
+    setFilasDia(dataRows);
     setResultado(null);
+    // Auto-detectar columnas
+    const detect=kws=>hdrs.find(h=>kws.some(k=>norm(h).includes(k)))||"";
+    setColMap({
+      fecha:  detect(["dia","fecha","date"]),
+      qFlex:  detect(["cantidad flex","qty flex","cant flex","n flex"]),
+      mFlex:  detect(["flex (","monto flex","importe flex","$ flex","total flex"]),
+      qBulto: detect(["cantidad bulto","qty bulto","cant bulto","n bulto","cantidad no"]),
+      mBulto: detect(["bulto (","monto bulto","importe bulto","$ bulto","total bulto","no flex"]),
+    });
+    // Fallback: si no detectó con los anteriores, asignar por posición si headers lo permiten
   };
 
-  // ── Normalizar nro de orden para matching ──────────────────────────────────
-  const normNro=s=>String(s||"").replace(/[#\s]/g,"").toUpperCase();
-
-  // ── Conciliar ──────────────────────────────────────────────────────────────
+  // Conciliar
   const conciliar=()=>{
-    if(!filasLiq||!logSel){alert("Seleccioná una logística y cargá el archivo.");return;}
-    if(!colMap.monto){alert("Mapeá al menos la columna de Monto.");return;}
-    setProcesando(true);
+    if(!filasDia||!logSel)return;
+    const resultado=filasDia.map(r=>{
+      const fecha=parseFecha(colMap.fecha?r[colMap.fecha]:"");
+      const qFlexLiq=parseInt(colMap.qFlex?r[colMap.qFlex]:"0")||0;
+      const mFlexLiq=parseMonto(colMap.mFlex?r[colMap.mFlex]:"");
+      const qBultoLiq=parseInt(colMap.qBulto?r[colMap.qBulto]:"0")||0;
+      const mBultoLiq=parseMonto(colMap.mBulto?r[colMap.mBulto]:"");
 
-    // Envíos de esta logística en la DB (no cancelados)
-    const enviosLog=envios.filter(e=>e.trans===logSel&&e.estado!=="cancelado");
-    const matchados=new Set(); // ids de envíos DB ya matchados
+      // Envíos de esa fecha y logística
+      const envDia=envios.filter(e=>e.trans===logSel&&e.fecha===fecha&&e.estado!=="cancelado");
+      const flexDB=envDia.filter(e=>e.origen==="ML");
+      const bultoDBArr=envDia.filter(e=>e.origen!=="ML");
 
-    // Parsear monto: soporta "$ 1.234,56" o "1234.56"
-    const parseMonto=v=>{
-      if(v===undefined||v===""||v===null)return 0;
-      const s=String(v).replace(/\$/g,"").replace(/\./g,"").replace(",",".").trim();
-      return parseFloat(s)||0;
-    };
+      const mFlexDB=flexDB.reduce((s,e)=>s+getImp(e),0);
+      const mBultoDB=bultoDBArr.reduce((s,e)=>s+getImp(e),0);
 
-    // Extraer rango de fechas de la liquidación
-    let fechaMin="9999-99",fechaMax="0000-00";
-    filasLiq.forEach(r=>{
-      const fRaw=colMap.fecha?String(r[colMap.fecha]||""):"";
-      // Intentar parsear fecha dd/mm/yyyy o yyyy-mm-dd
-      let fISO="";
-      if(/\d{4}-\d{2}-\d{2}/.test(fRaw))fISO=fRaw.slice(0,10);
-      else if(/\d{2}\/\d{2}\/\d{4}/.test(fRaw)){const[d,m,y]=fRaw.split("/");fISO=`${y}-${m}-${d}`;}
-      if(fISO){if(fISO<fechaMin)fechaMin=fISO;if(fISO>fechaMax)fechaMax=fISO;}
+      // Per-unit rates
+      const unitFlexLiq=qFlexLiq>0?mFlexLiq/qFlexLiq:0;
+      const unitBultoLiq=qBultoLiq>0?mBultoLiq/qBultoLiq:0;
+      const unitFlexDB=flexDB.length>0?mFlexDB/flexDB.length:0;
+      const unitBultoDB=bultoDBArr.length>0?mBultoDB/bultoDBArr.length:0;
+
+      const okFlex=Math.abs(flexDB.length-qFlexLiq)===0&&Math.abs(mFlexDB-mFlexLiq)<=50;
+      const okBulto=Math.abs(bultoDBArr.length-qBultoLiq)===0&&Math.abs(mBultoDB-mBultoLiq)<=50;
+
+      return{
+        fecha,
+        qFlexLiq,mFlexLiq,unitFlexLiq,
+        qBultoLiq,mBultoLiq,unitBultoLiq,
+        qFlexDB:flexDB.length,mFlexDB,unitFlexDB,
+        qBultoDB:bultoDBArr.length,mBultoDB,unitBultoDB,
+        diffQFlex:flexDB.length-qFlexLiq,
+        diffMFlex:mFlexDB-mFlexLiq,
+        diffQBulto:bultoDBArr.length-qBultoLiq,
+        diffMBulto:mBultoDB-mBultoLiq,
+        okFlex,okBulto,
+        ok:okFlex&&okBulto,
+      };
     });
-    const hayRango=fechaMin<fechaMax;
-
-    // Matching por fila de liquidación
-    const filasResultado=filasLiq.map(r=>{
-      const nroRaw=colMap.nroOrden?String(r[colMap.nroOrden]||""):"";
-      const montoLiq=parseMonto(colMap.monto?r[colMap.monto]:"");
-      const dirLiq=norm(colMap.direccion?String(r[colMap.direccion]||""):"");
-      const fRaw=colMap.fecha?String(r[colMap.fecha]||""):"";
-
-      // Buscar envío: 1° por nro de orden/seguimiento, 2° por dirección
-      const nroNorm=normNro(nroRaw);
-      let envMatch=null;
-      if(nroNorm){
-        envMatch=enviosLog.find(e=>{
-          const n1=normNro(e.nroOrdenTN);
-          const n2=normNro(e.nroSeguimiento);
-          return(n1&&(n1===nroNorm||nroNorm.endsWith(n1)||n1.endsWith(nroNorm)))||
-                 (n2&&(n2===nroNorm||nroNorm.endsWith(n2)||n2.endsWith(nroNorm)));
-        });
-      }
-      if(!envMatch&&dirLiq.length>8){
-        envMatch=enviosLog.find(e=>!matchados.has(e.id)&&norm(e.direccion).includes(dirLiq.slice(0,18)));
-      }
-
-      if(envMatch){
-        matchados.add(envMatch.id);
-        const montoDB=getImp(envMatch);
-        const diff=montoLiq-montoDB;
-        const esFlex=envMatch.origen==="ML";
-        const estado=Math.abs(diff)<=1?"OK":"DIFERENCIA";
-        return{tipo:"LIQ",estado,esFlex,nroRaw,dirLiq:colMap.direccion?r[colMap.direccion]:"",
-          montoLiq,montoDB,diff,env:envMatch,fRaw};
-      }else{
-        return{tipo:"LIQ",estado:"NO_ENCONTRADO",esFlex:null,nroRaw,
-          dirLiq:colMap.direccion?r[colMap.direccion]:"",montoLiq,montoDB:0,diff:montoLiq,env:null,fRaw};
-      }
-    });
-
-    // Envíos en DB no encontrados en liquidación (SIN_FACTURAR)
-    const sinFacturar=enviosLog
-      .filter(e=>!matchados.has(e.id)&&(!hayRango||(e.fecha&&e.fecha>=fechaMin&&e.fecha<=fechaMax)))
-      .map(e=>({tipo:"DB",estado:"SIN_FACTURAR",esFlex:e.origen==="ML",
-        nroRaw:e.nroOrdenTN||e.nroSeguimiento||"",dirLiq:e.direccion,
-        montoLiq:0,montoDB:getImp(e),diff:-getImp(e),env:e,fRaw:e.fecha||""}));
-
-    setResultado([...filasResultado,...sinFacturar]);
-    setProcesando(false);
+    setResultado(resultado);
   };
 
-  // ── Filtros sobre resultado ────────────────────────────────────────────────
-  const filasFiltradas=(resultado||[]).filter(r=>{
-    if(filFlexType==="FLEX"&&r.esFlex===false)return false;
-    if(filFlexType==="NOFLEX"&&r.esFlex!==false&&r.esFlex!==null)return false;
-    if(filEstado!=="TODOS"&&r.estado!==filEstado)return false;
+  // Totales liquidación vs DB
+  const totLiq=resultado?{
+    qFlex:resultado.reduce((s,r)=>s+r.qFlexLiq,0),
+    mFlex:resultado.reduce((s,r)=>s+r.mFlexLiq,0),
+    qBulto:resultado.reduce((s,r)=>s+r.qBultoLiq,0),
+    mBulto:resultado.reduce((s,r)=>s+r.mBultoLiq,0),
+  }:null;
+  const totDB=resultado?{
+    qFlex:resultado.reduce((s,r)=>s+r.qFlexDB,0),
+    mFlex:resultado.reduce((s,r)=>s+r.mFlexDB,0),
+    qBulto:resultado.reduce((s,r)=>s+r.qBultoDB,0),
+    mBulto:resultado.reduce((s,r)=>s+r.mBultoDB,0),
+  }:null;
+
+  const filasFil=(resultado||[]).filter(r=>{
+    if(filFlexType==="FLEX")return!r.okFlex;
+    if(filFlexType==="NOFLEX")return!r.okBulto;
+    if(filFlexType==="DIFF")return!r.ok;
     return true;
   });
 
-  // ── Totales ────────────────────────────────────────────────────────────────
-  const totales=resultado?{
-    ok:     resultado.filter(r=>r.estado==="OK").length,
-    dif:    resultado.filter(r=>r.estado==="DIFERENCIA").length,
-    noEnc:  resultado.filter(r=>r.estado==="NO_ENCONTRADO").length,
-    sinFac: resultado.filter(r=>r.estado==="SIN_FACTURAR").length,
-    montoLiq:resultado.filter(r=>r.estado!=="SIN_FACTURAR").reduce((s,r)=>s+r.montoLiq,0),
-    montoDB: resultado.filter(r=>r.estado!=="NO_ENCONTRADO").reduce((s,r)=>s+r.montoDB,0),
-    difTotal:resultado.reduce((s,r)=>s+(r.estado==="DIFERENCIA"||r.estado==="NO_ENCONTRADO"||r.estado==="SIN_FACTURAR"?r.diff:0),0),
-  }:null;
-
-  const ESTADO_INFO={
-    OK:           {l:"✓ OK",          bg:"#052e16",border:"#166534",c:"#4ade80"},
-    DIFERENCIA:   {l:"⚠ Diferencia",  bg:"#1c1400",border:"#92400e",c:"#fbbf24"},
-    NO_ENCONTRADO:{l:"✗ No encontrado",bg:"#1c0a0a",border:"#7f1d1d",c:"#f87171"},
-    SIN_FACTURAR: {l:"○ Sin facturar", bg:"#0c1a2e",border:"#1e40af",c:"#60a5fa"},
-  };
+  const colMapOk=colMap.fecha&&colMap.mFlex&&colMap.mBulto;
 
   return(
     <div>
-      {/* ── CONFIGURACION ── */}
+      {/* Config */}
       <div style={{...S.card,padding:"1rem 1.25rem",marginBottom:"1rem"}}>
         <div style={{fontWeight:800,fontSize:"0.95rem",color:"#e5e7eb",marginBottom:"0.75rem"}}>⚖️ Conciliación con logística</div>
         <div style={{display:"flex",gap:"0.75rem",flexWrap:"wrap",alignItems:"flex-end"}}>
-          {/* Logística */}
           <div>
             <div style={{fontSize:"0.62rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Logística</div>
-            <select value={logSel} onChange={e=>{setLogSel(e.target.value);setResultado(null);setFilasLiq(null);}}
-              style={{...S.input,minWidth:"130px"}}>
+            <select value={logSel} onChange={e=>{setLogSel(e.target.value);setResultado(null);}} style={{...S.input,minWidth:"140px"}}>
               <option value="">— Seleccionar —</option>
               {logActivas.map(l=><option key={l} value={l}>{l}</option>)}
             </select>
           </div>
-          {/* Upload */}
           <div>
-            <div style={{fontSize:"0.62rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Liquidación (.xlsx / .csv)</div>
+            <div style={{fontSize:"0.62rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Liquidación (.xlsx)</div>
             <label style={{cursor:"pointer"}}>
               <input type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}}
                 onChange={e=>{if(e.target.files[0]){cargarArchivo(e.target.files[0]);e.target.value="";}}}/>
               <span style={{display:"inline-block",padding:"0.35rem 0.9rem",borderRadius:"6px",
-                background:filasLiq?"#0d2218":"#12172a",border:"1px solid "+(filasLiq?"#10b981":"#252d40"),
-                color:filasLiq?"#10b981":"#9ca3af",fontWeight:700,fontSize:"0.78rem"}}>
-                {filasLiq?`✓ ${filasLiq.length} filas cargadas`:"Subir archivo"}
+                background:filasDia?"#0d2218":"#12172a",border:"1px solid "+(filasDia?"#10b981":"#252d40"),
+                color:filasDia?"#10b981":"#9ca3af",fontWeight:700,fontSize:"0.78rem"}}>
+                {filasDia?`✓ ${filasDia.length} días cargados`:"Subir archivo"}
               </span>
             </label>
           </div>
         </div>
 
-        {/* ── MAPPER ── */}
-        {filasLiq&&headers.length>0&&(
+        {/* Mapper */}
+        {filasDia&&headers.length>0&&(
           <div style={{marginTop:"0.9rem",padding:"0.75rem 1rem",background:"#0d1119",borderRadius:"8px",border:"1px solid #1e2535"}}>
-            <div style={{fontSize:"0.72rem",fontWeight:700,color:"#6b7280",textTransform:"uppercase",marginBottom:"0.5rem"}}>Mapear columnas del archivo</div>
+            <div style={{fontSize:"0.72rem",fontWeight:700,color:"#6b7280",textTransform:"uppercase",marginBottom:"0.5rem"}}>Mapear columnas</div>
             <div style={{display:"flex",gap:"0.75rem",flexWrap:"wrap"}}>
               {[
-                {k:"nroOrden",l:"Nro orden / seguimiento"},
-                {k:"monto",   l:"Monto cobrado ✱"},
-                {k:"fecha",   l:"Fecha"},
-                {k:"direccion",l:"Dirección"},
+                {k:"fecha",  l:"Fecha / Día ✱"},
+                {k:"qFlex",  l:"Cantidad FLEX"},
+                {k:"mFlex",  l:"Monto FLEX ✱"},
+                {k:"qBulto", l:"Cantidad Bulto"},
+                {k:"mBulto", l:"Monto Bulto ✱"},
               ].map(({k,l})=>(
                 <div key={k}>
                   <div style={{fontSize:"0.6rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>{l}</div>
                   <select value={colMap[k]} onChange={ev=>setColMap(p=>({...p,[k]:ev.target.value}))}
-                    style={{...S.input,fontSize:"0.72rem",minWidth:"150px"}}>
+                    style={{...S.input,fontSize:"0.72rem",minWidth:"160px"}}>
                     <option value="">— ninguna —</option>
                     {headers.map(h=><option key={h} value={h}>{h}</option>)}
                   </select>
                 </div>
               ))}
             </div>
-            <button onClick={conciliar} disabled={procesando||!logSel||!colMap.monto}
+            <button onClick={conciliar} disabled={!logSel||!colMapOk}
               style={{...S.btn(true),marginTop:"0.75rem",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",
-                padding:"0.45rem 1.25rem",opacity:(!logSel||!colMap.monto)?0.4:1}}>
-              {procesando?"Procesando...":"⚖️ Conciliar"}
+                padding:"0.45rem 1.25rem",opacity:(!logSel||!colMapOk)?0.4:1}}>
+              ⚖️ Conciliar
             </button>
           </div>
         )}
       </div>
 
-      {/* ── RESULTADO ── */}
+      {/* Resultado */}
       {resultado&&(
         <>
-          {/* Resumen */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:"8px",marginBottom:"1rem"}}>
+          {/* Resumen totales */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:"8px",marginBottom:"1rem"}}>
             {[
-              {l:"✓ OK",          v:totales.ok,      c:"#4ade80",bg:"#052e16",brd:"#166534"},
-              {l:"⚠ Diferencias", v:totales.dif,     c:"#fbbf24",bg:"#1c1400",brd:"#92400e"},
-              {l:"✗ No encontrado",v:totales.noEnc,  c:"#f87171",bg:"#1c0a0a",brd:"#7f1d1d"},
-              {l:"○ Sin facturar", v:totales.sinFac,  c:"#60a5fa",bg:"#0c1a2e",brd:"#1e40af"},
+              {l:"Días OK",          v:resultado.filter(r=>r.ok).length+"/"+resultado.length, c:"#4ade80",bg:"#052e16",brd:"#166534"},
+              {l:"Con diferencias",  v:resultado.filter(r=>!r.ok).length,                    c:"#fbbf24",bg:"#1c1400",brd:"#92400e"},
             ].map(m=>(
-              <div key={m.l} onClick={()=>setFilEstado(p=>p===m.l.split(" ").pop()&&m.v>0?"TODOS":
-                m.l.includes("OK")?"OK":m.l.includes("Dif")?"DIFERENCIA":m.l.includes("No enc")?"NO_ENCONTRADO":"SIN_FACTURAR")}
-                style={{background:m.bg,border:"1px solid "+m.brd,borderRadius:"10px",padding:"0.7rem 1rem",cursor:"pointer"}}>
+              <div key={m.l} style={{background:m.bg,border:"1px solid "+m.brd,borderRadius:"10px",padding:"0.7rem 1rem"}}>
                 <div style={{fontSize:"0.6rem",color:m.c,fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>{m.l}</div>
-                <div style={{fontSize:"1.4rem",fontWeight:800,color:m.c}}>{m.v}</div>
+                <div style={{fontSize:"1.5rem",fontWeight:800,color:m.c}}>{m.v}</div>
               </div>
             ))}
-            <div style={{...S.card,padding:"0.7rem 1rem"}}>
-              <div style={{fontSize:"0.6rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Cobrado por ellos</div>
-              <div style={{fontSize:"1rem",fontWeight:800,color:"#f59e0b"}}>{fmt(totales.montoLiq)}</div>
+            {/* FLEX summary */}
+            <div style={{...S.card,padding:"0.7rem 1rem",borderLeft:"3px solid #4ade80"}}>
+              <div style={{fontSize:"0.6rem",color:"#4ade80",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>FLEX</div>
+              <div style={{display:"flex",gap:"1rem",flexWrap:"wrap"}}>
+                <div>
+                  <div style={{fontSize:"0.6rem",color:"#6b7280"}}>Ellos / Nosotros</div>
+                  <div style={{fontSize:"0.85rem",fontWeight:700,color:"#e5e7eb"}}>{fmtN(totLiq.qFlex)} / {fmtN(totDB.qFlex)}</div>
+                </div>
+                <div>
+                  <div style={{fontSize:"0.6rem",color:"#6b7280"}}>Cobrado / Tarifa</div>
+                  <div style={{fontSize:"0.85rem",fontWeight:700,color:"#f59e0b"}}>{fmt(totLiq.mFlex)}</div>
+                  <div style={{fontSize:"0.75rem",color:"#9ca3af"}}>{fmt(totDB.mFlex)}</div>
+                </div>
+                <div>
+                  <div style={{fontSize:"0.6rem",color:"#6b7280"}}>Diferencia</div>
+                  <div style={{fontSize:"0.85rem",fontWeight:700,color:totDB.mFlex-totLiq.mFlex<-50?"#f87171":totDB.mFlex-totLiq.mFlex>50?"#60a5fa":"#4ade80"}}>
+                    {fmtDiff(totDB.mFlex-totLiq.mFlex)}
+                  </div>
+                </div>
+              </div>
             </div>
-            <div style={{...S.card,padding:"0.7rem 1rem"}}>
-              <div style={{fontSize:"0.6rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Según tu tarifa</div>
-              <div style={{fontSize:"1rem",fontWeight:800,color:"#e5e7eb"}}>{fmt(totales.montoDB)}</div>
-            </div>
-            <div style={{background:totales.difTotal>50?"#1c0a0a":totales.difTotal<-50?"#0c1a2e":"#12172a",border:"1px solid "+(totales.difTotal>50?"#7f1d1d":totales.difTotal<-50?"#1e40af":"#1e2535"),borderRadius:"10px",padding:"0.7rem 1rem"}}>
-              <div style={{fontSize:"0.6rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Diferencia neta</div>
-              <div style={{fontSize:"1rem",fontWeight:800,color:totales.difTotal>50?"#f87171":totales.difTotal<-50?"#60a5fa":"#10b981"}}>{fmtDiff(totales.difTotal)}</div>
+            {/* Bulto summary */}
+            <div style={{...S.card,padding:"0.7rem 1rem",borderLeft:"3px solid #a78bfa"}}>
+              <div style={{fontSize:"0.6rem",color:"#a78bfa",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>NO FLEX (Bulto)</div>
+              <div style={{display:"flex",gap:"1rem",flexWrap:"wrap"}}>
+                <div>
+                  <div style={{fontSize:"0.6rem",color:"#6b7280"}}>Ellos / Nosotros</div>
+                  <div style={{fontSize:"0.85rem",fontWeight:700,color:"#e5e7eb"}}>{fmtN(totLiq.qBulto)} / {fmtN(totDB.qBulto)}</div>
+                </div>
+                <div>
+                  <div style={{fontSize:"0.6rem",color:"#6b7280"}}>Cobrado / Tarifa</div>
+                  <div style={{fontSize:"0.85rem",fontWeight:700,color:"#f59e0b"}}>{fmt(totLiq.mBulto)}</div>
+                  <div style={{fontSize:"0.75rem",color:"#9ca3af"}}>{fmt(totDB.mBulto)}</div>
+                </div>
+                <div>
+                  <div style={{fontSize:"0.6rem",color:"#6b7280"}}>Diferencia</div>
+                  <div style={{fontSize:"0.85rem",fontWeight:700,color:totDB.mBulto-totLiq.mBulto<-50?"#f87171":totDB.mBulto-totLiq.mBulto>50?"#60a5fa":"#4ade80"}}>
+                    {fmtDiff(totDB.mBulto-totLiq.mBulto)}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Filtros */}
           <div style={{display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center",marginBottom:"0.75rem"}}>
-            {[{k:"TODOS",l:"Todos"},{k:"FLEX",l:"FLEX"},{k:"NOFLEX",l:"NO FLEX"}].map(f=>(
+            {[{k:"TODOS",l:"Todos los días"},{k:"DIFF",l:"⚠ Con diferencias"},{k:"FLEX",l:"FLEX con dif."},{k:"NOFLEX",l:"Bulto con dif."}].map(f=>(
               <button key={f.k} onClick={()=>setFilFlexType(f.k)} style={S.btnSm(filFlexType===f.k,"#6366f1")}>{f.l}</button>
             ))}
-            <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
-            {["TODOS","OK","DIFERENCIA","NO_ENCONTRADO","SIN_FACTURAR"].map(k=>(
-              <button key={k} onClick={()=>setFilEstado(k)}
-                style={{...S.btnSm(filEstado===k, k==="OK"?"#22c55e":k==="DIFERENCIA"?"#f59e0b":k==="NO_ENCONTRADO"?"#ef4444":"#3b82f6"),fontSize:"0.68rem"}}>
-                {k==="TODOS"?"Todos":k==="OK"?"✓ OK":k==="DIFERENCIA"?"Diferencias":k==="NO_ENCONTRADO"?"No encontrado":"Sin facturar"}
-              </button>
-            ))}
-            <span style={{marginLeft:"auto",fontSize:"0.72rem",color:"#6b7280"}}>{filasFiltradas.length} filas</span>
           </div>
 
-          {/* Tabla */}
-          <div style={{...S.card,overflow:"hidden"}}>
-            <table style={{width:"100%",borderCollapse:"collapse"}}>
+          {/* Tabla por día */}
+          <div style={{...S.card,overflow:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",minWidth:"800px"}}>
               <thead>
                 <tr style={{background:"#12172a"}}>
-                  {["Estado","FLEX","Nro orden","Dirección","Fecha","Cobrado","Tu tarifa","Diferencia"].map(h=>(
-                    <th key={h} style={{padding:"7px 10px",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",
-                      color:"#6b7280",textAlign:["Cobrado","Tu tarifa","Diferencia"].includes(h)?"right":"left",
-                      borderBottom:"1px solid #1e2535",whiteSpace:"nowrap"}}>{h}</th>
+                  <th rowSpan={2} style={{padding:"7px 10px",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",color:"#6b7280",borderBottom:"1px solid #1e2535",textAlign:"left",whiteSpace:"nowrap",verticalAlign:"bottom"}}>Fecha</th>
+                  <th colSpan={4} style={{padding:"5px 10px",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",color:"#4ade80",borderBottom:"1px solid #252d40",textAlign:"center",borderLeft:"2px solid #166534"}}>FLEX</th>
+                  <th colSpan={4} style={{padding:"5px 10px",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",color:"#a78bfa",borderBottom:"1px solid #252d40",textAlign:"center",borderLeft:"2px solid #4c1d95"}}>NO FLEX (Bulto)</th>
+                  <th rowSpan={2} style={{padding:"7px 10px",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",color:"#6b7280",borderBottom:"1px solid #1e2535",textAlign:"center",verticalAlign:"bottom"}}>Estado</th>
+                </tr>
+                <tr style={{background:"#12172a"}}>
+                  {["Liq.","DB","Monto liq.","Monto DB"].map(h=>(
+                    <th key={"f"+h} style={{padding:"4px 8px",fontSize:"0.58rem",fontWeight:700,textTransform:"uppercase",color:"#4b5563",borderBottom:"1px solid #1e2535",textAlign:"right",borderLeft:h==="Liq."?"2px solid #166534":"none"}}>{h}</th>
+                  ))}
+                  {["Liq.","DB","Monto liq.","Monto DB"].map(h=>(
+                    <th key={"b"+h} style={{padding:"4px 8px",fontSize:"0.58rem",fontWeight:700,textTransform:"uppercase",color:"#4b5563",borderBottom:"1px solid #1e2535",textAlign:"right",borderLeft:h==="Liq."?"2px solid #4c1d95":"none"}}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {filasFiltradas.length===0&&(
-                  <tr><td colSpan={8} style={{padding:"2rem",textAlign:"center",color:"#4b5563"}}>Sin resultados</td></tr>
+                {filasFil.length===0&&(
+                  <tr><td colSpan={9} style={{padding:"2rem",textAlign:"center",color:"#4b5563"}}>Sin diferencias 🎉</td></tr>
                 )}
-                {filasFiltradas.map((r,i)=>{
-                  const ei=ESTADO_INFO[r.estado];
+                {filasFil.map((r,i)=>{
+                  const rowBg=i%2===0?"transparent":"#0d1119";
+                  const diffFColor=n=>Math.abs(n)<50?"#4ade80":n<0?"#60a5fa":"#f87171";
                   return(
-                    <tr key={i} style={{background:i%2===0?"transparent":"#0d1119",borderBottom:"1px solid #1a1f2e"}}>
-                      <td style={{padding:"7px 10px"}}>
-                        <span style={{fontSize:"0.68rem",padding:"2px 8px",borderRadius:"4px",
-                          background:ei.bg,border:"1px solid "+ei.border,color:ei.c,fontWeight:700,whiteSpace:"nowrap"}}>
-                          {ei.l}
-                        </span>
+                    <tr key={r.fecha} style={{background:r.ok?"transparent":rowBg,borderBottom:"1px solid #1a1f2e"}}>
+                      <td style={{padding:"7px 10px",fontWeight:600,color:"#e5e7eb",whiteSpace:"nowrap"}}>{r.fecha}</td>
+                      {/* FLEX */}
+                      <td style={{padding:"7px 8px",textAlign:"right",borderLeft:"2px solid #1a2e1a",
+                        color:r.diffQFlex===0?"#4b5563":"#fbbf24",fontWeight:r.diffQFlex!==0?700:400}}>
+                        {r.qFlexLiq}
+                        {r.diffQFlex!==0&&<span style={{fontSize:"0.65rem",marginLeft:"4px",color:"#fbbf24"}}>({r.diffQFlex>0?"+":""}{r.diffQFlex})</span>}
                       </td>
-                      <td style={{padding:"7px 10px",textAlign:"center"}}>
-                        {r.esFlex===null?<span style={{color:"#4b5563"}}>—</span>
-                          :r.esFlex
-                            ?<span style={{fontSize:"0.65rem",padding:"1px 6px",background:"#0d2218",color:"#4ade80",borderRadius:"4px",fontWeight:700}}>FLEX</span>
-                            :<span style={{fontSize:"0.65rem",padding:"1px 6px",background:"#12172a",color:"#9ca3af",borderRadius:"4px",fontWeight:700}}>NO FLEX</span>}
+                      <td style={{padding:"7px 8px",textAlign:"right",color:"#9ca3af"}}>{r.qFlexDB}</td>
+                      <td style={{padding:"7px 8px",textAlign:"right",color:"#f59e0b"}}>{fmt(r.mFlexLiq)}</td>
+                      <td style={{padding:"7px 8px",textAlign:"right",color:diffFColor(r.diffMFlex)}}>
+                        {fmt(r.mFlexDB)}
+                        {Math.abs(r.diffMFlex)>50&&<div style={{fontSize:"0.62rem"}}>{fmtDiff(r.diffMFlex)}</div>}
                       </td>
-                      <td style={{padding:"7px 10px",fontFamily:"monospace",fontSize:"0.72rem",color:"#7dd3fc"}}>{r.nroRaw||"—"}</td>
-                      <td style={{padding:"7px 10px",fontSize:"0.75rem",color:"#d1d5db",maxWidth:"220px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={r.dirLiq}>{(r.dirLiq||"—").slice(0,50)}</td>
-                      <td style={{padding:"7px 10px",fontSize:"0.72rem",color:"#6b7280",whiteSpace:"nowrap"}}>{r.fRaw||"—"}</td>
-                      <td style={{padding:"7px 10px",textAlign:"right",fontWeight:700,color:r.estado==="SIN_FACTURAR"?"#4b5563":"#f59e0b"}}>{r.estado==="SIN_FACTURAR"?"—":fmt(r.montoLiq)}</td>
-                      <td style={{padding:"7px 10px",textAlign:"right",color:r.montoDB>0?"#e5e7eb":"#4b5563"}}>{r.montoDB>0?fmt(r.montoDB):"—"}</td>
-                      <td style={{padding:"7px 10px",textAlign:"right",fontWeight:700,
-                        color:r.estado==="OK"?"#4ade80":r.diff>0?"#f87171":r.diff<0?"#60a5fa":"#4b5563"}}>
-                        {r.estado==="OK"?"✓":r.diff!==0?fmtDiff(r.diff):"—"}
+                      {/* Bulto */}
+                      <td style={{padding:"7px 8px",textAlign:"right",borderLeft:"2px solid #1e1030",
+                        color:r.diffQBulto===0?"#4b5563":"#fbbf24",fontWeight:r.diffQBulto!==0?700:400}}>
+                        {r.qBultoLiq}
+                        {r.diffQBulto!==0&&<span style={{fontSize:"0.65rem",marginLeft:"4px",color:"#fbbf24"}}>({r.diffQBulto>0?"+":""}{r.diffQBulto})</span>}
+                      </td>
+                      <td style={{padding:"7px 8px",textAlign:"right",color:"#9ca3af"}}>{r.qBultoDB}</td>
+                      <td style={{padding:"7px 8px",textAlign:"right",color:"#f59e0b"}}>{fmt(r.mBultoLiq)}</td>
+                      <td style={{padding:"7px 8px",textAlign:"right",color:diffFColor(r.diffMBulto)}}>
+                        {fmt(r.mBultoDB)}
+                        {Math.abs(r.diffMBulto)>50&&<div style={{fontSize:"0.62rem"}}>{fmtDiff(r.diffMBulto)}</div>}
+                      </td>
+                      {/* Estado */}
+                      <td style={{padding:"7px 8px",textAlign:"center"}}>
+                        {r.ok
+                          ?<span style={{fontSize:"0.68rem",padding:"2px 8px",borderRadius:"4px",background:"#052e16",border:"1px solid #166534",color:"#4ade80",fontWeight:700}}>✓ OK</span>
+                          :<span style={{fontSize:"0.68rem",padding:"2px 8px",borderRadius:"4px",background:"#1c1400",border:"1px solid #92400e",color:"#fbbf24",fontWeight:700}}>⚠ Dif.</span>
+                        }
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
+              {resultado.length>0&&(
+                <tfoot>
+                  <tr style={{background:"#12172a",borderTop:"2px solid #252d40"}}>
+                    <td style={{padding:"8px 10px",fontWeight:800,color:"#e5e7eb",fontSize:"0.78rem"}}>TOTAL</td>
+                    <td style={{padding:"8px 8px",textAlign:"right",fontWeight:700,color:"#e5e7eb",borderLeft:"2px solid #1a2e1a"}}>{fmtN(totLiq.qFlex)}</td>
+                    <td style={{padding:"8px 8px",textAlign:"right",color:"#9ca3af"}}>{fmtN(totDB.qFlex)}</td>
+                    <td style={{padding:"8px 8px",textAlign:"right",fontWeight:700,color:"#f59e0b"}}>{fmt(totLiq.mFlex)}</td>
+                    <td style={{padding:"8px 8px",textAlign:"right",fontWeight:700,color:Math.abs(totDB.mFlex-totLiq.mFlex)<100?"#4ade80":totDB.mFlex<totLiq.mFlex?"#f87171":"#60a5fa"}}>{fmt(totDB.mFlex)}</td>
+                    <td style={{padding:"8px 8px",textAlign:"right",fontWeight:700,color:"#e5e7eb",borderLeft:"2px solid #1e1030"}}>{fmtN(totLiq.qBulto)}</td>
+                    <td style={{padding:"8px 8px",textAlign:"right",color:"#9ca3af"}}>{fmtN(totDB.qBulto)}</td>
+                    <td style={{padding:"8px 8px",textAlign:"right",fontWeight:700,color:"#f59e0b"}}>{fmt(totLiq.mBulto)}</td>
+                    <td style={{padding:"8px 8px",textAlign:"right",fontWeight:700,color:Math.abs(totDB.mBulto-totLiq.mBulto)<100?"#4ade80":totDB.mBulto<totLiq.mBulto?"#f87171":"#60a5fa"}}>{fmt(totDB.mBulto)}</td>
+                    <td/>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
-
-          {/* Detalle diferencias */}
-          {filasFiltradas.some(r=>r.estado==="DIFERENCIA")&&(
-            <div style={{...S.card,marginTop:"0.75rem",padding:"0.75rem 1rem"}}>
-              <div style={{fontSize:"0.72rem",fontWeight:700,color:"#fbbf24",textTransform:"uppercase",marginBottom:"0.4rem"}}>
-                Detalle diferencias
-              </div>
-              <div style={{fontSize:"0.72rem",color:"#6b7280"}}>
-                {filasFiltradas.filter(r=>r.estado==="DIFERENCIA").map((r,i)=>(
-                  <div key={i} style={{padding:"3px 0",borderBottom:"1px solid #1a1f2e",display:"flex",gap:"0.75rem",flexWrap:"wrap"}}>
-                    <span style={{color:"#7dd3fc",fontFamily:"monospace"}}>{r.nroRaw}</span>
-                    <span style={{color:"#d1d5db"}}>{(r.dirLiq||"").slice(0,40)}</span>
-                    <span style={{marginLeft:"auto",color:"#f59e0b"}}>Cobrado: {fmt(r.montoLiq)}</span>
-                    <span style={{color:"#9ca3af"}}>Tarifa: {fmt(r.montoDB)}</span>
-                    <span style={{fontWeight:700,color:r.diff>0?"#f87171":"#60a5fa"}}>{fmtDiff(r.diff)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </>
       )}
     </div>
   );
 }
+
 
 export default function App(){
   const [sesion,setSesion]=useState(()=>getSession());
