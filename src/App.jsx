@@ -3117,12 +3117,62 @@ function TabCtasCtes({envios,lc}){
         ))}
       </div>
 
-      {/* Filtros */}
+      {/* Filtros + Exportar */}
       <div style={{display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center",marginBottom:"0.85rem"}}>
         {[{k:"todos",l:"Todos"},{k:"deuda",l:"Con deuda"},{k:"vencidos",l:"Vencidos"},{k:"saldados",l:"Saldados"}].map(f=>(
           <button key={f.k} onClick={()=>setFiltro(f.k)} style={S.btnSm(filtro===f.k,"#6366f1")}>{f.l}</button>
         ))}
         <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Nombre, dirección o nro orden..." style={{...S.input,width:"240px",marginLeft:"auto"}}/>
+        <button onClick={()=>{
+          const filas=clientesFiltrados.map((c,i)=>({
+            "#":i+1,
+            Cliente:c.nombre,
+            Logisticas:c.logisticas.join(", "),
+            "Pedidos pendientes":c.pendienteCount,
+            "Cobrado a cta.":c.cobradoConSaldo,
+            Saldo:c.saldo,
+            "Antiguedad (dias)":c.saldo>0?c.dias:0,
+            Estado:c.saldo===0?"Saldado":c.dias>=c.limite?"Vencido":"Con deuda",
+          }));
+          exportarXLSX(filas,"ctas_ctes_"+fechaHoy());
+        }} style={{...S.btnSm(false),color:"#10b981",border:"1px solid #10b981",padding:"3px 10px",fontSize:"0.72rem"}}>⬇ Excel</button>
+        <button onClick={()=>{
+          const ahora=new Date();
+          const ts=ahora.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+          const rows=clientesFiltrados.map((c,i)=>{
+            const vencido=c.saldo>0&&c.dias>=c.limite;
+            return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}">
+              <td style="padding:3px 6px;border-bottom:0.5px solid #ddd;">${i+1}</td>
+              <td style="padding:3px 6px;border-bottom:0.5px solid #ddd;font-weight:600;">${c.nombre}</td>
+              <td style="padding:3px 6px;border-bottom:0.5px solid #ddd;font-size:9px;color:#555;">${c.logisticas.join(", ")}</td>
+              <td style="padding:3px 6px;border-bottom:0.5px solid #ddd;text-align:center;">${c.pendienteCount}</td>
+              <td style="padding:3px 6px;border-bottom:0.5px solid #ddd;text-align:right;color:#059669;">$${Math.round(c.cobradoConSaldo).toLocaleString("es-AR")}</td>
+              <td style="padding:3px 6px;border-bottom:0.5px solid #ddd;text-align:right;font-weight:700;color:${c.saldo===0?"#059669":vencido?"#dc2626":"#d97706"};">$${Math.round(c.saldo).toLocaleString("es-AR")}</td>
+              <td style="padding:3px 6px;border-bottom:0.5px solid #ddd;text-align:center;color:${vencido?"#dc2626":"#6b7280"};">${c.saldo===0?"—":c.dias+" días"}</td>
+              <td style="padding:3px 6px;border-bottom:0.5px solid #ddd;text-align:center;"><span style="font-size:8px;padding:1px 6px;border-radius:3px;background:${c.saldo===0?"#dcfce7":vencido?"#fee2e2":"#fef3c7"};color:${c.saldo===0?"#166534":vencido?"#991b1b":"#92400e"};font-weight:700;">${c.saldo===0?"Saldado":vencido?"Vencido":"Con deuda"}</span></td>
+            </tr>`;
+          }).join("");
+          const totalSaldo=clientesFiltrados.reduce((s,c)=>s+c.saldo,0);
+          const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Ctas. Ctes.</title><style>@page{size:A4;margin:10mm;}body{font-family:Arial,sans-serif;font-size:10px;color:#111;}table{width:100%;border-collapse:collapse;}th{background:#e8e8e8;padding:3px 6px;text-align:left;font-size:8px;text-transform:uppercase;font-weight:700;border-bottom:1.5px solid #333;}@media print{button{display:none!important;}}</style></head><body>
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+              <strong style="font-size:13px;">Cuentas Corrientes${busqueda?" — "+busqueda:""}</strong>
+              <span style="font-size:8px;color:#888;">${ts}</span>
+            </div>
+            <table><thead><tr>
+              <th style="width:20px;">#</th><th>Cliente</th><th style="width:80px;">Logísticas</th>
+              <th style="width:55px;text-align:center;">Pedidos</th>
+              <th style="width:80px;text-align:right;">Cobrado</th>
+              <th style="width:80px;text-align:right;">Saldo</th>
+              <th style="width:55px;text-align:center;">Antigüedad</th>
+              <th style="width:60px;text-align:center;">Estado</th>
+            </tr></thead><tbody>${rows}</tbody></table>
+            <div style="border-top:1.5px solid #333;margin-top:6px;padding-top:4px;display:flex;justify-content:space-between;font-size:9px;color:#555;">
+              <span>${clientesFiltrados.length} clientes</span>
+              <span style="font-weight:700;">Saldo total: $${Math.round(totalSaldo).toLocaleString("es-AR")}</span>
+            </div>
+            <script>window.onload=function(){window.print();}<\/script></body></html>`;
+          const w=window.open("","_blank");if(!w){alert("Permite ventanas emergentes.");return;}w.document.write(html);w.document.close();
+        }} style={{...S.btn(true),background:"#0f1420",border:"1px solid #252d40",padding:"0.3rem 0.8rem",fontSize:"0.72rem"}}>🖨️ Imprimir</button>
       </div>
 
       {/* Tabla */}
