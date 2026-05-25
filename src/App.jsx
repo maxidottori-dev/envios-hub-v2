@@ -3124,51 +3124,95 @@ function TabCtasCtes({envios,lc}){
         ))}
         <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Nombre, dirección o nro orden..." style={{...S.input,width:"240px",marginLeft:"auto"}}/>
         <button onClick={()=>{
-          const filas=clientesFiltrados.map((c,i)=>({
-            "#":i+1,
-            Cliente:c.nombre,
-            Logisticas:c.logisticas.join(", "),
-            "Pedidos pendientes":c.pendienteCount,
-            "Cobrado a cta.":c.cobradoConSaldo,
-            Saldo:c.saldo,
-            "Antiguedad (dias)":c.saldo>0?c.dias:0,
-            Estado:c.saldo===0?"Saldado":c.dias>=c.limite?"Vencido":"Con deuda",
-          }));
+          // Helper saldo por envio
+          const saldoE=e=>{const pE=pagos.filter(p=>p.envioIds?.includes(e.id)).reduce((s,p)=>{if(p.montosPorEnvio)return s+(p.montosPorEnvio[e.id]||0);if((p.envioIds?.length||0)===1)return s+(p.monto||0);return s;},0);return Math.max(0,(e._deuda?.monto||0)-pE);};
+          const filas=[];
+          clientesFiltrados.forEach((c,ci)=>{
+            const vencido=c.saldo>0&&c.dias>=c.limite;
+            // Fila resumen cliente
+            filas.push({
+              Tipo:"CLIENTE","#":ci+1,Cliente:c.nombre,
+              Logisticas:c.logisticas.join(", "),
+              Direccion:"","Nro Orden":"","Fecha Venta":"","Fecha Envio":"",
+              "Tipo CC":"","Importe":"",
+              "Cobrado a cta.":c.cobradoConSaldo,
+              Saldo:c.saldo,
+              "Antiguedad (dias)":c.saldo>0?c.dias:"",
+              Estado:c.saldo===0?"Saldado":vencido?"Vencido":"Con deuda",
+            });
+            // Filas de pedidos pendientes
+            c.envios.forEach(e=>{
+              const se=saldoE(e);
+              if(se<=0)return;
+              filas.push({
+                Tipo:"  pedido","#":"",Cliente:"",Logisticas:"",
+                Direccion:e.direccion,
+                "Nro Orden":e.nroOrdenTN?"#"+e.nroOrdenTN:e.id.slice(-8),
+                "Fecha Venta":e.fechaVenta?fmtCorta(e.fechaVenta):"",
+                "Fecha Envio":e.fecha?fmtCorta(e.fecha):"",
+                "Tipo CC":e._deuda?.tipo||"",
+                Importe:e._deuda?.monto||0,
+                "Cobrado a cta.":e._deuda?.monto-se,
+                Saldo:se,
+                "Antiguedad (dias)":"",Estado:"",
+              });
+            });
+            // Separador
+            filas.push({Tipo:"","":" ","#":"",Cliente:"",Logisticas:"",Direccion:"","Nro Orden":"","Fecha Venta":"","Fecha Envio":"","Tipo CC":"",Importe:"","Cobrado a cta.":"",Saldo:"","Antiguedad (dias)":"",Estado:""});
+          });
           exportarXLSX(filas,"ctas_ctes_"+fechaHoy());
         }} style={{...S.btnSm(false),color:"#10b981",border:"1px solid #10b981",padding:"3px 10px",fontSize:"0.72rem"}}>⬇ Excel</button>
         <button onClick={()=>{
           const ahora=new Date();
           const ts=ahora.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
-          const rows=clientesFiltrados.map((c,i)=>{
+          const saldoE=e=>{const pE=pagos.filter(p=>p.envioIds?.includes(e.id)).reduce((s,p)=>{if(p.montosPorEnvio)return s+(p.montosPorEnvio[e.id]||0);if((p.envioIds?.length||0)===1)return s+(p.monto||0);return s;},0);return Math.max(0,(e._deuda?.monto||0)-pE);};
+          const rows=clientesFiltrados.map((c,ci)=>{
             const vencido=c.saldo>0&&c.dias>=c.limite;
-            return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}">
-              <td style="padding:3px 6px;border-bottom:0.5px solid #ddd;">${i+1}</td>
-              <td style="padding:3px 6px;border-bottom:0.5px solid #ddd;font-weight:600;">${c.nombre}</td>
-              <td style="padding:3px 6px;border-bottom:0.5px solid #ddd;font-size:9px;color:#555;">${c.logisticas.join(", ")}</td>
-              <td style="padding:3px 6px;border-bottom:0.5px solid #ddd;text-align:center;">${c.pendienteCount}</td>
-              <td style="padding:3px 6px;border-bottom:0.5px solid #ddd;text-align:right;color:#059669;">$${Math.round(c.cobradoConSaldo).toLocaleString("es-AR")}</td>
-              <td style="padding:3px 6px;border-bottom:0.5px solid #ddd;text-align:right;font-weight:700;color:${c.saldo===0?"#059669":vencido?"#dc2626":"#d97706"};">$${Math.round(c.saldo).toLocaleString("es-AR")}</td>
-              <td style="padding:3px 6px;border-bottom:0.5px solid #ddd;text-align:center;color:${vencido?"#dc2626":"#6b7280"};">${c.saldo===0?"—":c.dias+" días"}</td>
-              <td style="padding:3px 6px;border-bottom:0.5px solid #ddd;text-align:center;"><span style="font-size:8px;padding:1px 6px;border-radius:3px;background:${c.saldo===0?"#dcfce7":vencido?"#fee2e2":"#fef3c7"};color:${c.saldo===0?"#166534":vencido?"#991b1b":"#92400e"};font-weight:700;">${c.saldo===0?"Saldado":vencido?"Vencido":"Con deuda"}</span></td>
-            </tr>`;
+            const estadoBg=c.saldo===0?"#dcfce7":vencido?"#fee2e2":"#fef3c7";
+            const estadoC=c.saldo===0?"#166534":vencido?"#991b1b":"#92400e";
+            const pedidosRows=c.envios.map(e=>{
+              const se=saldoE(e);
+              if(se<=0)return"";
+              return`<tr>
+                <td style="padding:2px 6px 2px 18px;border-bottom:0.5px solid #eee;font-size:8.5px;color:#374151;">${e.direccion?.slice(0,55)||"—"}</td>
+                <td style="padding:2px 6px;border-bottom:0.5px solid #eee;font-size:8px;font-family:monospace;color:#2563eb;">${e.nroOrdenTN?"#"+e.nroOrdenTN:e.id.slice(-8)}</td>
+                <td style="padding:2px 6px;border-bottom:0.5px solid #eee;font-size:8px;color:#6b7280;">${e.fecha?fmtCorta(e.fecha):"—"}</td>
+                <td style="padding:2px 6px;border-bottom:0.5px solid #eee;font-size:8px;color:#555;">${e.trans||"—"}</td>
+                <td style="padding:2px 6px;border-bottom:0.5px solid #eee;font-size:8px;">${e._deuda?.tipo||""}</td>
+                <td style="padding:2px 6px;border-bottom:0.5px solid #eee;text-align:right;font-size:8.5px;color:#92400e;">$${Math.round(e._deuda?.monto||0).toLocaleString("es-AR")}</td>
+                <td style="padding:2px 6px;border-bottom:0.5px solid #eee;text-align:right;font-size:8.5px;font-weight:700;color:${se>0?"#dc2626":"#059669"};">$${Math.round(se).toLocaleString("es-AR")}</td>
+              </tr>`;
+            }).join("");
+            return`
+              <tr style="background:#f0f0f0;border-top:1.5px solid #bbb;">
+                <td style="padding:4px 6px;font-weight:700;font-size:10px;">${ci+1}. ${c.nombre}</td>
+                <td style="padding:4px 6px;font-size:8px;color:#555;">${c.logisticas.join(", ")}</td>
+                <td style="padding:4px 6px;font-size:8px;text-align:center;color:#555;">${c.pendienteCount} pedido${c.pendienteCount!==1?"s":""}</td>
+                <td style="padding:4px 6px;font-size:8px;text-align:center;color:#555;">${c.saldo===0?"—":c.dias+" días"}</td>
+                <td colspan="2" style="padding:4px 6px;text-align:right;font-weight:800;font-size:10px;color:${c.saldo===0?"#059669":vencido?"#dc2626":"#d97706"};">$${Math.round(c.saldo).toLocaleString("es-AR")}</td>
+                <td style="padding:4px 6px;text-align:center;"><span style="font-size:7.5px;padding:1px 5px;border-radius:3px;background:${estadoBg};color:${estadoC};font-weight:700;">${c.saldo===0?"Saldado":vencido?"Vencido":"Con deuda"}</span></td>
+              </tr>
+              ${pedidosRows}`;
           }).join("");
           const totalSaldo=clientesFiltrados.reduce((s,c)=>s+c.saldo,0);
-          const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Ctas. Ctes.</title><style>@page{size:A4;margin:10mm;}body{font-family:Arial,sans-serif;font-size:10px;color:#111;}table{width:100%;border-collapse:collapse;}th{background:#e8e8e8;padding:3px 6px;text-align:left;font-size:8px;text-transform:uppercase;font-weight:700;border-bottom:1.5px solid #333;}@media print{button{display:none!important;}}</style></head><body>
+          const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Ctas. Ctes.</title>
+            <style>@page{size:A4;margin:10mm;}body{font-family:Arial,sans-serif;font-size:10px;color:#111;}table{width:100%;border-collapse:collapse;}th{background:#d1d5db;padding:3px 6px;text-align:left;font-size:8px;text-transform:uppercase;font-weight:700;border-bottom:1.5px solid #333;}@media print{button{display:none!important;}}</style>
+            </head><body>
             <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
               <strong style="font-size:13px;">Cuentas Corrientes${busqueda?" — "+busqueda:""}</strong>
               <span style="font-size:8px;color:#888;">${ts}</span>
             </div>
             <table><thead><tr>
-              <th style="width:20px;">#</th><th>Cliente</th><th style="width:80px;">Logísticas</th>
+              <th>Cliente / Dirección</th>
+              <th style="width:70px;">Logística</th>
               <th style="width:55px;text-align:center;">Pedidos</th>
-              <th style="width:80px;text-align:right;">Cobrado</th>
-              <th style="width:80px;text-align:right;">Saldo</th>
-              <th style="width:55px;text-align:center;">Antigüedad</th>
-              <th style="width:60px;text-align:center;">Estado</th>
+              <th style="width:50px;text-align:center;">Antigüedad</th>
+              <th style="width:75px;text-align:right;" colspan="2">Saldo</th>
+              <th style="width:55px;text-align:center;">Estado</th>
             </tr></thead><tbody>${rows}</tbody></table>
             <div style="border-top:1.5px solid #333;margin-top:6px;padding-top:4px;display:flex;justify-content:space-between;font-size:9px;color:#555;">
-              <span>${clientesFiltrados.length} clientes</span>
-              <span style="font-weight:700;">Saldo total: $${Math.round(totalSaldo).toLocaleString("es-AR")}</span>
+              <span>${clientesFiltrados.length} clientes · ${clientesFiltrados.reduce((s,c)=>s+c.pendienteCount,0)} pedidos pendientes</span>
+              <span style="font-weight:700;font-size:11px;">Saldo total: $${Math.round(totalSaldo).toLocaleString("es-AR")}</span>
             </div>
             <script>window.onload=function(){window.print();}<\/script></body></html>`;
           const w=window.open("","_blank");if(!w){alert("Permite ventanas emergentes.");return;}w.document.write(html);w.document.close();
