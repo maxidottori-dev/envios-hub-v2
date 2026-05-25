@@ -3170,33 +3170,34 @@ function TabCtasCtes({envios,lc}){
             const vencido=c.saldo>0&&c.dias>=c.limite;
             const estadoBg=c.saldo===0?"#dcfce7":vencido?"#fee2e2":"#fef3c7";
             const estadoC=c.saldo===0?"#166534":vencido?"#991b1b":"#92400e";
-            const pedidosRows=c.envios.map(e=>{
+            const pedidosOrdenados=[...c.envios].sort((a,b)=>(a.fechaVenta||a.fecha||"").localeCompare(b.fechaVenta||b.fecha||""));
+            const pedidosRows=pedidosOrdenados.map(e=>{
               const se=saldoE(e);
               if(se<=0)return"";
               return`<tr>
-                <td style="padding:2px 6px 2px 18px;border-bottom:0.5px solid #eee;font-size:8.5px;color:#374151;">${e.direccion?.slice(0,55)||"—"}</td>
-                <td style="padding:2px 6px;border-bottom:0.5px solid #eee;font-size:8px;font-family:monospace;color:#2563eb;">${e.nroOrdenTN?"#"+e.nroOrdenTN:e.id.slice(-8)}</td>
-                <td style="padding:2px 6px;border-bottom:0.5px solid #eee;font-size:8px;color:#6b7280;">${e.fecha?fmtCorta(e.fecha):"—"}</td>
-                <td style="padding:2px 6px;border-bottom:0.5px solid #eee;font-size:8px;color:#555;">${e.trans||"—"}</td>
-                <td style="padding:2px 6px;border-bottom:0.5px solid #eee;font-size:8px;">${e._deuda?.tipo||""}</td>
-                <td style="padding:2px 6px;border-bottom:0.5px solid #eee;text-align:right;font-size:8.5px;color:#92400e;">$${Math.round(e._deuda?.monto||0).toLocaleString("es-AR")}</td>
-                <td style="padding:2px 6px;border-bottom:0.5px solid #eee;text-align:right;font-size:8.5px;font-weight:700;color:${se>0?"#dc2626":"#059669"};">$${Math.round(se).toLocaleString("es-AR")}</td>
+                <td style="padding:3px 6px 3px 18px;border-bottom:0.5px solid #eee;font-size:10px;color:#374151;">${e.direccion?.slice(0,55)||"—"}</td>
+                <td style="padding:3px 6px;border-bottom:0.5px solid #eee;font-size:9px;font-family:monospace;color:#2563eb;">${e.nroOrdenTN?"#"+e.nroOrdenTN:e.id.slice(-8)}</td>
+                <td style="padding:3px 6px;border-bottom:0.5px solid #eee;font-size:9px;color:#6b7280;">${e.fecha?fmtCorta(e.fecha):"—"}</td>
+                <td style="padding:3px 6px;border-bottom:0.5px solid #eee;font-size:9px;color:#555;">${e.trans||"—"}</td>
+                <td style="padding:3px 6px;border-bottom:0.5px solid #eee;font-size:9px;">${e._deuda?.tipo||""}</td>
+                <td style="padding:3px 6px;border-bottom:0.5px solid #eee;text-align:right;font-size:10px;color:#92400e;">$${Math.round(e._deuda?.monto||0).toLocaleString("es-AR")}</td>
+                <td style="padding:3px 6px;border-bottom:0.5px solid #eee;text-align:right;font-size:10px;font-weight:700;color:${se>0?"#dc2626":"#059669"};">$${Math.round(se).toLocaleString("es-AR")}</td>
               </tr>`;
             }).join("");
             return`
               <tr style="background:#f0f0f0;border-top:1.5px solid #bbb;">
-                <td style="padding:4px 6px;font-weight:700;font-size:10px;">${ci+1}. ${c.nombre}</td>
-                <td style="padding:4px 6px;font-size:8px;color:#555;">${c.logisticas.join(", ")}</td>
-                <td style="padding:4px 6px;font-size:8px;text-align:center;color:#555;">${c.pendienteCount} pedido${c.pendienteCount!==1?"s":""}</td>
-                <td style="padding:4px 6px;font-size:8px;text-align:center;color:#555;">${c.saldo===0?"—":c.dias+" días"}</td>
-                <td colspan="2" style="padding:4px 6px;text-align:right;font-weight:800;font-size:10px;color:${c.saldo===0?"#059669":vencido?"#dc2626":"#d97706"};">$${Math.round(c.saldo).toLocaleString("es-AR")}</td>
-                <td style="padding:4px 6px;text-align:center;"><span style="font-size:7.5px;padding:1px 5px;border-radius:3px;background:${estadoBg};color:${estadoC};font-weight:700;">${c.saldo===0?"Saldado":vencido?"Vencido":"Con deuda"}</span></td>
+                <td style="padding:5px 6px;font-weight:700;font-size:11px;">${ci+1}. ${c.nombre}</td>
+                <td style="padding:5px 6px;font-size:9px;color:#555;">${c.logisticas.join(", ")}</td>
+                <td style="padding:5px 6px;font-size:9px;text-align:center;color:#555;">${c.pendienteCount} pedido${c.pendienteCount!==1?"s":""}</td>
+                <td style="padding:5px 6px;font-size:9px;text-align:center;color:#555;">${c.saldo===0?"—":c.dias+" días"}</td>
+                <td colspan="2" style="padding:5px 6px;text-align:right;font-weight:800;font-size:11px;color:${c.saldo===0?"#059669":vencido?"#dc2626":"#d97706"};">$${Math.round(c.saldo).toLocaleString("es-AR")}</td>
+                <td style="padding:5px 6px;text-align:center;"><span style="font-size:8.5px;padding:2px 6px;border-radius:3px;background:${estadoBg};color:${estadoC};font-weight:700;">${c.saldo===0?"Saldado":vencido?"Vencido":"Con deuda"}</span></td>
               </tr>
               ${pedidosRows}`;
           }).join("");
           const totalSaldo=clientesFiltrados.reduce((s,c)=>s+c.saldo,0);
           const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Ctas. Ctes.</title>
-            <style>@page{size:A4;margin:10mm;}body{font-family:Arial,sans-serif;font-size:10px;color:#111;}table{width:100%;border-collapse:collapse;}th{background:#d1d5db;padding:3px 6px;text-align:left;font-size:8px;text-transform:uppercase;font-weight:700;border-bottom:1.5px solid #333;}@media print{button{display:none!important;}}</style>
+            <style>@page{size:A4;margin:10mm;}body{font-family:Arial,sans-serif;font-size:11px;color:#111;}table{width:100%;border-collapse:collapse;}th{background:#d1d5db;padding:4px 6px;text-align:left;font-size:9px;text-transform:uppercase;font-weight:700;border-bottom:1.5px solid #333;}@media print{button{display:none!important;}}</style>
             </head><body>
             <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
               <strong style="font-size:13px;">Cuentas Corrientes${busqueda?" — "+busqueda:""}</strong>
