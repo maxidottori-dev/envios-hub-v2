@@ -1768,7 +1768,6 @@ function TabTarifas({zc,setZc,lc,setLc}){
 }
 
 function TabInforme({envios,zc,lc}){
-  // Calcular lunes y domingo de la semana actual
   const initSem=()=>{
     const d=new Date();const day=d.getDay()||7;
     const lun=new Date(d);lun.setDate(d.getDate()-(day-1));
@@ -1781,6 +1780,7 @@ function TabInforme({envios,zc,lc}){
   const [hasta,setHasta]=useState(sem.h);
   const [logSel,setLogSel]=useState("TODAS");
   const [filTipos,setFilTipos]=useState(new Set());
+  const [showCaros,setShowCaros]=useState(false);
   const toggleTipo=t=>setFilTipos(prev=>{const n=new Set(prev);n.has(t)?n.delete(t):n.add(t);return n;});
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const tmap=buildTarifaMap(zc);
@@ -1794,9 +1794,27 @@ function TabInforme({envios,zc,lc}){
     return ds>=desde&&ds<=hasta;
   });
   const logsMost=logSel==="TODAS"?logActivas:[logSel];
+
+  // Análisis FLEX vs ML
+  const envFlex=envSem.filter(e=>e.origen==="ML");
+  const flexCaros=envFlex.filter(e=>{const mlF=ML_FINAL[e.partido];return mlF&&getImp(e)>mlF;});
+  const totalMLPaga=envFlex.reduce((s,e)=>s+(ML_FINAL[e.partido]||0),0);
+  const totalCostoFlex=envFlex.reduce((s,e)=>s+getImp(e),0);
+  const porPartidoFlex=(()=>{
+    const m={};
+    envFlex.forEach(e=>{
+      const p=e.partido||"Sin partido";
+      if(!m[p])m[p]={partido:p,mlFinal:ML_FINAL[e.partido]||0,count:0,costo:0,caros:[]};
+      const imp=getImp(e);m[p].count++;m[p].costo+=imp;
+      if(m[p].mlFinal>0&&imp>m[p].mlFinal)m[p].caros.push(e);
+    });
+    return Object.values(m).sort((a,b)=>b.count-a.count);
+  })();
+
   if(!envios.length)return<div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📊</div><p>Sin envios para mostrar</p></div>;
   return(
     <div>
+      {/* Filtros fecha */}
       <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}}>
         <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Desde</span>
         <input type="date" value={desde} onChange={ev=>setDesde(ev.target.value)} style={{...S.input,padding:"4px 8px",width:"140px"}}/>
@@ -1804,6 +1822,7 @@ function TabInforme({envios,zc,lc}){
         <input type="date" value={hasta} onChange={ev=>setHasta(ev.target.value)} style={{...S.input,padding:"4px 8px",width:"140px"}}/>
         <button onClick={()=>{const s=initSem();setDesde(s.d);setHasta(s.h);}} style={S.btnSm(false)}>Esta semana</button>
       </div>
+      {/* Filtro tipo */}
       <div style={{...S.card,padding:"0.55rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"0.35rem",flexWrap:"wrap",alignItems:"center"}}>
         <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",marginRight:"4px"}}>Tipo</span>
         {[{k:"FLEX",c:"#84cc16"},{k:"TN",c:"#38bdf8"},{k:"Manual",c:"#a78bfa"}].map(({k,c})=>(
@@ -1811,26 +1830,50 @@ function TabInforme({envios,zc,lc}){
         ))}
         {filTipos.size>0&&<button onClick={()=>setFilTipos(new Set())} style={{...S.btnSm(false),fontSize:"0.65rem",padding:"2px 8px",color:"#6b7280"}}>✕ Limpiar</button>}
       </div>
+      {/* Filtro logística + Excel */}
       <div style={{...S.card,padding:"0.55rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"0.35rem",flexWrap:"wrap",alignItems:"center"}}>
         <button onClick={()=>setLogSel("TODAS")} style={S.btn(logSel==="TODAS")}>TODAS</button>
-        {logActivas.map(l =><button key={l} onClick={()=>setLogSel(l)} style={S.btn(logSel===l,lc[l]?.color||"#6366f1")}>{l}</button>)}
+        {logActivas.map(l=><button key={l} onClick={()=>setLogSel(l)} style={S.btn(logSel===l,lc[l]?.color||"#6366f1")}>{l}</button>)}
         <button onClick={()=>{
-          const filas=envSem.map((e,i)=>({
-            "#":i+1,Tipo:getTipo(e),Logistica:e.trans||"",Partido:e.partido,Direccion:e.direccion,
-            Fecha:e.fecha||"",Turno:e.turno||"",Bultos:e.bultos||1,
-            Zona:(()=>{const zi=getZonaLogistica(zc,e.trans,e.partido);return zi?zi.nombre:"";})(),
-            Importe:getImp(e),EstadoLiq:e.estadoLiq||"normal",NotaLiq:e.notaLiq||"",
-          }));
+          const filas=envSem.map((e,i)=>{
+            const tipo=getTipo(e);
+            const mlF=tipo==="FLEX"?(ML_FINAL[e.partido]||""):"";
+            const imp=getImp(e);
+            const dif=tipo==="FLEX"&&mlF!==""?mlF-imp:"";
+            return{
+              "#":i+1,
+              Tipo:tipo,
+              NroSeguimiento:e.nroSeguimiento||"",
+              NroOrden:e.nroOrdenTN||"",
+              Cliente:e.clienteNombre||"",
+              Logistica:e.trans||"",
+              Partido:e.partido||"",
+              Localidad:e.localidad||"",
+              Direccion:e.direccion||"",
+              Fecha:e.fecha||e.fechaVenta||"",
+              Turno:e.turno||"",
+              Bultos:e.bultos||1,
+              Zona:(()=>{const zi=getZonaLogistica(zc,e.trans,e.partido);return zi?zi.nombre:"";})(),
+              Importe:imp,
+              MLFinal:mlF,
+              Diferencia:dif,
+              Cobranza:e.cobranza||"",
+              EstadoPago:e.estadoPago||"",
+              EstadoLiq:e.estadoLiq||"normal",
+              NotaLiq:e.notaLiq||"",
+            };
+          });
           exportarXLSX(filas,"informe_"+desde+"_"+hasta);
         }} style={{...S.btnSm(false),color:"#10b981",border:"1px solid #10b981",marginLeft:"auto",padding:"3px 12px",fontSize:"0.72rem"}}>⬇ Excel</button>
       </div>
-      {logsMost.map(l =>{
+
+      {/* Tablas por logística */}
+      {logsMost.map(l=>{
         const lcD=lc[l];const envL=envSem.filter(e=>e.trans===l);if(!envL.length)return null;
         const envLNormal=envL.filter(e=>!e.estadoLiq||e.estadoLiq==="normal");
         const envLNoAbonado=envL.filter(e=>e.estadoLiq==="cancelado_liq"||e.estadoLiq==="no_abonado");
         const porZona={};
         envLNormal.forEach(e=>{const zi=getZonaLogistica(zc,l,e.partido);const k=zi?zi.nombre:"Sin zona";if(!porZona[k])porZona[k]={nombre:k,color:zi?.color||"#374151",envios:[]};porZona[k].envios.push(e);});
-        // Agregar no abonados en seccion separada si existen
         if(envLNoAbonado.length){if(!porZona["_no_abonado"])porZona["_no_abonado"]={nombre:"No abonados / Cancelados",color:"#f87171",envios:[]};envLNoAbonado.forEach(e=>porZona["_no_abonado"].envios.push(e));}
         const totalL=envLNormal.reduce((s,e)=>s+getImp(e),0);
         const totalNoAbonado=envLNoAbonado.reduce((s,e)=>s+getImp(e),0);
@@ -1845,26 +1888,161 @@ function TabInforme({envios,zc,lc}){
             </div>
             <div style={{overflow:"auto"}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.82rem"}}>
-                <thead><tr style={{borderBottom:"1px solid #1e2535",background:"#0f1420"}}><th style={thSt}>Zona / Partido</th><th style={{...thSt,textAlign:"center"}}>Envios</th><th style={{...thSt,textAlign:"right"}}>Valor unitario</th><th style={{...thSt,textAlign:"right"}}>Total</th></tr></thead>
+                <thead><tr style={{borderBottom:"1px solid #1e2535",background:"#0f1420"}}>
+                  <th style={thSt}>Zona / Partido</th>
+                  <th style={{...thSt,textAlign:"center"}}>Envios</th>
+                  <th style={{...thSt,textAlign:"right"}}>Valor unitario</th>
+                  <th style={{...thSt,textAlign:"right"}}>Total</th>
+                </tr></thead>
                 <tbody>
                   {Object.values(porZona).map(zona=>{
                     const porValor={};
-                    zona.envios.forEach(e=>{const imp=getImp(e);const vk=String(imp);if(!porValor[vk])porValor[vk]={valor:imp,count:0,total:0,partidos:new Set()};porValor[vk].count++;porValor[vk].total+=imp;porValor[vk].partidos.add(e.partido);});
+                    zona.envios.forEach(e=>{
+                      const imp=getImp(e);const vk=String(imp);
+                      if(!porValor[vk])porValor[vk]={valor:imp,count:0,total:0,partidos:new Set(),tieneCaro:false};
+                      porValor[vk].count++;porValor[vk].total+=imp;porValor[vk].partidos.add(e.partido);
+                      if(e.origen==="ML"&&ML_FINAL[e.partido]&&imp>ML_FINAL[e.partido])porValor[vk].tieneCaro=true;
+                    });
                     const zonaTotal=zona.envios.reduce((s,e)=>s+getImp(e),0);
                     return([
-                      <tr key={zona.nombre+"_h"} style={{background:"#12172a",borderTop:"1px solid #252d40"}}><td colSpan={4} style={{...tdSt,padding:"0.35rem 0.8rem"}}><span style={{display:"inline-block",padding:"1px 8px",borderRadius:"5px",background:zona.color+"22",color:zona.color,fontWeight:700,fontSize:"0.75rem"}}>{zona.nombre}</span><span style={{color:"#4b5563",fontSize:"0.7rem",marginLeft:"8px"}}>{zona.envios.length} envios · {fmt(zonaTotal)}</span></td></tr>,
-                      ...Object.values(porValor).sort((a,b)=>b.valor-a.valor).map(({valor,count,total,partidos})=>(
-                        <tr key={zona.nombre+valor} style={{borderBottom:"1px solid #1a1f2e"}}><td style={{...tdSt,color:"#6b7280",paddingLeft:"1.5rem",fontSize:"0.75rem",whiteSpace:"normal"}}>{[...partidos].join(", ")}</td><td style={{...tdSt,textAlign:"center",color:"#e5e7eb"}}>{count}</td><td style={{...tdSt,textAlign:"right",color:"#9ca3af"}}>{fmt(valor)}</td><td style={{...tdSt,textAlign:"right",color:"#10b981",fontWeight:600}}>{fmt(total)}</td></tr>
+                      <tr key={zona.nombre+"_h"} style={{background:"#12172a",borderTop:"1px solid #252d40"}}>
+                        <td colSpan={4} style={{...tdSt,padding:"0.35rem 0.8rem"}}>
+                          <span style={{display:"inline-block",padding:"1px 8px",borderRadius:"5px",background:zona.color+"22",color:zona.color,fontWeight:700,fontSize:"0.75rem"}}>{zona.nombre}</span>
+                          <span style={{color:"#4b5563",fontSize:"0.7rem",marginLeft:"8px"}}>{zona.envios.length} envios · {fmt(zonaTotal)}</span>
+                        </td>
+                      </tr>,
+                      ...Object.values(porValor).sort((a,b)=>b.valor-a.valor).map(({valor,count,total,partidos,tieneCaro})=>(
+                        <tr key={zona.nombre+valor} style={{borderBottom:"1px solid #1a1f2e"}}>
+                          <td style={{...tdSt,color:"#6b7280",paddingLeft:"1.5rem",fontSize:"0.75rem",whiteSpace:"normal"}}>{[...partidos].join(", ")}</td>
+                          <td style={{...tdSt,textAlign:"center",color:"#e5e7eb"}}>{count}</td>
+                          <td style={{...tdSt,textAlign:"right",color:"#9ca3af"}}>
+                            {fmt(valor)}{tieneCaro&&<span title="Algún envío cuesta más que lo que paga ML" style={{marginLeft:"5px",fontSize:"0.75rem",cursor:"default"}}>⚠️</span>}
+                          </td>
+                          <td style={{...tdSt,textAlign:"right",color:"#10b981",fontWeight:600}}>{fmt(total)}</td>
+                        </tr>
                       ))
                     ]);
                   })}
                 </tbody>
-                <tfoot><tr style={{borderTop:"2px solid #252d40",background:"#12172a"}}><td style={{...tdSt,color:lcD.color,fontWeight:800}}>TOTAL {l}</td><td style={{...tdSt,textAlign:"center",color:"#e5e7eb",fontWeight:700}}>{envL.length}</td><td style={tdSt}></td><td style={{...tdSt,textAlign:"right",color:"#10b981",fontWeight:800}}>{fmt(totalL)}</td></tr></tfoot>
+                <tfoot>
+                  <tr style={{borderTop:"2px solid #252d40",background:"#12172a"}}>
+                    <td style={{...tdSt,color:lcD.color,fontWeight:800}}>TOTAL {l}</td>
+                    <td style={{...tdSt,textAlign:"center",color:"#e5e7eb",fontWeight:700}}>{envL.length}</td>
+                    <td style={tdSt}></td>
+                    <td style={{...tdSt,textAlign:"right",color:"#10b981",fontWeight:800}}>{fmt(totalL)}</td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </div>
         );
       })}
+
+      {/* Sección Análisis FLEX vs ML */}
+      {envFlex.length>0&&(()=>{
+        const difNeta=totalMLPaga-totalCostoFlex;
+        return(
+          <div style={{...S.card,marginBottom:"1rem",overflow:"hidden",border:"1px solid #1a3008"}}>
+            <div style={{padding:"0.7rem 1rem",background:"#0a1a04",borderBottom:"1px solid #1a3008",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
+              <span style={{color:"#84cc16",fontWeight:800,fontSize:"1rem"}}>📦 Análisis FLEX vs ML</span>
+              <span style={{color:"#6b7280",fontSize:"0.75rem"}}>{envFlex.length} envíos FLEX en el período</span>
+              {flexCaros.length>0&&(
+                <button onClick={()=>setShowCaros(p=>!p)} style={{marginLeft:"auto",...S.btnSm(showCaros,"#f59e0b"),border:"1px solid #f59e0b",fontSize:"0.72rem"}}>
+                  ⚠️ {flexCaros.length} más caro{flexCaros.length>1?"s":""} que ML {showCaros?"▲":"▼"}
+                </button>
+              )}
+            </div>
+            {/* Cards resumen */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(155px,1fr))",gap:"0.65rem",padding:"0.75rem 1rem",borderBottom:"1px solid #1a3008"}}>
+              <div style={{background:"#0f1420",borderRadius:"8px",padding:"0.65rem 0.85rem",border:"1px solid #1a3008"}}>
+                <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>ML paga (total)</div>
+                <div style={{color:"#84cc16",fontWeight:800,fontSize:"1.05rem"}}>{fmt(totalMLPaga)}</div>
+              </div>
+              <div style={{background:"#0f1420",borderRadius:"8px",padding:"0.65rem 0.85rem",border:"1px solid #1a3008"}}>
+                <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nuestro costo FLEX</div>
+                <div style={{color:"#10b981",fontWeight:800,fontSize:"1.05rem"}}>{fmt(totalCostoFlex)}</div>
+              </div>
+              <div style={{background:"#0f1420",borderRadius:"8px",padding:"0.65rem 0.85rem",border:"1px solid "+(difNeta>=0?"#1a3008":"#7f1d1d")}}>
+                <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Diferencia neta</div>
+                <div style={{color:difNeta>=0?"#4ade80":"#f87171",fontWeight:800,fontSize:"1.05rem"}}>{difNeta>=0?"+":""}{fmt(difNeta)}</div>
+                <div style={{color:"#374151",fontSize:"0.6rem"}}>{difNeta>=0?"ML cubre el costo":"Costo supera lo que paga ML"}</div>
+              </div>
+              {flexCaros.length>0&&(
+                <div style={{background:"#1c0a00",borderRadius:"8px",padding:"0.65rem 0.85rem",border:"1px solid #92400e"}}>
+                  <div style={{color:"#f59e0b",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Caros ({flexCaros.length})</div>
+                  <div style={{color:"#f87171",fontWeight:800,fontSize:"1.05rem"}}>{fmt(flexCaros.reduce((s,e)=>s+(getImp(e)-(ML_FINAL[e.partido]||0)),0))}</div>
+                  <div style={{color:"#6b7280",fontSize:"0.6rem"}}>exceso sobre lo que paga ML</div>
+                </div>
+              )}
+            </div>
+            {/* Tabla por partido */}
+            <div style={{overflow:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.8rem"}}>
+                <thead>
+                  <tr style={{background:"#0a1a04",borderBottom:"1px solid #1a3008"}}>
+                    <th style={{...thSt,color:"#84cc16"}}>Partido</th>
+                    <th style={{...thSt,textAlign:"center"}}>Envíos</th>
+                    <th style={{...thSt,textAlign:"right"}}>ML paga</th>
+                    <th style={{...thSt,textAlign:"right"}}>Nuestro costo (prom.)</th>
+                    <th style={{...thSt,textAlign:"right"}}>Dif. unit.</th>
+                    <th style={{...thSt,textAlign:"center"}}>⚠️</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {porPartidoFlex.map(({partido,mlFinal,count,costo,caros})=>{
+                    const costoUnit=count?Math.round(costo/count):0;
+                    const dif=mlFinal?mlFinal-costoUnit:null;
+                    const esCaro=dif!==null&&dif<0;
+                    return(
+                      <tr key={partido} style={{borderBottom:"1px solid #1a1f2e",background:esCaro?"rgba(127,29,29,0.15)":"transparent"}}>
+                        <td style={{...tdSt,color:"#e5e7eb",fontWeight:600}}>{partido}</td>
+                        <td style={{...tdSt,textAlign:"center",color:"#9ca3af"}}>{count}</td>
+                        <td style={{...tdSt,textAlign:"right",color:"#84cc16",fontWeight:600}}>{mlFinal?fmt(mlFinal):"—"}</td>
+                        <td style={{...tdSt,textAlign:"right",color:"#10b981"}}>{fmt(costoUnit)}</td>
+                        <td style={{...tdSt,textAlign:"right",fontWeight:dif!==null?700:400,color:dif===null?"#6b7280":dif>=0?"#4ade80":"#f87171"}}>
+                          {dif===null?"—":(dif>=0?"+":"")+fmt(dif)}
+                        </td>
+                        <td style={{...tdSt,textAlign:"center",color:caros.length>0?"#f59e0b":"#374151",fontWeight:700}}>
+                          {caros.length>0?caros.length:"—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {/* Lista de envíos caros (expandible) */}
+            {showCaros&&flexCaros.length>0&&(
+              <div style={{borderTop:"1px solid #1a3008",padding:"0.75rem 1rem"}}>
+                <div style={{color:"#f59e0b",fontWeight:700,fontSize:"0.78rem",marginBottom:"0.6rem"}}>
+                  Envíos donde el costo supera lo que paga ML
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:"5px"}}>
+                  {flexCaros.map(e=>{
+                    const imp=getImp(e);const mlF=ML_FINAL[e.partido]||0;const exceso=imp-mlF;
+                    const nroRef=e.nroSeguimiento||("#"+(e.nroOrdenTN||e.id.slice(-10)));
+                    return(
+                      <div key={e.id} style={{display:"flex",gap:"8px",alignItems:"center",padding:"6px 10px",background:"#1c0a00",borderRadius:"6px",border:"1px solid #92400e",flexWrap:"wrap"}}>
+                        <span style={{color:"#fbbf24",fontFamily:"monospace",fontSize:"0.75rem",flexShrink:0}}>{nroRef}</span>
+                        <span style={{color:"#e5e7eb",fontSize:"0.78rem",flex:1,minWidth:"120px"}}>{e.direccion}</span>
+                        <span style={{color:"#9ca3af",fontSize:"0.72rem",flexShrink:0}}>{e.partido}</span>
+                        <span style={{color:"#f87171",fontWeight:700,fontSize:"0.78rem",flexShrink:0}}>
+                          {fmt(imp)} <span style={{color:"#6b7280",fontWeight:400,fontSize:"0.72rem"}}>vs ML {fmt(mlF)}</span>
+                        </span>
+                        <span style={{color:"#f87171",fontWeight:700,fontSize:"0.75rem",background:"#7f1d1d",padding:"1px 7px",borderRadius:"4px",flexShrink:0}}>
+                          +{fmt(exceso)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Total período */}
       {logSel==="TODAS"&&(()=>{
         const totNorm=envSem.filter(e=>!e.estadoLiq||e.estadoLiq==="normal").reduce((s,e)=>s+getImp(e),0);
         const totNoAb=envSem.filter(e=>e.estadoLiq==="cancelado_liq"||e.estadoLiq==="no_abonado").reduce((s,e)=>s+getImp(e),0);
