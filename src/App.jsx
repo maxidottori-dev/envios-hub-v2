@@ -171,6 +171,8 @@ function fechaManana() { const d=new Date();d.setDate(d.getDate()+1);return d.to
 function fechaInicioSemana() { const d=new Date();d.setDate(d.getDate()-((d.getDay()||7)-1));return d.toISOString().split("T")[0]; }
 function fmtCorta(ds) { if(!ds)return"";const[,m,d]=ds.split("-");return d+"/"+m; }
 const norm=s=>s?String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase():"";
+// Valor de referencia que paga ML por envío (por partido)
+const ML_FINAL={"CABA":6490,"Lomas de Zamora":6490,"Avellaneda":4490,"Lanus":4490,"Quilmes":4490,"Almirante Brown":8490,"Berazategui":8490,"Berisso":8490,"Campana":8490,"Canuelas":8490,"Ensenada":8490,"Escobar":8490,"Esteban Echeverria":8490,"Ezeiza":8490,"Florencio Varela":8490,"Gral. Rodriguez":8490,"Hurlingham":8490,"Ituzaingo":8490,"Jose C Paz":8490,"La Matanza Norte":8490,"La Matanza Sur":8490,"La Plata":8490,"Lujan":8490,"Malvinas Argentinas":8490,"Marcos Paz":8490,"Merlo":8490,"Moreno":8490,"Moron":8490,"Pilar":8490,"Presidente Peron":8490,"San Fernando":8490,"San Isidro":8490,"San Martin":8490,"San Miguel":8490,"San Vicente":8490,"Tigre":8490,"Tres de Febrero":8490,"Vicente Lopez":8490,"Zarate":8490};
 const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
 function parseFechaES(str){const m=String(str||"").toLowerCase().match(/(\d+)\s+de\s+(\w+)\s+de\s+(\d{4})/);if(!m)return"";const mes=MESES[m[2]];if(!mes)return"";return m[3]+"-"+String(mes).padStart(2,"0")+"-"+String(m[1]).padStart(2,"0");}
 
@@ -1113,6 +1115,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
                   </div>
                   {imp>0&&<span style={{color:e.importeOverride>0?"#fbbf24":"#10b981",fontWeight:700,fontSize:"0.82rem"}}>{fmt(imp)}{e.importeOverride>0&&<span style={{fontSize:"0.62rem",opacity:.65,marginLeft:"2px"}}>*</span>}</span>}
                   {esTN&&e.importeOrden>0&&<span style={{color:"#6b7280",fontSize:"0.7rem"}}>{fmt(e.importeOrden)}</span>}
+                  {e.origen==="ML"&&ML_FINAL[e.partido]&&<span style={{color:"#64748b",fontSize:"0.68rem",marginTop:"1px"}}>ML {fmt(ML_FINAL[e.partido])}</span>}
                 </div>
               </div>
               {isEdit&&!modoSel&&<PanelEdit envio={e} onSave={saveEnvio} onSaveMultiple={saveMultipleEnvios} onClose={()=>setEditId(null)} lc={lc} envios={envios} getImp={getImp} esAdmin={esAdmin}/>}
@@ -1235,7 +1238,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
   };
 
   const [pdfOrient,setPdfOrient]=useState("landscape");
-  const [pdfFontSize,setPdfFontSize]=useState(11);
+  const [pdfFontSize,setPdfFontSize]=useState(14);
   const [pdfVersion,setPdfVersion]=useState("completa"); // "completa" | "simple"
   const generarPDF=()=>{
     const ahora=new Date();
@@ -1537,6 +1540,35 @@ function TabTarifas({zc,setZc,lc,setLc}){
   const [moverModal,setMoverModal]=useState(null);
   const [addModal,setAddModal]=useState(false);
   const [newZona,setNewZona]=useState({nombre:"",color:"#6366f1",precio:0});
+  const [renaming,setRenaming]=useState(null); // {key,nombre}
+  const [renameSaving,setRenameSaving]=useState(false);
+  const doRename=async(oldKey,newNombre)=>{
+    const nombre=newNombre.trim().toUpperCase();
+    const newKey=nombre.replace(/\s+/g,"_");
+    if(!nombre||newKey===oldKey){setRenaming(null);return;}
+    if(lc[newKey]){alert("Ya existe una logística con ese nombre");return;}
+    setRenameSaving(true);
+    try{
+      const newLc={...lc,[newKey]:{...lc[oldKey],nombre}};
+      delete newLc[oldKey];
+      setLc(newLc);
+      await setDoc(doc(db,"config","logisticas"),newLc);
+      // Batch update envíos
+      const snap=await getDocs(query(collection(db,"envios"),where("trans","==",oldKey)));
+      if(!snap.empty){
+        const CHUNK=400;const docs=snap.docs;
+        for(let i=0;i<docs.length;i+=CHUNK){
+          const batch=writeBatch(db);
+          docs.slice(i,i+CHUNK).forEach(d=>batch.update(d.ref,{trans:newKey}));
+          await batch.commit();
+        }
+      }
+      // También actualizar zonas si el logSel era el oldKey
+      if(logSel===oldKey)setLogSel(newKey);
+      setRenaming(null);
+    }catch(err){console.error("Error renombrando:",err);alert("Error al renombrar: "+err.message);}
+    finally{setRenameSaving(false);}
+  };
   const logActivas=Object.keys(lc).filter(k =>lc[k].activa);
   useEffect(()=>{if((!logSel||!lc[logSel]?.activa)&&logActivas.length>0)setLogSel(logActivas[0]);},[lc]);
   const cfg=zc[logSel]||{zonas:[]};
@@ -1686,7 +1718,12 @@ function TabTarifas({zc,setZc,lc,setLc}){
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:"0.85rem",marginBottom:"1rem"}}>
           {Object.entries(lc).map(([k,v])=>(
             <div key={k} style={{...S.card,borderTop:"3px solid "+(v.activa?v.color:"#374151"),overflow:"hidden",opacity:v.activa?1:0.6}}>
-              <div style={{padding:"0.75rem 1rem",display:"flex",alignItems:"center",justifyContent:"space-between"}}><span style={{color:v.activa?v.color:"#6b7280",fontWeight:800,fontSize:"1rem"}}>{v.nombre}</span><button onClick={()=>toggleLog(k)} style={{...S.btnSm(v.activa,v.color),padding:"4px 12px"}}>{v.activa?"Activa":"Desactivar"}</button></div>
+              <div style={{padding:"0.75rem 1rem",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"6px"}}>
+                {renaming?.key===k
+                  ?<><input autoFocus value={renaming.nombre} onChange={ev=>setRenaming(p=>({...p,nombre:ev.target.value}))} onKeyDown={ev=>{if(ev.key==="Enter")doRename(k,renaming.nombre);if(ev.key==="Escape")setRenaming(null);}} style={{...S.input,flex:1,fontWeight:800,fontSize:"0.9rem",padding:"2px 8px",color:v.color,border:"1px solid "+v.color}}/><button onClick={()=>doRename(k,renaming.nombre)} disabled={renameSaving} style={{...S.btnSm(true,"#10b981"),padding:"4px 10px",fontSize:"0.7rem"}}>{renameSaving?"...":"OK"}</button><button onClick={()=>setRenaming(null)} style={{...S.btnSm(false),padding:"4px 8px",fontSize:"0.7rem"}}>✕</button></>
+                  :<><span style={{color:v.activa?v.color:"#6b7280",fontWeight:800,fontSize:"1rem",flex:1}}>{v.nombre}</span><button onClick={()=>setRenaming({key:k,nombre:v.nombre||k})} title="Renombrar" style={{background:"none",border:"none",color:"#4b5563",cursor:"pointer",fontSize:"0.78rem",padding:"2px 4px"}}>✏️</button><button onClick={()=>toggleLog(k)} style={{...S.btnSm(v.activa,v.color),padding:"4px 12px"}}>{v.activa?"Activa":"Desactivar"}</button></>
+                }
+              </div>
               <div style={{padding:"0 1rem 0.75rem",display:"flex",flexDirection:"column",gap:"6px"}}>
                 <div style={{color:"#4b5563",fontSize:"0.75rem"}}>{v.activa?"Visible en la app":"No aparece en asignacion ni filtros"}</div>
                 {v.activa&&<div style={{display:"flex",alignItems:"center",gap:"8px"}}>
@@ -4819,352 +4856,6 @@ function ScrollTop(){
   );
 }
 
-// ─── TAB CONCILIACION ────────────────────────────────────────────────────────
-function TabConciliacion({envios,lc,zc}){
-  const tmap=buildTarifaMap(zc);
-  const getImp=e=>calcImp(e,tmap,lc,zc);
-  const logActivas=Object.keys(lc).filter(k=>lc[k]?.activa);
-
-  const [logSel,setLogSel]=useState("");
-  const [filasDia,setFilasDia]=useState(null);   // [{fecha,qFlex,mFlex,qBulto,mBulto}]
-  const [headers,setHeaders]=useState([]);
-  const [colMap,setColMap]=useState({fecha:"",qFlex:"",mFlex:"",qBulto:"",mBulto:""});
-  const [resultado,setResultado]=useState(null);
-  const [filFlexType,setFilFlexType]=useState("TODOS");
-
-  const fmt=n=>"$"+Math.round(n||0).toLocaleString("es-AR");
-  const fmtN=n=>Math.round(n||0).toLocaleString("es-AR");
-  const fmtDiff=n=>{if(!n)return"—";const abs=Math.abs(Math.round(n));return(n>0?"+":"-")+"$"+abs.toLocaleString("es-AR");};
-
-  // Parsear fecha "11/5/2026" o "2026-05-11T..." a "2026-05-11"
-  const parseFecha=v=>{
-    const s=String(v||"");
-    if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);
-    const m1=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
-    if(m1)return`${m1[3]}-${String(m1[2]).padStart(2,"0")}-${String(m1[1]).padStart(2,"0")}`;
-    // Excel serial number
-    if(/^\d+$/.test(s)&&Number(s)>40000){
-      const d=new Date((Number(s)-25569)*86400*1000);
-      return d.toISOString().slice(0,10);
-    }
-    return s;
-  };
-
-  // Parsear monto "$259,600" o "259600" → number
-  const parseMonto=v=>{
-    if(v===undefined||v===null||v==="")return 0;
-    return parseFloat(String(v).replace(/[$\s]/g,"").replace(/\./g,"").replace(",",".").trim())||0;
-  };
-
-  // Cargar archivo
-  const cargarArchivo=async(file)=>{
-    const XLSX=await cargarXLSX();
-    const buf=await file.arrayBuffer();
-    const wb=XLSX.read(new Uint8Array(buf),{type:"array",raw:false});
-    const ws=wb.Sheets[wb.SheetNames[0]];
-    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
-    if(!rows.length){alert("Archivo vacío.");return;}
-    // Encontrar fila de header
-    let hIdx=0;
-    for(let i=0;i<Math.min(8,rows.length);i++){
-      if(rows[i].filter(c=>c!=="").length>=2){hIdx=i;break;}
-    }
-    const hdrs=rows[hIdx].map(String);
-    const dataRows=rows.slice(hIdx+1)
-      .filter(r=>r.some(c=>c!=="")&&!String(r[0]||"").toLowerCase().includes("total"))
-      .map(r=>{const o={};hdrs.forEach((h,i)=>o[h]=r[i]??"");return o;});
-    setHeaders(hdrs);
-    setFilasDia(dataRows);
-    setResultado(null);
-    // Auto-detectar columnas
-    const detect=kws=>hdrs.find(h=>kws.some(k=>norm(h).includes(k)))||"";
-    setColMap({
-      fecha:  detect(["dia","fecha","date"]),
-      qFlex:  detect(["cantidad flex","qty flex","cant flex","n flex"]),
-      mFlex:  detect(["flex (","monto flex","importe flex","$ flex","total flex"]),
-      qBulto: detect(["cantidad bulto","qty bulto","cant bulto","n bulto","cantidad no"]),
-      mBulto: detect(["bulto (","monto bulto","importe bulto","$ bulto","total bulto","no flex"]),
-    });
-    // Fallback: si no detectó con los anteriores, asignar por posición si headers lo permiten
-  };
-
-  // Conciliar
-  const conciliar=()=>{
-    if(!filasDia||!logSel)return;
-    const resultado=filasDia.map(r=>{
-      const fecha=parseFecha(colMap.fecha?r[colMap.fecha]:"");
-      const qFlexLiq=parseInt(colMap.qFlex?r[colMap.qFlex]:"0")||0;
-      const mFlexLiq=parseMonto(colMap.mFlex?r[colMap.mFlex]:"");
-      const qBultoLiq=parseInt(colMap.qBulto?r[colMap.qBulto]:"0")||0;
-      const mBultoLiq=parseMonto(colMap.mBulto?r[colMap.mBulto]:"");
-
-      // Envíos de esa fecha y logística
-      const envDia=envios.filter(e=>e.trans===logSel&&e.fecha===fecha&&e.estado!=="cancelado");
-      const flexDB=envDia.filter(e=>e.origen==="ML");
-      const bultoDBArr=envDia.filter(e=>e.origen!=="ML");
-
-      const mFlexDB=flexDB.reduce((s,e)=>s+getImp(e),0);
-      const mBultoDB=bultoDBArr.reduce((s,e)=>s+getImp(e),0);
-
-      // Per-unit rates
-      const unitFlexLiq=qFlexLiq>0?mFlexLiq/qFlexLiq:0;
-      const unitBultoLiq=qBultoLiq>0?mBultoLiq/qBultoLiq:0;
-      const unitFlexDB=flexDB.length>0?mFlexDB/flexDB.length:0;
-      const unitBultoDB=bultoDBArr.length>0?mBultoDB/bultoDBArr.length:0;
-
-      const okFlex=Math.abs(flexDB.length-qFlexLiq)===0&&Math.abs(mFlexDB-mFlexLiq)<=50;
-      const okBulto=Math.abs(bultoDBArr.length-qBultoLiq)===0&&Math.abs(mBultoDB-mBultoLiq)<=50;
-
-      return{
-        fecha,
-        qFlexLiq,mFlexLiq,unitFlexLiq,
-        qBultoLiq,mBultoLiq,unitBultoLiq,
-        qFlexDB:flexDB.length,mFlexDB,unitFlexDB,
-        qBultoDB:bultoDBArr.length,mBultoDB,unitBultoDB,
-        diffQFlex:flexDB.length-qFlexLiq,
-        diffMFlex:mFlexDB-mFlexLiq,
-        diffQBulto:bultoDBArr.length-qBultoLiq,
-        diffMBulto:mBultoDB-mBultoLiq,
-        okFlex,okBulto,
-        ok:okFlex&&okBulto,
-      };
-    });
-    setResultado(resultado);
-  };
-
-  // Totales liquidación vs DB
-  const totLiq=resultado?{
-    qFlex:resultado.reduce((s,r)=>s+r.qFlexLiq,0),
-    mFlex:resultado.reduce((s,r)=>s+r.mFlexLiq,0),
-    qBulto:resultado.reduce((s,r)=>s+r.qBultoLiq,0),
-    mBulto:resultado.reduce((s,r)=>s+r.mBultoLiq,0),
-  }:null;
-  const totDB=resultado?{
-    qFlex:resultado.reduce((s,r)=>s+r.qFlexDB,0),
-    mFlex:resultado.reduce((s,r)=>s+r.mFlexDB,0),
-    qBulto:resultado.reduce((s,r)=>s+r.qBultoDB,0),
-    mBulto:resultado.reduce((s,r)=>s+r.mBultoDB,0),
-  }:null;
-
-  const filasFil=(resultado||[]).filter(r=>{
-    if(filFlexType==="FLEX")return!r.okFlex;
-    if(filFlexType==="NOFLEX")return!r.okBulto;
-    if(filFlexType==="DIFF")return!r.ok;
-    return true;
-  });
-
-  const colMapOk=colMap.fecha&&colMap.mFlex&&colMap.mBulto;
-
-  return(
-    <div>
-      {/* Config */}
-      <div style={{...S.card,padding:"1rem 1.25rem",marginBottom:"1rem"}}>
-        <div style={{fontWeight:800,fontSize:"0.95rem",color:"#e5e7eb",marginBottom:"0.75rem"}}>⚖️ Conciliación con logística</div>
-        <div style={{display:"flex",gap:"0.75rem",flexWrap:"wrap",alignItems:"flex-end"}}>
-          <div>
-            <div style={{fontSize:"0.62rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Logística</div>
-            <select value={logSel} onChange={e=>{setLogSel(e.target.value);setResultado(null);}} style={{...S.input,minWidth:"140px"}}>
-              <option value="">— Seleccionar —</option>
-              {logActivas.map(l=><option key={l} value={l}>{l}</option>)}
-            </select>
-          </div>
-          <div>
-            <div style={{fontSize:"0.62rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Liquidación (.xlsx)</div>
-            <label style={{cursor:"pointer"}}>
-              <input type="file" accept=".xlsx,.xls,.csv" style={{display:"none"}}
-                onChange={e=>{if(e.target.files[0]){cargarArchivo(e.target.files[0]);e.target.value="";}}}/>
-              <span style={{display:"inline-block",padding:"0.35rem 0.9rem",borderRadius:"6px",
-                background:filasDia?"#0d2218":"#12172a",border:"1px solid "+(filasDia?"#10b981":"#252d40"),
-                color:filasDia?"#10b981":"#9ca3af",fontWeight:700,fontSize:"0.78rem"}}>
-                {filasDia?`✓ ${filasDia.length} días cargados`:"Subir archivo"}
-              </span>
-            </label>
-          </div>
-        </div>
-
-        {/* Mapper */}
-        {filasDia&&headers.length>0&&(
-          <div style={{marginTop:"0.9rem",padding:"0.75rem 1rem",background:"#0d1119",borderRadius:"8px",border:"1px solid #1e2535"}}>
-            <div style={{fontSize:"0.72rem",fontWeight:700,color:"#6b7280",textTransform:"uppercase",marginBottom:"0.5rem"}}>Mapear columnas</div>
-            <div style={{display:"flex",gap:"0.75rem",flexWrap:"wrap"}}>
-              {[
-                {k:"fecha",  l:"Fecha / Día ✱"},
-                {k:"qFlex",  l:"Cantidad FLEX"},
-                {k:"mFlex",  l:"Monto FLEX ✱"},
-                {k:"qBulto", l:"Cantidad Bulto"},
-                {k:"mBulto", l:"Monto Bulto ✱"},
-              ].map(({k,l})=>(
-                <div key={k}>
-                  <div style={{fontSize:"0.6rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>{l}</div>
-                  <select value={colMap[k]} onChange={ev=>setColMap(p=>({...p,[k]:ev.target.value}))}
-                    style={{...S.input,fontSize:"0.72rem",minWidth:"160px"}}>
-                    <option value="">— ninguna —</option>
-                    {headers.map(h=><option key={h} value={h}>{h}</option>)}
-                  </select>
-                </div>
-              ))}
-            </div>
-            <button onClick={conciliar} disabled={!logSel||!colMapOk}
-              style={{...S.btn(true),marginTop:"0.75rem",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",
-                padding:"0.45rem 1.25rem",opacity:(!logSel||!colMapOk)?0.4:1}}>
-              ⚖️ Conciliar
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Resultado */}
-      {resultado&&(
-        <>
-          {/* Resumen totales */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:"8px",marginBottom:"1rem"}}>
-            {[
-              {l:"Días OK",          v:resultado.filter(r=>r.ok).length+"/"+resultado.length, c:"#4ade80",bg:"#052e16",brd:"#166534"},
-              {l:"Con diferencias",  v:resultado.filter(r=>!r.ok).length,                    c:"#fbbf24",bg:"#1c1400",brd:"#92400e"},
-            ].map(m=>(
-              <div key={m.l} style={{background:m.bg,border:"1px solid "+m.brd,borderRadius:"10px",padding:"0.7rem 1rem"}}>
-                <div style={{fontSize:"0.6rem",color:m.c,fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>{m.l}</div>
-                <div style={{fontSize:"1.5rem",fontWeight:800,color:m.c}}>{m.v}</div>
-              </div>
-            ))}
-            {/* FLEX summary */}
-            <div style={{...S.card,padding:"0.7rem 1rem",borderLeft:"3px solid #4ade80"}}>
-              <div style={{fontSize:"0.6rem",color:"#4ade80",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>FLEX</div>
-              <div style={{display:"flex",gap:"1rem",flexWrap:"wrap"}}>
-                <div>
-                  <div style={{fontSize:"0.6rem",color:"#6b7280"}}>Ellos / Nosotros</div>
-                  <div style={{fontSize:"0.85rem",fontWeight:700,color:"#e5e7eb"}}>{fmtN(totLiq.qFlex)} / {fmtN(totDB.qFlex)}</div>
-                </div>
-                <div>
-                  <div style={{fontSize:"0.6rem",color:"#6b7280"}}>Cobrado / Tarifa</div>
-                  <div style={{fontSize:"0.85rem",fontWeight:700,color:"#f59e0b"}}>{fmt(totLiq.mFlex)}</div>
-                  <div style={{fontSize:"0.75rem",color:"#9ca3af"}}>{fmt(totDB.mFlex)}</div>
-                </div>
-                <div>
-                  <div style={{fontSize:"0.6rem",color:"#6b7280"}}>Diferencia</div>
-                  <div style={{fontSize:"0.85rem",fontWeight:700,color:totDB.mFlex-totLiq.mFlex<-50?"#f87171":totDB.mFlex-totLiq.mFlex>50?"#60a5fa":"#4ade80"}}>
-                    {fmtDiff(totDB.mFlex-totLiq.mFlex)}
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/* Bulto summary */}
-            <div style={{...S.card,padding:"0.7rem 1rem",borderLeft:"3px solid #a78bfa"}}>
-              <div style={{fontSize:"0.6rem",color:"#a78bfa",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>NO FLEX (Bulto)</div>
-              <div style={{display:"flex",gap:"1rem",flexWrap:"wrap"}}>
-                <div>
-                  <div style={{fontSize:"0.6rem",color:"#6b7280"}}>Ellos / Nosotros</div>
-                  <div style={{fontSize:"0.85rem",fontWeight:700,color:"#e5e7eb"}}>{fmtN(totLiq.qBulto)} / {fmtN(totDB.qBulto)}</div>
-                </div>
-                <div>
-                  <div style={{fontSize:"0.6rem",color:"#6b7280"}}>Cobrado / Tarifa</div>
-                  <div style={{fontSize:"0.85rem",fontWeight:700,color:"#f59e0b"}}>{fmt(totLiq.mBulto)}</div>
-                  <div style={{fontSize:"0.75rem",color:"#9ca3af"}}>{fmt(totDB.mBulto)}</div>
-                </div>
-                <div>
-                  <div style={{fontSize:"0.6rem",color:"#6b7280"}}>Diferencia</div>
-                  <div style={{fontSize:"0.85rem",fontWeight:700,color:totDB.mBulto-totLiq.mBulto<-50?"#f87171":totDB.mBulto-totLiq.mBulto>50?"#60a5fa":"#4ade80"}}>
-                    {fmtDiff(totDB.mBulto-totLiq.mBulto)}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Filtros */}
-          <div style={{display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center",marginBottom:"0.75rem"}}>
-            {[{k:"TODOS",l:"Todos los días"},{k:"DIFF",l:"⚠ Con diferencias"},{k:"FLEX",l:"FLEX con dif."},{k:"NOFLEX",l:"Bulto con dif."}].map(f=>(
-              <button key={f.k} onClick={()=>setFilFlexType(f.k)} style={S.btnSm(filFlexType===f.k,"#6366f1")}>{f.l}</button>
-            ))}
-          </div>
-
-          {/* Tabla por día */}
-          <div style={{...S.card,overflow:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",minWidth:"800px"}}>
-              <thead>
-                <tr style={{background:"#12172a"}}>
-                  <th rowSpan={2} style={{padding:"7px 10px",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",color:"#6b7280",borderBottom:"1px solid #1e2535",textAlign:"left",whiteSpace:"nowrap",verticalAlign:"bottom"}}>Fecha</th>
-                  <th colSpan={4} style={{padding:"5px 10px",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",color:"#4ade80",borderBottom:"1px solid #252d40",textAlign:"center",borderLeft:"2px solid #166534"}}>FLEX</th>
-                  <th colSpan={4} style={{padding:"5px 10px",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",color:"#a78bfa",borderBottom:"1px solid #252d40",textAlign:"center",borderLeft:"2px solid #4c1d95"}}>NO FLEX (Bulto)</th>
-                  <th rowSpan={2} style={{padding:"7px 10px",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",color:"#6b7280",borderBottom:"1px solid #1e2535",textAlign:"center",verticalAlign:"bottom"}}>Estado</th>
-                </tr>
-                <tr style={{background:"#12172a"}}>
-                  {["Liq.","DB","Monto liq.","Monto DB"].map(h=>(
-                    <th key={"f"+h} style={{padding:"4px 8px",fontSize:"0.58rem",fontWeight:700,textTransform:"uppercase",color:"#4b5563",borderBottom:"1px solid #1e2535",textAlign:"right",borderLeft:h==="Liq."?"2px solid #166534":"none"}}>{h}</th>
-                  ))}
-                  {["Liq.","DB","Monto liq.","Monto DB"].map(h=>(
-                    <th key={"b"+h} style={{padding:"4px 8px",fontSize:"0.58rem",fontWeight:700,textTransform:"uppercase",color:"#4b5563",borderBottom:"1px solid #1e2535",textAlign:"right",borderLeft:h==="Liq."?"2px solid #4c1d95":"none"}}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filasFil.length===0&&(
-                  <tr><td colSpan={9} style={{padding:"2rem",textAlign:"center",color:"#4b5563"}}>Sin diferencias 🎉</td></tr>
-                )}
-                {filasFil.map((r,i)=>{
-                  const rowBg=i%2===0?"transparent":"#0d1119";
-                  const diffFColor=n=>Math.abs(n)<50?"#4ade80":n<0?"#60a5fa":"#f87171";
-                  return(
-                    <tr key={r.fecha} style={{background:r.ok?"transparent":rowBg,borderBottom:"1px solid #1a1f2e"}}>
-                      <td style={{padding:"7px 10px",fontWeight:600,color:"#e5e7eb",whiteSpace:"nowrap"}}>{r.fecha}</td>
-                      {/* FLEX */}
-                      <td style={{padding:"7px 8px",textAlign:"right",borderLeft:"2px solid #1a2e1a",
-                        color:r.diffQFlex===0?"#4b5563":"#fbbf24",fontWeight:r.diffQFlex!==0?700:400}}>
-                        {r.qFlexLiq}
-                        {r.diffQFlex!==0&&<span style={{fontSize:"0.65rem",marginLeft:"4px",color:"#fbbf24"}}>({r.diffQFlex>0?"+":""}{r.diffQFlex})</span>}
-                      </td>
-                      <td style={{padding:"7px 8px",textAlign:"right",color:"#9ca3af"}}>{r.qFlexDB}</td>
-                      <td style={{padding:"7px 8px",textAlign:"right",color:"#f59e0b"}}>{fmt(r.mFlexLiq)}</td>
-                      <td style={{padding:"7px 8px",textAlign:"right",color:diffFColor(r.diffMFlex)}}>
-                        {fmt(r.mFlexDB)}
-                        {Math.abs(r.diffMFlex)>50&&<div style={{fontSize:"0.62rem"}}>{fmtDiff(r.diffMFlex)}</div>}
-                      </td>
-                      {/* Bulto */}
-                      <td style={{padding:"7px 8px",textAlign:"right",borderLeft:"2px solid #1e1030",
-                        color:r.diffQBulto===0?"#4b5563":"#fbbf24",fontWeight:r.diffQBulto!==0?700:400}}>
-                        {r.qBultoLiq}
-                        {r.diffQBulto!==0&&<span style={{fontSize:"0.65rem",marginLeft:"4px",color:"#fbbf24"}}>({r.diffQBulto>0?"+":""}{r.diffQBulto})</span>}
-                      </td>
-                      <td style={{padding:"7px 8px",textAlign:"right",color:"#9ca3af"}}>{r.qBultoDB}</td>
-                      <td style={{padding:"7px 8px",textAlign:"right",color:"#f59e0b"}}>{fmt(r.mBultoLiq)}</td>
-                      <td style={{padding:"7px 8px",textAlign:"right",color:diffFColor(r.diffMBulto)}}>
-                        {fmt(r.mBultoDB)}
-                        {Math.abs(r.diffMBulto)>50&&<div style={{fontSize:"0.62rem"}}>{fmtDiff(r.diffMBulto)}</div>}
-                      </td>
-                      {/* Estado */}
-                      <td style={{padding:"7px 8px",textAlign:"center"}}>
-                        {r.ok
-                          ?<span style={{fontSize:"0.68rem",padding:"2px 8px",borderRadius:"4px",background:"#052e16",border:"1px solid #166534",color:"#4ade80",fontWeight:700}}>✓ OK</span>
-                          :<span style={{fontSize:"0.68rem",padding:"2px 8px",borderRadius:"4px",background:"#1c1400",border:"1px solid #92400e",color:"#fbbf24",fontWeight:700}}>⚠ Dif.</span>
-                        }
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              {resultado.length>0&&(
-                <tfoot>
-                  <tr style={{background:"#12172a",borderTop:"2px solid #252d40"}}>
-                    <td style={{padding:"8px 10px",fontWeight:800,color:"#e5e7eb",fontSize:"0.78rem"}}>TOTAL</td>
-                    <td style={{padding:"8px 8px",textAlign:"right",fontWeight:700,color:"#e5e7eb",borderLeft:"2px solid #1a2e1a"}}>{fmtN(totLiq.qFlex)}</td>
-                    <td style={{padding:"8px 8px",textAlign:"right",color:"#9ca3af"}}>{fmtN(totDB.qFlex)}</td>
-                    <td style={{padding:"8px 8px",textAlign:"right",fontWeight:700,color:"#f59e0b"}}>{fmt(totLiq.mFlex)}</td>
-                    <td style={{padding:"8px 8px",textAlign:"right",fontWeight:700,color:Math.abs(totDB.mFlex-totLiq.mFlex)<100?"#4ade80":totDB.mFlex<totLiq.mFlex?"#f87171":"#60a5fa"}}>{fmt(totDB.mFlex)}</td>
-                    <td style={{padding:"8px 8px",textAlign:"right",fontWeight:700,color:"#e5e7eb",borderLeft:"2px solid #1e1030"}}>{fmtN(totLiq.qBulto)}</td>
-                    <td style={{padding:"8px 8px",textAlign:"right",color:"#9ca3af"}}>{fmtN(totDB.qBulto)}</td>
-                    <td style={{padding:"8px 8px",textAlign:"right",fontWeight:700,color:"#f59e0b"}}>{fmt(totLiq.mBulto)}</td>
-                    <td style={{padding:"8px 8px",textAlign:"right",fontWeight:700,color:Math.abs(totDB.mBulto-totLiq.mBulto)<100?"#4ade80":totDB.mBulto<totLiq.mBulto?"#f87171":"#60a5fa"}}>{fmt(totDB.mBulto)}</td>
-                    <td/>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
 
 
 export default function App(){
@@ -5340,7 +5031,6 @@ export default function App(){
     {id:"liquidacion",l:"Cobranzas Log."},
     {id:"liquidacionlog",l:"Liquidacion Log."},
     {id:"ctasctes",l:"Ctas. Ctes."},
-    {id:"conciliacion",l:"Conciliación"},
     {id:"localidades",l:"Localidades"},
     ...(esAdmin?[{id:"expedicion",l:"Expedicion"},{id:"usuarios",l:"Usuarios"}]:[]),
   ];
@@ -5517,7 +5207,6 @@ export default function App(){
         {tab==="liquidacion"    &&<TabLiquidacion    envios={envios} setEnvios={setEnvios} lc={lc}/>}
         {tab==="liquidacionlog" &&<TabLiquidacionLog envios={envios} setEnvios={setEnvios} zc={zc} lc={lc} esAdmin={esAdmin}/>}
         {tab==="ctasctes"       &&<TabCtasCtes       envios={envios} lc={lc}/>}
-        {tab==="conciliacion"   &&<TabConciliacion   envios={envios} lc={lc} zc={zc}/>}
         {tab==="localidades" &&<TabLocalidades cpExtra={cpExtra} setCpExtra={setCpExtra}/>}
         {tab==="usuarios"   &&esAdmin&&<TabUsuarios lc={lc} setLc={setLcPersist}/>}
         {tab==="expedicion" &&esAdmin&&<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>}
