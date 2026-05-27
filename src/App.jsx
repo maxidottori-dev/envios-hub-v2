@@ -5067,7 +5067,7 @@ function DespachoPage({token}){
     }).catch(e=>{setErr("Error al cargar: "+e.message);setEstado("error");});
   },[token]);
 
-  // Genera y descarga el PDF a partir del HTML de generarHTMLDespacho
+  // Genera y descarga el PDF usando jsPDF + autotable (sin html2canvas)
   useEffect(()=>{
     if(estado!=="generando"||!despachoData)return;
     const generar=async()=>{
@@ -5075,51 +5075,97 @@ function DespachoPage({token}){
       const nombre=despachoData?.logisticaNombre||despachoData?.logistica||"despacho";
       const fecha=despachoData?.fecha||"hoy";
       const filename=`${nombre}_${fecha}.pdf`;
+      const lista=despachoData.envios||[];
 
-      // Generar HTML completo y extraer el contenido del body (sin el script de window.print)
-      const htmlFull=generarHTMLDespacho(despachoData);
-      const bodyMatch=htmlFull.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-      const bodyHtml=(bodyMatch?bodyMatch[1]:"").replace(/<script[\s\S]*?<\/script>/gi,"");
-
-      // Wrapper temporal: posicionado arriba fuera de la vista (top negativo, left:0 para que
-      // html2canvas capture el ancho correcto sin cortes)
-      const pageW=orient==="landscape"?1060:740;
-      const wrap=document.createElement("div");
-      wrap.style.cssText=`position:absolute;top:-99999px;left:0;width:${pageW}px;background:#fff;font-family:Arial,sans-serif;font-size:14px;color:#111;`;
-      wrap.innerHTML=bodyHtml;
-      document.body.appendChild(wrap);
-
-      // Cargar html2pdf.js dinámicamente
-      if(!window.html2pdf){
-        await new Promise((res,rej)=>{
-          const s=document.createElement("script");
-          s.src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
-          s.onload=res; s.onerror=rej;
-          document.head.appendChild(s);
-        });
+      // Cargar jsPDF
+      if(!window.jspdf){
+        await new Promise((res,rej)=>{const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+      }
+      // Cargar autotable (extiende jsPDF.prototype)
+      if(!window.jspdf?.jsPDF?.prototype?.autoTable){
+        await new Promise((res,rej)=>{const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.7.0/jspdf.plugin.autotable.min.js";s.onload=res;s.onerror=rej;document.head.appendChild(s);});
       }
 
-      const opt={
-        margin:[8,10,8,10],
-        filename,
-        image:{type:"jpeg",quality:0.98},
-        html2canvas:{scale:2,useCORS:true,logging:false,windowWidth:pageW,scrollX:0,scrollY:0},
-        jsPDF:{unit:"mm",format:"a4",orientation:orient},
-        pagebreak:{mode:["avoid-all","css"]},
-      };
+      const {jsPDF}=window.jspdf;
+      const doc=new jsPDF({orientation:orient,unit:"mm",format:"a4"});
+      const hayCobro=lista.some(e=>e.cobranza>0);
+      const totalImp=lista.reduce((s,e)=>s+(e.importe||0),0);
+      const cobTotal=lista.filter(e=>e.cobranza>0).reduce((s,e)=>s+(e.cobranza||0),0);
+      const ahora=new Date();
+      const ts=ahora.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+" "+ahora.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false});
+      const pageW=doc.internal.pageSize.getWidth();
 
-      try{
-        await window.html2pdf().set(opt).from(wrap).save();
-        document.body.removeChild(wrap);
-        setEstado("listo");
-        setTimeout(()=>window.close(),4000);
-      }catch(e){
-        if(document.body.contains(wrap))document.body.removeChild(wrap);
-        setErr("Error al generar PDF: "+e.message);
-        setEstado("error");
-      }
+      // Encabezado
+      doc.setFontSize(11);doc.setFont("helvetica","bold");
+      doc.text(`${nombre} · ${ts}`,10,9);
+      doc.setFontSize(8);doc.setFont("helvetica","normal");
+      const resumen=`${lista.length} envíos · $${Math.round(totalImp).toLocaleString("es-AR")}${cobTotal?" · A cobrar: $"+cobTotal.toLocaleString("es-AR"):""}`;
+      doc.text(resumen,pageW-10,9,{align:"right"});
+
+      // Filas de datos
+      const body=lista.map((e,i)=>{
+        const esFlex=e.origen==="ML";
+        const dir=[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · ");
+        const refExtra=(e.referencia&&!(e.direccion||"").toLowerCase().includes((e.referencia||"").toLowerCase().slice(0,20)))?" — "+e.referencia:"";
+        const nroRef=esFlex?(e.nroSeguimiento||""):("#"+(e.nroOrdenTN||""));
+        const zml=esFlex?(getZonaML(e.partido)||""):(e.partido||"");
+        const loteCell=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"—";
+        const row=[i+1,loteCell,nroRef,e.tipoEntrega==="COMERCIAL"?"COM":e.tipoEntrega==="RESIDENCIAL"?"RES":"—",e.bultos||1,"□",dir+(refExtra||""),zml,e.turno||"—",e.fecha?fmtCorta(e.fecha):"—"];
+        if(hayCobro)row.push(e.cobranza?"$"+Number(e.cobranza).toLocaleString("es-AR"):"—");
+        return row;
+      });
+
+      const head=[["#","Lote","Nro envío","Tipo","Blts","Chk","Dirección · Localidad · Partido · CP","Zona","Turno","Fecha",...(hayCobro?["Cobrar"]:[])]];
+
+      doc.autoTable({
+        startY:13,
+        head,
+        body,
+        styles:{fontSize:8,cellPadding:1.5,overflow:"linebreak"},
+        headStyles:{fillColor:[232,232,232],textColor:[85,85,85],fontStyle:"bold",fontSize:7},
+        alternateRowStyles:{fillColor:[249,249,249]},
+        columnStyles:{
+          0:{cellWidth:7,halign:"center",textColor:[150,150,150]},
+          1:{cellWidth:15,halign:"center",textColor:[22,163,74],fontStyle:"bold"},
+          2:{cellWidth:32,halign:"left"},
+          3:{cellWidth:10,halign:"center"},
+          4:{cellWidth:9,halign:"center"},
+          5:{cellWidth:7,halign:"center"},
+          6:{cellWidth:"auto"},
+          7:{cellWidth:16},
+          8:{cellWidth:11,halign:"center"},
+          9:{cellWidth:13,halign:"center"},
+          ...(hayCobro?{10:{cellWidth:18,halign:"right"}}:{}),
+        },
+        didParseCell:(data)=>{
+          if(data.section==="body"){
+            // Dirección en negrita
+            if(data.column.index===6)data.cell.styles.fontStyle="bold";
+            // Nro envío en courier
+            if(data.column.index===2)data.cell.styles.font="courier";
+            // Bultos múltiples en negrita
+            if(data.column.index===4&&Number(data.cell.raw)>1)data.cell.styles.fontStyle="bold";
+            // Color tipo COM/RES
+            if(data.column.index===3){
+              if(data.cell.raw==="COM"){data.cell.styles.textColor=[29,78,216];data.cell.styles.fillColor=[219,234,254];}
+              else if(data.cell.raw==="RES"){data.cell.styles.textColor=[21,128,61];data.cell.styles.fillColor=[220,252,231];}
+            }
+          }
+        },
+        margin:{top:8,right:10,bottom:8,left:10},
+        didDrawPage:(data)=>{
+          doc.setFontSize(6);doc.setFont("helvetica","normal");doc.setTextColor(150,150,150);
+          doc.text(`${lista.length} envíos`,data.settings.margin.left,doc.internal.pageSize.getHeight()-4);
+          doc.text(`Pág. ${doc.internal.getCurrentPageInfo().pageNumber}`,pageW-data.settings.margin.right,doc.internal.pageSize.getHeight()-4,{align:"right"});
+          doc.setTextColor(0,0,0);
+        },
+      });
+
+      doc.save(filename);
+      setEstado("listo");
+      setTimeout(()=>window.close(),4000);
     };
-    generar();
+    generar().catch(e=>{setErr("Error al generar PDF: "+e.message);setEstado("error");});
   },[estado,despachoData]);
 
   const bg="#0a0e1a",tx="#e5e7eb",muted="#6b7280",red="#f87171",yellow="#fbbf24";
