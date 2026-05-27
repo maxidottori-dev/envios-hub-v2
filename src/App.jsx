@@ -193,14 +193,14 @@ function generarHTMLDespacho({logistica,fecha,envios:lista,pdfOrient="landscape"
     const tipoColor=e.tipoEntrega==="COMERCIAL"?"#1d4ed8":"#15803d";
     const tipoBg=e.tipoEntrega==="COMERCIAL"?"#dbeafe":"#dcfce7";
     const tipoCell=e.tipoEntrega?`<span style="background:${tipoBg};color:${tipoColor};border-radius:3px;padding:0 4px;font-size:${fs-2}px;font-weight:700;">${e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</span>`:"—";
-    if(esSimple)return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"};border-bottom:0.5px solid #e5e7eb;">
+    if(esSimple)return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"};border-bottom:0.5px solid #e5e7eb;page-break-inside:avoid;break-inside:avoid;">
       <td style="padding:3px 4px;text-align:center;color:#888;width:20px;">${i+1}</td>
       <td style="padding:3px 4px;width:50px;color:#16a34a;font-weight:700;font-size:${fs-1}px;">${loteCell}</td>
       <td style="padding:3px 4px;font-family:monospace;font-size:${fs-1}px;color:#444;width:100px;">${nroRef}</td>
       <td style="padding:3px 4px;text-align:center;width:35px;">${tipoCell}</td>
       <td style="padding:3px 4px;text-align:center;width:25px;font-weight:${(e.bultos||1)>1?700:400};">${e.bultos||1}</td>
       <td style="padding:3px 4px;text-align:center;width:18px;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td>
-      <td style="padding:3px 4px;font-weight:600;">${dirCorta}</td>
+      <td style="padding:3px 4px;font-weight:700;"><strong>${dirCorta}</strong></td>
       <td style="padding:3px 4px;color:#555;">${(e.localidad&&!/referencia/i.test(e.localidad))?e.localidad:""}</td>
       <td style="padding:3px 4px;color:#555;">${e.partido||""}</td>
       <td style="padding:3px 4px;white-space:nowrap;font-size:${fs-1}px;">${zml}</td>
@@ -209,14 +209,15 @@ function generarHTMLDespacho({logistica,fecha,envios:lista,pdfOrient="landscape"
       ${hayCobro?`<td style="padding:3px 4px;width:70px;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}
     </tr>`;
     const td=(w,extra,val)=>`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;${w?"width:"+w+"px;":""}${extra||""}">${val}</td>`;
-    return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}">
+    const dirHTML=(e.direccion?`<strong>${e.direccion}</strong>`:"")+[e.localidad,e.partido,e.cp].filter(Boolean).map(v=>" · "+v).join("")+refExtra;
+    return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"};page-break-inside:avoid;break-inside:avoid;">
       ${td(20,"text-align:center;color:#888;",i+1)}
       ${td(55,"text-align:center;font-size:"+(fs-2)+"px;font-weight:700;color:#16a34a;",loteCell)}
       ${td(110,"font-family:monospace;font-size:"+(fs-1)+"px;color:#444;",nroRef)}
       ${e.tipoEntrega?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;font-size:${fs-2}px;font-weight:700;color:${tipoColor};background:${tipoBg};">${e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</td>`:`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;color:#aaa;">—</td>`}
       ${td(28,"text-align:center;font-weight:"+(((e.bultos||1)>1)?700:400)+";",e.bultos||1)}
       <td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:18px;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td>
-      ${td("","font-weight:500;",dir+refExtra)}
+      ${td("","",dirHTML)}
       ${td("","white-space:nowrap;font-size:"+(fs-1)+"px;",zml)}
       ${td(32,"text-align:center;",e.turno||"—")}
       ${td(42,"text-align:center;",e.fecha?fmtCorta(e.fecha):"—")}
@@ -1273,7 +1274,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
       const cfg=lc[trans];
       const fechaStr=fecha?new Date(fecha+"T00:00:00").toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long"}):"hoy";
       const url=window.location.origin+"/?d="+token;
-      const msg=`🛵 *${cfg?.nombre||trans} — ${fechaStr}*\n📋 ${lista.length} envío${lista.length!==1?"s":""} para entregar.\n\n📄 Descargá la hoja de ruta acá:\n${url}\n\n_EnviosHub_`;
+      const msg=`🛵 *${cfg?.nombre||trans} — ${fechaStr}*\n📋 ${lista.length} envío${lista.length!==1?"s":""} para entregar.\n\n📄 Descargá el detalle acá:\n${url}\n\n_EnviosHub_`;
       await setDoc(doc(db,"despachos",token),{
         token,
         logistica:trans,
@@ -5050,7 +5051,6 @@ function DespachoPage({token}){
   const [estado,setEstado]=useState("cargando"); // cargando | generando | listo | error | expirado
   const [err,setErr]=useState("");
   const [despachoData,setDespachoData]=useState(null);
-  const contentRef=useRef(null);
 
   // Carga datos de Firestore
   useEffect(()=>{
@@ -5067,10 +5067,28 @@ function DespachoPage({token}){
     }).catch(e=>{setErr("Error al cargar: "+e.message);setEstado("error");});
   },[token]);
 
-  // Una vez que el contenido está renderizado, genera el PDF con html2pdf.js
+  // Genera y descarga el PDF a partir del HTML de generarHTMLDespacho
   useEffect(()=>{
-    if(estado!=="generando"||!contentRef.current)return;
-    const cargarYGenerar=async()=>{
+    if(estado!=="generando"||!despachoData)return;
+    const generar=async()=>{
+      const orient=despachoData?.pdfOrient||"landscape";
+      const nombre=despachoData?.logisticaNombre||despachoData?.logistica||"despacho";
+      const fecha=despachoData?.fecha||"hoy";
+      const filename=`${nombre}_${fecha}.pdf`;
+
+      // Generar HTML completo y extraer el contenido del body (sin el script de window.print)
+      const htmlFull=generarHTMLDespacho(despachoData);
+      const bodyMatch=htmlFull.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+      const bodyHtml=(bodyMatch?bodyMatch[1]:"").replace(/<script[\s\S]*?<\/script>/gi,"");
+
+      // Wrapper temporal: posicionado arriba fuera de la vista (top negativo, left:0 para que
+      // html2canvas capture el ancho correcto sin cortes)
+      const pageW=orient==="landscape"?1060:740;
+      const wrap=document.createElement("div");
+      wrap.style.cssText=`position:absolute;top:-99999px;left:0;width:${pageW}px;background:#fff;font-family:Arial,sans-serif;font-size:14px;color:#111;`;
+      wrap.innerHTML=bodyHtml;
+      document.body.appendChild(wrap);
+
       // Cargar html2pdf.js dinámicamente
       if(!window.html2pdf){
         await new Promise((res,rej)=>{
@@ -5080,92 +5098,31 @@ function DespachoPage({token}){
           document.head.appendChild(s);
         });
       }
-      const orient=despachoData?.pdfOrient||"landscape";
-      const fecha=despachoData?.fecha||"";
-      const nombre=despachoData?.logisticaNombre||despachoData?.logistica||"despacho";
-      const filename=`${nombre}_${fecha||"hoy"}.pdf`;
+
       const opt={
         margin:[8,10,8,10],
         filename,
         image:{type:"jpeg",quality:0.98},
-        html2canvas:{scale:2,useCORS:true,logging:false},
+        html2canvas:{scale:2,useCORS:true,logging:false,windowWidth:pageW,scrollX:0,scrollY:0},
         jsPDF:{unit:"mm",format:"a4",orientation:orient},
+        pagebreak:{mode:["avoid-all","css"]},
       };
+
       try{
-        await window.html2pdf().set(opt).from(contentRef.current).save();
+        await window.html2pdf().set(opt).from(wrap).save();
+        document.body.removeChild(wrap);
         setEstado("listo");
+        setTimeout(()=>window.close(),4000);
       }catch(e){
-        setErr("Error al generar PDF: "+e.message);setEstado("error");
+        if(document.body.contains(wrap))document.body.removeChild(wrap);
+        setErr("Error al generar PDF: "+e.message);
+        setEstado("error");
       }
     };
-    cargarYGenerar();
+    generar();
   },[estado,despachoData]);
 
   const bg="#0a0e1a",tx="#e5e7eb",muted="#6b7280",red="#f87171",yellow="#fbbf24";
-
-  // Render del contenido del PDF (oculto, lo usa html2pdf)
-  const contenidoPDF=despachoData?(()=>{
-    const d=despachoData;
-    const fs=d.pdfFontSize||14;
-    const totalImp=d.envios.reduce((s,e)=>s+(e.importe||0),0);
-    const cobTotal=d.envios.filter(e=>e.cobranza>0).reduce((s,e)=>s+(e.cobranza||0),0);
-    const hayCobro=d.envios.some(e=>e.cobranza>0);
-    const ahora=new Date();
-    const ts=ahora.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+" "+ahora.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false});
-    const thSt={background:"#e8e8e8",padding:"3px 4px",textAlign:"left",fontSize:(fs-2)+"px",fontWeight:700,textTransform:"uppercase",color:"#555",borderBottom:"1.5px solid #333"};
-    return(
-      <div ref={contentRef} style={{fontFamily:"Arial,sans-serif",fontSize:fs+"px",color:"#111",background:"#fff",padding:"8mm 10mm",width:"277mm",minHeight:"190mm"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:"4px"}}>
-          <span style={{fontWeight:700,fontSize:(fs+2)+"px"}}>{d.logisticaNombre||d.logistica} · {ts}</span>
-          <span style={{fontSize:(fs-1)+"px",color:"#888"}}>{d.envios.length} envios · Total: ${Math.round(totalImp).toLocaleString("es-AR")}{cobTotal?" · A cobrar: $"+cobTotal.toLocaleString("es-AR"):""}</span>
-        </div>
-        <table style={{width:"100%",borderCollapse:"collapse"}}>
-          <thead>
-            <tr>
-              <th style={{...thSt,width:"20px"}}>#</th>
-              <th style={{...thSt,width:"55px",textAlign:"center"}}>Lote</th>
-              <th style={{...thSt,width:"100px"}}>Nro envio / orden</th>
-              <th style={{...thSt,width:"38px",textAlign:"center"}}>Tipo</th>
-              <th style={{...thSt,width:"28px",textAlign:"center"}}>Blts</th>
-              <th style={{...thSt,width:"18px",textAlign:"center"}}>Chk</th>
-              <th style={thSt}>Direccion · Localidad · Partido · CP · Referencia</th>
-              <th style={{...thSt,whiteSpace:"nowrap"}}>Zona</th>
-              <th style={{...thSt,width:"32px",textAlign:"center"}}>Turno</th>
-              <th style={{...thSt,width:"42px",textAlign:"center"}}>Fecha</th>
-              {hayCobro&&<th style={{...thSt,width:"72px",textAlign:"right"}}>Cobrar</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {d.envios.map((e,i)=>{
-              const esFlex=e.origen==="ML";
-              const dir=[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · ");
-              const refExtra=(e.referencia&&!e.direccion.toLowerCase().includes((e.referencia||"").toLowerCase().slice(0,20)))?" — "+e.referencia:"";
-              const nroRef=esFlex?(e.nroSeguimiento||""):("#"+(e.nroOrdenTN||""));
-              const zml=esFlex?(getZonaML(e.partido)||""):(e.partido||"");
-              const loteCell=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"—";
-              const tdSt={borderBottom:"0.5px solid #ddd",padding:"3px 4px",fontSize:fs+"px",background:i%2===0?"#fff":"#f9f9f9"};
-              return(
-                <tr key={e.id||i} style={{background:i%2===0?"#fff":"#f9f9f9"}}>
-                  <td style={{...tdSt,textAlign:"center",color:"#888"}}>{i+1}</td>
-                  <td style={{...tdSt,textAlign:"center",fontSize:(fs-2)+"px",fontWeight:700,color:"#16a34a"}}>{loteCell}</td>
-                  <td style={{...tdSt,fontFamily:"monospace",fontSize:(fs-1)+"px",color:"#444"}}>{nroRef}</td>
-                  <td style={{...tdSt,textAlign:"center",fontSize:(fs-2)+"px",fontWeight:700,color:e.tipoEntrega==="COMERCIAL"?"#1d4ed8":"#15803d",background:e.tipoEntrega==="COMERCIAL"?"#dbeafe":e.tipoEntrega==="RESIDENCIAL"?"#dcfce7":(i%2===0?"#fff":"#f9f9f9")}}>{e.tipoEntrega==="COMERCIAL"?"COM":e.tipoEntrega==="RESIDENCIAL"?"RES":"—"}</td>
-                  <td style={{...tdSt,textAlign:"center",fontWeight:(e.bultos||1)>1?700:400}}>{e.bultos||1}</td>
-                  <td style={{...tdSt,textAlign:"center"}}><div style={{width:"11px",height:"11px",border:"1px solid #aaa",borderRadius:"1px",display:"inline-block"}}/></td>
-                  <td style={{...tdSt,fontWeight:500}}>{dir+refExtra}</td>
-                  <td style={{...tdSt,whiteSpace:"nowrap",fontSize:(fs-1)+"px"}}>{zml}</td>
-                  <td style={{...tdSt,textAlign:"center"}}>{e.turno||"—"}</td>
-                  <td style={{...tdSt,textAlign:"center"}}>{e.fecha?fmtCorta(e.fecha):"—"}</td>
-                  {hayCobro&&<td style={{...tdSt,textAlign:"right",fontWeight:e.cobranza?600:400,color:e.cobranza?"#b45309":"#aaa"}}>{e.cobranza?"$"+Number(e.cobranza).toLocaleString("es-AR"):"—"}</td>}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        <div style={{borderTop:"1.5px solid #333",marginTop:"4px",paddingTop:"3px",fontSize:(fs-2)+"px",color:"#555"}}>{d.envios.length} envios</div>
-      </div>
-    );
-  })():null;
 
   if(estado==="expirado")return(
     <div style={{minHeight:"100vh",background:bg,display:"flex",alignItems:"center",justifyContent:"center",color:tx,fontFamily:"sans-serif",padding:"1rem"}}>
@@ -5180,15 +5137,10 @@ function DespachoPage({token}){
 
   return(
     <div style={{minHeight:"100vh",background:bg,color:tx,fontFamily:"sans-serif"}}>
-      {/* Mensaje de estado visible */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",flexDirection:"column",gap:"0.75rem"}}>
         <div style={{fontSize:"2.5rem"}}>{estado==="listo"?"✅":"📄"}</div>
         <div style={{fontWeight:700,fontSize:"1rem"}}>{estado==="listo"?"PDF descargado":"Generando PDF..."}</div>
-        {estado==="listo"&&<div style={{color:muted,fontSize:"0.82rem"}}>Revisá tu carpeta de descargas.</div>}
-      </div>
-      {/* Contenido oculto que html2pdf procesa */}
-      <div style={{position:"absolute",left:"-9999px",top:0,visibility:"hidden"}}>
-        {contenidoPDF}
+        {estado==="listo"&&<div style={{color:muted,fontSize:"0.82rem",textAlign:"center"}}>Revisá tu carpeta de descargas.<br/>Esta pestaña se cierra en unos segundos.</div>}
       </div>
     </div>
   );
