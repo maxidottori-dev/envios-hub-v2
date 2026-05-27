@@ -1215,6 +1215,45 @@ function TabImprimir({envios,setEnvios,zc,lc}){
   };
   const puedeWA=trans!=="TODOS"&&lista.length>0&&lc[trans]?.waGroup;
 
+  // Cierre del día
+  const [cierreModal,setCierreModal]=useState(null);
+  const [cierreSaving,setCierreSaving]=useState(false);
+  const [cierreCopied,setCierreCopied]=useState(false);
+  const generarCierre=async()=>{
+    if(cierreSaving||trans==="TODOS"||lista.length===0)return;
+    setCierreSaving(true);
+    try{
+      const token=Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-4);
+      const cfg=lc[trans];
+      const fechaStr=fecha?new Date(fecha+"T00:00:00").toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long"}):"hoy";
+      const url=window.location.origin+"/?t="+token;
+      const msg=`🛵 *${cfg?.nombre||trans} — Cierre del ${fechaStr}*\n📋 ${lista.length} envío${lista.length!==1?"s":""} asignados.\n\n✅ Confirmá las entregas acá:\n${url}\n\n_EnviosHub · Solo confirmación_`;
+      await setDoc(doc(db,"cierres",token),{
+        token,
+        logistica:trans,
+        logisticaNombre:cfg?.nombre||trans,
+        fecha:fecha||fechaHoy(),
+        envios:lista.map(e=>({
+          id:e.id,
+          nroSeguimiento:e.nroSeguimiento||"",
+          nroOrdenTN:e.nroOrdenTN||"",
+          direccion:e.direccion||"",
+          localidad:e.localidad||"",
+          partido:e.partido||"",
+          bultos:e.bultos||1,
+          cobranza:e.cobranza||0,
+          importe:getImp(e),
+        })),
+        confirmado:false,
+        confirmadoAt:null,
+        incidentes:[],
+        creadoAt:new Date().toISOString(),
+      });
+      setCierreModal({token,msg,url});
+    }catch(err){alert("Error al generar cierre: "+err.message);}
+    setCierreSaving(false);
+  };
+
   // Envíos sin confirmar dentro del filtro actual (solo si hay logística específica)
   const sinConfirmar=lista.filter(e=>!e.estadoPago&&e.trans);
   const puedeConfirmar=trans!=="TODOS"&&sinConfirmar.length>0;
@@ -1405,8 +1444,36 @@ function TabImprimir({envios,setEnvios,zc,lc}){
           {puedeWA&&<button onClick={notificarWA} style={{...S.btn(true),background:waCopied?"linear-gradient(135deg,#059669,#047857)":"linear-gradient(135deg,#25d366,#128c7e)",padding:"0.5rem 1.1rem",border:"none"}}>
             {waCopied?"✓ Mensaje copiado":"📲 Notificar WA"}
           </button>}
+          {trans!=="TODOS"&&lista.length>0&&(
+            <button onClick={generarCierre} disabled={cierreSaving} style={{...S.btn(true),background:cierreSaving?"#1a1a2e":"linear-gradient(135deg,#4f46e5,#7c3aed)",padding:"0.5rem 1.1rem",border:"none",opacity:cierreSaving?0.6:1}}>
+              {cierreSaving?"Generando...":"🔒 Cierre del día"}
+            </button>
+          )}
         </div>
       </div>
+      {/* Modal cierre del día */}
+      {cierreModal&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.72)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
+          <div style={{background:"#12172a",border:"1px solid #1e2640",borderRadius:"14px",padding:"1.5rem",maxWidth:"480px",width:"100%"}}>
+            <div style={{fontWeight:800,fontSize:"1rem",marginBottom:"0.25rem"}}>🔒 Cierre generado</div>
+            <div style={{color:"#6b7280",fontSize:"0.8rem",marginBottom:"1rem"}}>Copiá el mensaje y envialo por WhatsApp o al grupo que prefieras.</div>
+            <textarea value={cierreModal.msg} readOnly style={{width:"100%",background:"#0a0e1a",border:"1px solid #252d40",borderRadius:"8px",padding:"0.75rem",color:"#e5e7eb",fontSize:"0.78rem",resize:"none",height:"148px",outline:"none",lineHeight:1.6,fontFamily:"monospace"}} onClick={e=>e.target.select()}/>
+            <div style={{display:"flex",gap:"0.5rem",marginTop:"0.75rem",flexWrap:"wrap"}}>
+              <button onClick={()=>{navigator.clipboard.writeText(cierreModal.msg).catch(()=>{});setCierreCopied(true);setTimeout(()=>setCierreCopied(false),2500);}} style={{flex:2,padding:"0.6rem",borderRadius:"9px",background:cierreCopied?"#0d1c14":"#1e2640",border:`1px solid ${cierreCopied?"#10b981":"#374151"}`,color:cierreCopied?"#10b981":"#e5e7eb",fontWeight:700,cursor:"pointer",fontSize:"0.82rem"}}>
+                {cierreCopied?"✓ Copiado":"📋 Copiar mensaje"}
+              </button>
+              {lc[trans]?.waGroup&&(
+                <button onClick={()=>window.open(lc[trans].waGroup,"_blank")} style={{flex:1,padding:"0.6rem",borderRadius:"9px",background:"#0a1a10",border:"1px solid #128c7e",color:"#25d366",fontWeight:700,cursor:"pointer",fontSize:"0.82rem"}}>
+                  📲 Abrir grupo
+                </button>
+              )}
+              <button onClick={()=>{setCierreModal(null);setCierreCopied(false);}} style={{padding:"0.6rem 1rem",borderRadius:"9px",background:"transparent",border:"1px solid #374151",color:"#6b7280",fontWeight:600,cursor:"pointer",fontSize:"0.82rem"}}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.9rem",display:"flex",gap:"1.5rem",flexWrap:"wrap"}}>
         <div><span style={{color:"#6b7280",fontSize:"0.72rem"}}>Envios: </span><span style={{color:"#e5e7eb",fontWeight:700}}>{lista.length}</span></div>
         <div><span style={{color:"#6b7280",fontSize:"0.72rem"}}>Total: </span><span style={{color:"#10b981",fontWeight:700}}>{fmt(totalImp)}</span></div>
@@ -5042,7 +5109,173 @@ function ScrollTop(){
 
 
 
+// ════════════════════════════════════════════════════════════════════
+// CONFIRM PAGE — página pública para que logísticas confirmen cierre
+// ════════════════════════════════════════════════════════════════════
+function ConfirmPage({token}){
+  const [cierre,setCierre]=useState(null);
+  const [cargando,setCargando]=useState(true);
+  const [err,setErr]=useState("");
+  const [modo,setModo]=useState(null); // null | "ok" | "incidentes"
+  const [incidents,setIncidents]=useState({});
+  const [guardando,setGuardando]=useState(false);
+  const [done,setDone]=useState(false);
+
+  useEffect(()=>{
+    if(!token){setErr("Token inválido.");setCargando(false);return;}
+    getDoc(doc(db,"cierres",token)).then(snap=>{
+      if(!snap.exists()){setErr("Cierre no encontrado. El link puede ser incorrecto o ya fue eliminado.");setCargando(false);return;}
+      const d=snap.data();
+      setCierre(d);
+      if(d.confirmado)setDone(true);
+      setCargando(false);
+    }).catch(e=>{setErr("Error al cargar: "+e.message);setCargando(false);});
+  },[token]);
+
+  const fmtP=n=>n!=null?"$"+Number(n).toLocaleString("es-AR"):"";
+  const fechaLabel=cierre?.fecha?new Date(cierre.fecha+"T00:00:00").toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):"";
+  const bg="#0a0e1a",card="#12172a",brd="#1e2640",green="#10b981",yellow="#fbbf24",red="#f87171",tx="#e5e7eb",muted="#6b7280";
+  const cs={background:card,border:`1px solid ${brd}`,borderRadius:"12px",padding:"1rem",marginBottom:"0.75rem"};
+
+  const handleConfirmar=async()=>{
+    setGuardando(true);
+    const incs=Object.entries(incidents).filter(([,v])=>v.sel).map(([envioId,v])=>({envioId,motivo:v.motivo||"",nuevaFecha:v.nuevaFecha||""}));
+    try{
+      await updateDoc(doc(db,"cierres",token),{confirmado:true,confirmadoAt:new Date().toISOString(),incidentes:incs});
+      setDone(true);
+    }catch(e){alert("Error al confirmar: "+e.message);}
+    setGuardando(false);
+  };
+
+  if(cargando)return(
+    <div style={{minHeight:"100vh",background:bg,display:"flex",alignItems:"center",justifyContent:"center",color:tx,fontFamily:"sans-serif"}}>
+      <div style={{textAlign:"center"}}><div style={{fontSize:"2rem",marginBottom:"0.5rem"}}>⏳</div><div style={{color:muted}}>Cargando...</div></div>
+    </div>
+  );
+  if(err)return(
+    <div style={{minHeight:"100vh",background:bg,display:"flex",alignItems:"center",justifyContent:"center",color:tx,fontFamily:"sans-serif",padding:"1rem"}}>
+      <div style={{textAlign:"center",maxWidth:"320px"}}><div style={{fontSize:"2rem",marginBottom:"0.5rem"}}>❌</div><div style={{color:red,fontWeight:700,marginBottom:"0.5rem"}}>No se pudo cargar</div><div style={{color:muted,fontSize:"0.85rem"}}>{err}</div></div>
+    </div>
+  );
+  if(done)return(
+    <div style={{minHeight:"100vh",background:bg,color:tx,fontFamily:"sans-serif",padding:"1rem",maxWidth:"480px",margin:"0 auto"}}>
+      <style>{`*{box-sizing:border-box;}`}</style>
+      <div style={{textAlign:"center",padding:"2rem 0 1rem"}}>
+        <div style={{fontSize:"3rem",marginBottom:"0.5rem"}}>✅</div>
+        <div style={{fontWeight:800,fontSize:"1.2rem",marginBottom:"0.3rem"}}>Cierre confirmado</div>
+        <div style={{color:muted,fontSize:"0.85rem"}}>{fechaLabel}</div>
+      </div>
+      <div style={cs}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:"0.5rem"}}><span style={{color:muted,fontSize:"0.8rem"}}>Logística</span><span style={{fontWeight:700}}>{cierre.logisticaNombre}</span></div>
+        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:muted,fontSize:"0.8rem"}}>Envíos asignados</span><span style={{fontWeight:700}}>{cierre.envios?.length||0}</span></div>
+        {cierre.incidentes?.length>0&&(
+          <div style={{marginTop:"0.75rem",borderTop:`1px solid ${brd}`,paddingTop:"0.75rem"}}>
+            <div style={{color:yellow,fontWeight:700,fontSize:"0.85rem",marginBottom:"0.5rem"}}>⚠️ Incidentes reportados ({cierre.incidentes.length})</div>
+            {cierre.incidentes.map((inc,i)=>{
+              const e=cierre.envios?.find(x=>x.id===inc.envioId);
+              return(<div key={i} style={{background:"#1c1a0a",border:"1px solid #3d3200",borderRadius:"8px",padding:"0.5rem 0.75rem",marginBottom:"0.4rem",fontSize:"0.8rem"}}>
+                <div style={{color:tx,fontWeight:600}}>{e?.direccion||inc.envioId}</div>
+                {inc.motivo&&<div style={{color:muted,marginTop:"2px"}}>Motivo: {inc.motivo}</div>}
+                {inc.nuevaFecha&&<div style={{color:muted,marginTop:"2px"}}>Reprogramado: {inc.nuevaFecha}</div>}
+              </div>);
+            })}
+          </div>
+        )}
+      </div>
+      <div style={{textAlign:"center",color:muted,fontSize:"0.75rem",marginTop:"1rem"}}>EnviosHub · Solo lectura</div>
+    </div>
+  );
+
+  return(
+    <div style={{minHeight:"100vh",background:bg,color:tx,fontFamily:"sans-serif",padding:"1rem",maxWidth:"480px",margin:"0 auto"}}>
+      <style>{`*{box-sizing:border-box;}`}</style>
+      <div style={{textAlign:"center",padding:"1.5rem 0 1rem"}}>
+        <div style={{width:"40px",height:"40px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:"10px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"1.3rem",margin:"0 auto 0.75rem"}}>🛵</div>
+        <div style={{fontWeight:800,fontSize:"1.1rem",marginBottom:"0.2rem"}}>Cierre del día</div>
+        <div style={{color:muted,fontSize:"0.85rem"}}>{fechaLabel}</div>
+      </div>
+      <div style={cs}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:"0.4rem"}}><span style={{color:muted,fontSize:"0.8rem"}}>Logística</span><span style={{fontWeight:700}}>{cierre.logisticaNombre}</span></div>
+        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:muted,fontSize:"0.8rem"}}>Envíos asignados</span><span style={{fontWeight:700}}>{cierre.envios?.length||0}</span></div>
+      </div>
+      <div style={cs}>
+        <div style={{fontWeight:700,fontSize:"0.8rem",marginBottom:"0.6rem",color:muted,textTransform:"uppercase",letterSpacing:"0.05em"}}>Detalle</div>
+        {cierre.envios?.map((e,i)=>(
+          <div key={e.id} style={{padding:"0.5rem 0",borderBottom:i<cierre.envios.length-1?`1px solid ${brd}`:"none",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"8px"}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:"0.82rem",fontWeight:600,color:tx,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{e.direccion||"(sin dirección)"}</div>
+              <div style={{fontSize:"0.72rem",color:muted,marginTop:"1px"}}>{[e.localidad,e.partido].filter(Boolean).join(" · ")}{e.bultos>1?" · "+e.bultos+" bultos":""}</div>
+            </div>
+            <div style={{textAlign:"right",flexShrink:0}}>
+              <div style={{fontSize:"0.82rem",fontWeight:700,color:green}}>{fmtP(e.importe)}</div>
+              {e.cobranza>0&&<div style={{fontSize:"0.7rem",color:yellow}}>COB {fmtP(e.cobranza)}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+      {modo===null&&(
+        <div style={{display:"flex",flexDirection:"column",gap:"0.6rem",marginTop:"0.25rem"}}>
+          <div style={{textAlign:"center",color:muted,fontSize:"0.85rem",marginBottom:"0.1rem"}}>¿Todos los envíos fueron entregados?</div>
+          <button onClick={()=>setModo("ok")} style={{width:"100%",padding:"0.9rem",borderRadius:"12px",background:"#0d1c14",border:"2px solid #10b981",color:"#10b981",fontWeight:800,fontSize:"1rem",cursor:"pointer"}}>✅ Sí, todo OK</button>
+          <button onClick={()=>setModo("incidentes")} style={{width:"100%",padding:"0.9rem",borderRadius:"12px",background:"#1c1200",border:"2px solid #f59e0b",color:"#f59e0b",fontWeight:800,fontSize:"1rem",cursor:"pointer"}}>⚠️ Hubo incidentes</button>
+        </div>
+      )}
+      {modo==="ok"&&(
+        <div style={{marginTop:"0.25rem"}}>
+          <div style={{...cs,background:"#0d1c14",border:"1px solid #10b981",textAlign:"center",padding:"1rem"}}>
+            <div style={{fontSize:"1.5rem",marginBottom:"0.3rem"}}>✅</div>
+            <div style={{fontWeight:700,color:green}}>Todo entregado correctamente</div>
+          </div>
+          <div style={{display:"flex",gap:"0.5rem"}}>
+            <button onClick={()=>setModo(null)} style={{flex:1,padding:"0.8rem",borderRadius:"10px",background:"transparent",border:`1px solid ${brd}`,color:muted,cursor:"pointer",fontWeight:600}}>Volver</button>
+            <button onClick={handleConfirmar} disabled={guardando} style={{flex:2,padding:"0.8rem",borderRadius:"10px",background:guardando?"#1a1a2e":"linear-gradient(135deg,#10b981,#059669)",border:"none",color:"#fff",fontWeight:800,cursor:guardando?"not-allowed":"pointer",fontSize:"0.95rem"}}>
+              {guardando?"Guardando...":"Confirmar y enviar"}
+            </button>
+          </div>
+        </div>
+      )}
+      {modo==="incidentes"&&(
+        <div>
+          <div style={{color:yellow,fontWeight:700,fontSize:"0.85rem",marginBottom:"0.5rem"}}>Marcá los envíos con incidentes:</div>
+          <div style={cs}>
+            {cierre.envios?.map((e,i)=>{
+              const inc=incidents[e.id]||{};
+              return(
+                <div key={e.id} style={{padding:"0.6rem 0",borderBottom:i<cierre.envios.length-1?`1px solid ${brd}`:"none"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"10px",cursor:"pointer"}} onClick={()=>setIncidents(p=>({...p,[e.id]:{...p[e.id],sel:!inc.sel}}))}>
+                    <div style={{width:"22px",height:"22px",borderRadius:"5px",border:`2px solid ${inc.sel?"#f59e0b":brd}`,background:inc.sel?"#2a1a00":"transparent",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.85rem"}}>
+                      {inc.sel?"⚠️":""}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:"0.82rem",fontWeight:600,color:tx,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{e.direccion||"(sin dirección)"}</div>
+                      <div style={{fontSize:"0.7rem",color:muted}}>{[e.localidad,e.partido].filter(Boolean).join(" · ")}</div>
+                    </div>
+                  </div>
+                  {inc.sel&&(
+                    <div style={{marginTop:"0.5rem",paddingLeft:"32px",display:"flex",flexDirection:"column",gap:"6px"}}>
+                      <input placeholder="Motivo (ej: no había nadie, dirección incorrecta...)" value={inc.motivo||""} onChange={ev=>setIncidents(p=>({...p,[e.id]:{...p[e.id],motivo:ev.target.value}}))} style={{width:"100%",background:"#1a1f2e",border:`1px solid ${brd}`,borderRadius:"7px",padding:"6px 10px",color:tx,fontSize:"0.78rem",outline:"none"}}/>
+                      <input type="date" value={inc.nuevaFecha||""} onChange={ev=>setIncidents(p=>({...p,[e.id]:{...p[e.id],nuevaFecha:ev.target.value}}))} style={{width:"100%",background:"#1a1f2e",border:`1px solid ${brd}`,borderRadius:"7px",padding:"6px 10px",color:tx,fontSize:"0.78rem",outline:"none"}}/>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{display:"flex",gap:"0.5rem"}}>
+            <button onClick={()=>setModo(null)} style={{flex:1,padding:"0.8rem",borderRadius:"10px",background:"transparent",border:`1px solid ${brd}`,color:muted,cursor:"pointer",fontWeight:600}}>Volver</button>
+            <button onClick={handleConfirmar} disabled={guardando} style={{flex:2,padding:"0.8rem",borderRadius:"10px",background:guardando?"#1a1a2e":"linear-gradient(135deg,#f59e0b,#d97706)",border:"none",color:"#fff",fontWeight:800,cursor:guardando?"not-allowed":"pointer",fontSize:"0.95rem"}}>
+              {guardando?"Guardando...":"Confirmar y enviar"}
+            </button>
+          </div>
+        </div>
+      )}
+      <div style={{textAlign:"center",color:muted,fontSize:"0.72rem",marginTop:"1.5rem",paddingBottom:"1rem"}}>EnviosHub · Link de solo confirmación</div>
+    </div>
+  );
+}
+
 export default function App(){
+  const [confirmToken]=useState(()=>new URLSearchParams(window.location.search).get('t'));
   const [sesion,setSesion]=useState(()=>getSession());
   const [pantalla,setPantalla]=useState("dashboard");
 
@@ -5191,6 +5424,7 @@ export default function App(){
   const reasignarSel=items=>{setBorrador(items);setPantalla("asignacion");};
 
   // Auth gates
+  if(confirmToken)return<ConfirmPage token={confirmToken}/>;
   if(!sesion)return<PantallaLogin onLogin={s=>{setSession(s);setSesion(s);}}/>;
   if(sesion.rol==="logistica"){
     const esChofer=sesion.esChofer===true;
