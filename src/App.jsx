@@ -171,6 +171,80 @@ function fechaManana() { const d=new Date();d.setDate(d.getDate()+1);return d.to
 function fechaInicioSemana() { const d=new Date();d.setDate(d.getDate()-((d.getDay()||7)-1));return d.toISOString().split("T")[0]; }
 function fmtCorta(ds) { if(!ds)return"";const[,m,d]=ds.split("-");return d+"/"+m; }
 const norm=s=>s?String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase():"";
+
+// Genera el HTML completo del PDF de despacho a partir de datos serializados
+function generarHTMLDespacho({logistica,fecha,envios:lista,pdfOrient="landscape",pdfFontSize:fs=14,pdfVersion="completa"}){
+  const ahora=new Date();
+  const ts=ahora.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+" "+ahora.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false});
+  const totalImp=lista.reduce((s,e)=>s+(e.importe||0),0);
+  const cobTotal=lista.filter(e=>e.cobranza>0).reduce((s,e)=>s+(e.cobranza||0),0);
+  const hayCobro=lista.some(e=>e.cobranza>0);
+  const esSimple=pdfVersion==="simple";
+  const thPDF="background:#e8e8e8;padding:3px 4px;text-align:left;font-size:"+(fs-2)+"px;font-weight:700;text-transform:uppercase;color:#555;border-bottom:1.5px solid #333;";
+  const rows=lista.map((e,i)=>{
+    const esFlex=e.origen==="ML";
+    const dir=[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · ");
+    const dirCorta=(e.direccion||"").split("/")[0].split("-")[0].split(",")[0].trim();
+    const nroRef=esFlex?(e.nroSeguimiento||e.id||""):("#"+(e.nroOrdenTN||""));
+    const zml=esFlex?(getZonaML(e.partido)||""):(e.partido||"");
+    const refExtra=(e.referencia&&!e.direccion.toLowerCase().includes((e.referencia||"").toLowerCase().slice(0,20)))?" — "+e.referencia:"";
+    const cobrar=e.cobranza?"$"+Number(e.cobranza).toLocaleString("es-AR"):"—";
+    const loteCell=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"—";
+    const tipoColor=e.tipoEntrega==="COMERCIAL"?"#1d4ed8":"#15803d";
+    const tipoBg=e.tipoEntrega==="COMERCIAL"?"#dbeafe":"#dcfce7";
+    const tipoCell=e.tipoEntrega?`<span style="background:${tipoBg};color:${tipoColor};border-radius:3px;padding:0 4px;font-size:${fs-2}px;font-weight:700;">${e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</span>`:"—";
+    if(esSimple)return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"};border-bottom:0.5px solid #e5e7eb;">
+      <td style="padding:3px 4px;text-align:center;color:#888;width:20px;">${i+1}</td>
+      <td style="padding:3px 4px;width:50px;color:#16a34a;font-weight:700;font-size:${fs-1}px;">${loteCell}</td>
+      <td style="padding:3px 4px;font-family:monospace;font-size:${fs-1}px;color:#444;width:100px;">${nroRef}</td>
+      <td style="padding:3px 4px;text-align:center;width:35px;">${tipoCell}</td>
+      <td style="padding:3px 4px;text-align:center;width:25px;font-weight:${(e.bultos||1)>1?700:400};">${e.bultos||1}</td>
+      <td style="padding:3px 4px;text-align:center;width:18px;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td>
+      <td style="padding:3px 4px;font-weight:600;">${dirCorta}</td>
+      <td style="padding:3px 4px;color:#555;">${(e.localidad&&!/referencia/i.test(e.localidad))?e.localidad:""}</td>
+      <td style="padding:3px 4px;color:#555;">${e.partido||""}</td>
+      <td style="padding:3px 4px;white-space:nowrap;font-size:${fs-1}px;">${zml}</td>
+      <td style="padding:3px 4px;width:30px;text-align:center;">${e.turno||"—"}</td>
+      <td style="padding:3px 4px;width:40px;text-align:center;">${e.fecha?fmtCorta(e.fecha):"—"}</td>
+      ${hayCobro?`<td style="padding:3px 4px;width:70px;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}
+    </tr>`;
+    const td=(w,extra,val)=>`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;${w?"width:"+w+"px;":""}${extra||""}">${val}</td>`;
+    return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}">
+      ${td(20,"text-align:center;color:#888;",i+1)}
+      ${td(55,"text-align:center;font-size:"+(fs-2)+"px;font-weight:700;color:#16a34a;",loteCell)}
+      ${td(110,"font-family:monospace;font-size:"+(fs-1)+"px;color:#444;",nroRef)}
+      ${e.tipoEntrega?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;font-size:${fs-2}px;font-weight:700;color:${tipoColor};background:${tipoBg};">${e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</td>`:`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;color:#aaa;">—</td>`}
+      ${td(28,"text-align:center;font-weight:"+(((e.bultos||1)>1)?700:400)+";",e.bultos||1)}
+      <td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:18px;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td>
+      ${td("","font-weight:500;",dir+refExtra)}
+      ${td("","white-space:nowrap;font-size:"+(fs-1)+"px;",zml)}
+      ${td(32,"text-align:center;",e.turno||"—")}
+      ${td(42,"text-align:center;",e.fecha?fmtCorta(e.fecha):"—")}
+      ${hayCobro?td(72,"text-align:right;font-weight:"+(e.cobranza?600:400)+";color:"+(e.cobranza?"#b45309":"#aaa")+";",cobrar):""}
+    </tr>`;
+  }).join("");
+  const headerRow=esSimple
+    ?`<tr><th style="${thPDF}width:20px;">#</th><th style="${thPDF}width:50px;">Lote</th><th style="${thPDF}width:100px;">Nro envio</th><th style="${thPDF}width:35px;text-align:center;">Tipo</th><th style="${thPDF}width:25px;text-align:center;">Blts</th><th style="${thPDF}width:18px;text-align:center;">Chk</th><th style="${thPDF}">Direccion</th><th style="${thPDF}">Ciudad</th><th style="${thPDF}">Partido</th><th style="${thPDF}white-space:nowrap;">Zona</th><th style="${thPDF}width:30px;text-align:center;">Turno</th><th style="${thPDF}width:40px;text-align:center;">Fecha</th>${hayCobro?`<th style="${thPDF}width:70px;text-align:right;">Cobrar</th>`:""}</tr>`
+    :`<tr><th style="${thPDF}width:20px;">#</th><th style="${thPDF}width:55px;text-align:center;">Lote</th><th style="${thPDF}width:100px;">Nro envio / orden</th><th style="${thPDF}width:38px;text-align:center;">Tipo</th><th style="${thPDF}width:28px;text-align:center;">Blts</th><th style="${thPDF}width:18px;text-align:center;">Chk</th><th style="${thPDF}">Direccion · Localidad · Partido · CP · Referencia</th><th style="${thPDF}white-space:nowrap;">Zona</th><th style="${thPDF}width:32px;text-align:center;">Turno</th><th style="${thPDF}width:42px;text-align:center;">Fecha</th>${hayCobro?`<th style="${thPDF}width:72px;text-align:right;">Cobrar</th>`:""}</tr>`;
+  return`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Envios ${fecha||"hoy"}</title><style>
+    @page{size:A4 ${pdfOrient};margin:8mm 10mm;}
+    body{font-family:Arial,sans-serif;font-size:${fs}px;margin:0;color:#111;}
+    table{width:100%;border-collapse:collapse;}
+    th{${thPDF}}
+    td{font-size:${fs}px;}
+    thead{display:table-header-group;}
+    .page-header{margin-bottom:4px;}
+    @media print{button{display:none!important;}.page-header{page-break-inside:avoid;}}
+  </style></head><body>
+  <div class="page-header" style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+    <span style="font-weight:700;font-size:${fs+2}px;">${logistica} · ${ts}</span>
+    <span style="font-size:${fs-1}px;color:#888;">${lista.length} envios · Total: $${Math.round(totalImp).toLocaleString("es-AR")}${cobTotal?" · A cobrar: $"+cobTotal.toLocaleString("es-AR"):""}</span>
+  </div>
+  <table><thead>${headerRow}</thead><tbody>${rows}</tbody></table>
+  <div style="border-top:1.5px solid #333;margin-top:4px;padding-top:3px;font-size:${fs-2}px;color:#555;">${lista.length} envios</div>
+  <script>window.onload=function(){window.print();};<\/script>
+  </body></html>`;
+}
 // Valor de referencia que paga ML por envío (por partido)
 const ML_FINAL={"CABA":6490,"Lomas de Zamora":6490,"Avellaneda":4490,"Lanus":4490,"Quilmes":4490,"Almirante Brown":8490,"Berazategui":8490,"Berisso":8490,"Campana":8490,"Canuelas":8490,"Ensenada":8490,"Escobar":8490,"Esteban Echeverria":8490,"Ezeiza":8490,"Florencio Varela":8490,"Gral. Rodriguez":8490,"Hurlingham":8490,"Ituzaingo":8490,"Jose C Paz":8490,"La Matanza Norte":8490,"La Matanza Sur":8490,"La Plata":8490,"Lujan":8490,"Malvinas Argentinas":8490,"Marcos Paz":8490,"Merlo":8490,"Moreno":8490,"Moron":8490,"Pilar":8490,"Presidente Peron":8490,"San Fernando":8490,"San Isidro":8490,"San Martin":8490,"San Miguel":8490,"San Vicente":8490,"Tigre":8490,"Tres de Febrero":8490,"Vicente Lopez":8490,"Zarate":8490};
 const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
@@ -1187,28 +1261,52 @@ function TabImprimir({envios,setEnvios,zc,lc}){
   const cobTotal=lista.filter(e=>e.cobranza).reduce((s,e)=>s+(e.cobranza||0),0);
   const hayCobro=lista.some(e=>e.cobranza!==null&&e.cobranza>0);
 
-  // WhatsApp: generar mensaje de texto y abrir grupo
+  // WhatsApp: guardar despacho en Firestore y generar link copiable
   const [waCopied,setWaCopied]=useState(false);
-  const notificarWA=()=>{
-    const cfg=lc[trans];
-    const fechaStr=fecha?new Date(fecha+"T00:00:00").toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long"}):"hoy";
-    const lineas=lista.map((e,i)=>{
-      const dir=[e.direccion,e.localidad&&!/referencia/i.test(e.localidad)?e.localidad:"",e.partido,e.cp].filter(Boolean).join(" · ");
-      const ref=e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,15))?" ("+e.referencia+")":"";
-      const turnoStr=e.turno?"⏰ "+e.turno:"";
-      const bultosStr=(e.bultos||1)>1?"📦 "+(e.bultos)+" bultos":"📦 1 bulto";
-      const cobStr=e.cobranza>0?"💰 $"+Number(e.cobranza).toLocaleString("es-AR"):"";
-      const nroStr=e.nroOrdenTN?"#"+e.nroOrdenTN:e.nroSeguimiento?"📮 "+e.nroSeguimiento:"";
-      const detalles=[turnoStr,bultosStr,cobStr].filter(Boolean).join(" · ");
-      return`${i+1}. ${dir}${ref}${nroStr?"\n   "+nroStr:""}${detalles?"\n   "+detalles:""}`;
-    }).join("\n\n");
-    const msg=`🛵 *${trans} — ${fechaStr}*\n📋 ${lista.length} envío${lista.length!==1?"s":""}\n\n${lineas}\n\n_Enviado desde EnviosHub_`;
-    navigator.clipboard.writeText(msg).catch(()=>{});
-    setWaCopied(true);
-    setTimeout(()=>setWaCopied(false),3000);
-    if(cfg?.waGroup)window.open(cfg.waGroup,"_blank");
+  const [waSaving,setWaSaving]=useState(false);
+  const [waModal,setWaModal]=useState(null); // {msg, url, token}
+  const notificarWA=async()=>{
+    if(waSaving||trans==="TODOS"||lista.length===0)return;
+    setWaSaving(true);
+    try{
+      const token=Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-4);
+      const cfg=lc[trans];
+      const fechaStr=fecha?new Date(fecha+"T00:00:00").toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long"}):"hoy";
+      const url=window.location.origin+"/?d="+token;
+      const msg=`🛵 *${cfg?.nombre||trans} — ${fechaStr}*\n📋 ${lista.length} envío${lista.length!==1?"s":""} para entregar.\n\n📄 Descargá la hoja de ruta acá:\n${url}\n\n_EnviosHub_`;
+      await setDoc(doc(db,"despachos",token),{
+        token,
+        logistica:trans,
+        logisticaNombre:cfg?.nombre||trans,
+        fecha:fecha||fechaHoy(),
+        envios:lista.map(e=>({
+          id:e.id,
+          nroSeguimiento:e.nroSeguimiento||"",
+          nroOrdenTN:e.nroOrdenTN||"",
+          direccion:e.direccion||"",
+          localidad:e.localidad||"",
+          partido:e.partido||"",
+          cp:e.cp||"",
+          bultos:e.bultos||1,
+          cobranza:e.cobranza||0,
+          importe:getImp(e),
+          origen:e.origen||"",
+          loteImportacion:e.loteImportacion||"",
+          turno:e.turno||"",
+          referencia:e.referencia||"",
+          tipoEntrega:e.tipoEntrega||"",
+          fecha:e.fecha||"",
+        })),
+        pdfOrient,
+        pdfFontSize,
+        pdfVersion,
+        creadoAt:new Date().toISOString(),
+      });
+      setWaModal({msg,url,token});
+    }catch(err){alert("Error al generar link: "+err.message);}
+    setWaSaving(false);
   };
-  const puedeWA=trans!=="TODOS"&&lista.length>0&&lc[trans]?.waGroup;
+  const puedeWA=trans!=="TODOS"&&lista.length>0;
 
   // Cierre del día
   const [cierreModal,setCierreModal]=useState(null);
@@ -1384,8 +1482,8 @@ function TabImprimir({envios,setEnvios,zc,lc}){
             </select>
           </div>
           <button onClick={generarPDF} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.5rem 1.1rem"}}>Generar PDF</button>
-          {puedeWA&&<button onClick={notificarWA} style={{...S.btn(true),background:waCopied?"linear-gradient(135deg,#059669,#047857)":"linear-gradient(135deg,#25d366,#128c7e)",padding:"0.5rem 1.1rem",border:"none"}}>
-            {waCopied?"✓ Mensaje copiado":"📲 Notificar WA"}
+          {puedeWA&&<button onClick={notificarWA} disabled={waSaving} style={{...S.btn(true),background:waSaving?"#1a2a1a":waCopied?"linear-gradient(135deg,#059669,#047857)":"linear-gradient(135deg,#25d366,#128c7e)",padding:"0.5rem 1.1rem",border:"none",opacity:waSaving?0.6:1}}>
+            {waSaving?"Generando...":"📲 Notificar WA"}
           </button>}
           {trans!=="TODOS"&&lista.length>0&&(
             <button onClick={generarCierre} disabled={cierreSaving} style={{...S.btn(true),background:cierreSaving?"#1a1a2e":"linear-gradient(135deg,#4f46e5,#7c3aed)",padding:"0.5rem 1.1rem",border:"none",opacity:cierreSaving?0.6:1}}>
@@ -1394,6 +1492,29 @@ function TabImprimir({envios,setEnvios,zc,lc}){
           )}
         </div>
       </div>
+      {/* Modal Notificar WA */}
+      {waModal&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.72)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
+          <div style={{background:"#12172a",border:"1px solid #1e2640",borderRadius:"14px",padding:"1.5rem",maxWidth:"480px",width:"100%"}}>
+            <div style={{fontWeight:800,fontSize:"1rem",marginBottom:"0.25rem"}}>📲 Link generado</div>
+            <div style={{color:"#6b7280",fontSize:"0.8rem",marginBottom:"1rem"}}>Copiá el mensaje y envialo por WhatsApp. Al abrir el link se descarga el PDF de la hoja de ruta.</div>
+            <textarea value={waModal.msg} readOnly style={{width:"100%",background:"#0a0e1a",border:"1px solid #252d40",borderRadius:"8px",padding:"0.75rem",color:"#e5e7eb",fontSize:"0.78rem",resize:"none",height:"140px",outline:"none",lineHeight:1.6,fontFamily:"monospace"}} onClick={e=>e.target.select()}/>
+            <div style={{display:"flex",gap:"0.5rem",marginTop:"0.75rem",flexWrap:"wrap"}}>
+              <button onClick={()=>{navigator.clipboard.writeText(waModal.msg).catch(()=>{});setWaCopied(true);setTimeout(()=>setWaCopied(false),2500);}} style={{flex:2,padding:"0.6rem",borderRadius:"9px",background:waCopied?"#0d1c14":"#1e2640",border:`1px solid ${waCopied?"#10b981":"#374151"}`,color:waCopied?"#10b981":"#e5e7eb",fontWeight:700,cursor:"pointer",fontSize:"0.82rem"}}>
+                {waCopied?"✓ Copiado":"📋 Copiar mensaje"}
+              </button>
+              {lc[trans]?.waGroup&&(
+                <button onClick={()=>window.open(lc[trans].waGroup,"_blank")} style={{flex:1,padding:"0.6rem",borderRadius:"9px",background:"#0a1a10",border:"1px solid #128c7e",color:"#25d366",fontWeight:700,cursor:"pointer",fontSize:"0.82rem"}}>
+                  📲 Abrir grupo
+                </button>
+              )}
+              <button onClick={()=>{setWaModal(null);setWaCopied(false);}} style={{padding:"0.6rem 1rem",borderRadius:"9px",background:"transparent",border:"1px solid #374151",color:"#6b7280",fontWeight:600,cursor:"pointer",fontSize:"0.82rem"}}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Modal cierre del día */}
       {cierreModal&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.72)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
@@ -2394,13 +2515,6 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
     }
   };
 
-  const toggleSel=id=>setSelIds(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
-  const toggleLogSel=envLog=>{
-    const ids=envLog.map(e=>e.id);
-    const allSel=ids.every(id=>selIds.has(id));
-    setSelIds(p=>{const n=new Set(p);ids.forEach(id=>allSel?n.delete(id):n.add(id));return n;});
-  };
-
   const totalSaldoPendiente=envRelevantes.filter(e=>e.estadoPago!=="abonado").reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
 
   return(
@@ -2488,11 +2602,9 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
               const totalLog=envLog.reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
               const pendLog=envLog.filter(e=>e.estadoPago!=="abonado");
               const totalPend=pendLog.reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
-              const allLogSel=envLog.length>0&&envLog.every(e=>selIds.has(e.id));
               return(
                 <div key={log} style={{...S.card,padding:"0",overflow:"hidden",border:"1px solid #1e2535"}}>
                   <div style={{padding:"0.65rem 1rem",background:"#12172a",borderBottom:"1px solid #252d40",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
-                    <input type="checkbox" checked={allLogSel} onChange={()=>toggleLogSel(envLog)} style={{cursor:"pointer"}}/>
                     <Bdg label={log} bg={lc[log]?.bg||"#1e293b"} t={lc[log]?.color||"#94a3b8"} style={{fontSize:"0.75rem"}}/>
                     <span style={{color:"#9ca3af",fontSize:"0.78rem"}}>{envLog.length} envío{envLog.length!==1?"s":""}</span>
                     <div style={{flex:1}}/>
@@ -2507,8 +2619,8 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
                       const imp=e.importeOverride||getImp(e)||0;
                       const abonado=e.estadoPago==="abonado";
                       return(
-                        <div key={e.id} style={{display:"flex",alignItems:"center",gap:"0.6rem",padding:"7px 1rem",borderBottom:"1px solid #1a1f2e",background:selIds.has(e.id)?"#0f0b2a":"transparent"}}>
-                          {!abonado?<input type="checkbox" checked={selIds.has(e.id)} onChange={()=>toggleSel(e.id)} style={{cursor:"pointer",flexShrink:0}}/>:<span style={{color:"#10b981",fontSize:"0.75rem",flexShrink:0,width:"16px"}}>✓</span>}
+                        <div key={e.id} style={{display:"flex",alignItems:"center",gap:"0.6rem",padding:"7px 1rem",borderBottom:"1px solid #1a1f2e"}}>
+                          <span style={{color:"#10b981",fontSize:"0.75rem",flexShrink:0,width:"16px"}}>{abonado?"✓":""}</span>
                           <span style={{color:"#6b7280",fontSize:"0.72rem",flexShrink:0,minWidth:"50px"}}>{fmtF(e.fecha||e.fechaVenta)}</span>
                           <span style={{color:"#e5e7eb",fontSize:"0.8rem",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}{e.partido?` · ${e.partido}`:""}</span>
                           {e.nroOrdenTN&&<span style={{color:"#4b5563",fontSize:"0.7rem",flexShrink:0}}>#{e.nroOrdenTN}</span>}
@@ -4945,6 +5057,38 @@ function ScrollTop(){
 
 
 // ════════════════════════════════════════════════════════════════════
+// DESPACHO PAGE — página pública que abre el PDF de despacho
+// ════════════════════════════════════════════════════════════════════
+function DespachoPage({token}){
+  const [estado,setEstado]=useState("cargando");
+  const [err,setErr]=useState("");
+
+  useEffect(()=>{
+    if(!token){setErr("Token inválido.");setEstado("error");return;}
+    getDoc(doc(db,"despachos",token)).then(snap=>{
+      if(!snap.exists()){setErr("Despacho no encontrado. El link puede haber expirado.");setEstado("error");return;}
+      const data=snap.data();
+      const html=generarHTMLDespacho(data);
+      setEstado("listo");
+      // Reemplazar la página actual con el PDF HTML — auto-print en onload
+      setTimeout(()=>{document.open();document.write(html);document.close();},100);
+    }).catch(e=>{setErr("Error al cargar: "+e.message);setEstado("error");});
+  },[token]);
+
+  const bg="#0a0e1a",tx="#e5e7eb",muted="#6b7280",red="#f87171";
+  if(estado==="error")return(
+    <div style={{minHeight:"100vh",background:bg,display:"flex",alignItems:"center",justifyContent:"center",color:tx,fontFamily:"sans-serif",padding:"1rem"}}>
+      <div style={{textAlign:"center",maxWidth:"320px"}}><div style={{fontSize:"2rem",marginBottom:"0.5rem"}}>❌</div><div style={{color:red,fontWeight:700,marginBottom:"0.5rem"}}>No se pudo cargar</div><div style={{color:muted,fontSize:"0.85rem"}}>{err}</div></div>
+    </div>
+  );
+  return(
+    <div style={{minHeight:"100vh",background:bg,display:"flex",alignItems:"center",justifyContent:"center",color:tx,fontFamily:"sans-serif"}}>
+      <div style={{textAlign:"center"}}><div style={{fontSize:"2rem",marginBottom:"0.5rem"}}>📄</div><div style={{color:muted}}>Preparando PDF...</div></div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
 // CONFIRM PAGE — página pública para que logísticas confirmen cierre
 // ════════════════════════════════════════════════════════════════════
 function ConfirmPage({token}){
@@ -5111,6 +5255,7 @@ function ConfirmPage({token}){
 
 export default function App(){
   const [confirmToken]=useState(()=>new URLSearchParams(window.location.search).get('t'));
+  const [despachoToken]=useState(()=>new URLSearchParams(window.location.search).get('d'));
   const [sesion,setSesion]=useState(()=>getSession());
   const [pantalla,setPantalla]=useState("dashboard");
 
@@ -5259,6 +5404,7 @@ export default function App(){
   const reasignarSel=items=>{setBorrador(items);setPantalla("asignacion");};
 
   // Auth gates
+  if(despachoToken)return<DespachoPage token={despachoToken}/>;
   if(confirmToken)return<ConfirmPage token={confirmToken}/>;
   if(!sesion)return<PantallaLogin onLogin={s=>{setSession(s);setSesion(s);}}/>;
   if(sesion.rol==="logistica"){
