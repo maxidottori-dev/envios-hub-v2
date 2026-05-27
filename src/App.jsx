@@ -1301,6 +1301,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
         pdfFontSize,
         pdfVersion,
         creadoAt:new Date().toISOString(),
+        expiresAt:new Date(Date.now()+48*60*60*1000).toISOString(),
       });
       setWaModal({msg,url,token});
     }catch(err){alert("Error al generar link: "+err.message);}
@@ -5060,30 +5061,149 @@ function ScrollTop(){
 // DESPACHO PAGE — página pública que abre el PDF de despacho
 // ════════════════════════════════════════════════════════════════════
 function DespachoPage({token}){
-  const [estado,setEstado]=useState("cargando");
+  const [estado,setEstado]=useState("cargando"); // cargando | generando | listo | error | expirado
   const [err,setErr]=useState("");
+  const [despachoData,setDespachoData]=useState(null);
+  const contentRef=useRef(null);
 
+  // Carga datos de Firestore
   useEffect(()=>{
     if(!token){setErr("Token inválido.");setEstado("error");return;}
     getDoc(doc(db,"despachos",token)).then(snap=>{
-      if(!snap.exists()){setErr("Despacho no encontrado. El link puede haber expirado.");setEstado("error");return;}
+      if(!snap.exists()){setErr("Despacho no encontrado.");setEstado("error");return;}
       const data=snap.data();
-      const html=generarHTMLDespacho(data);
-      setEstado("listo");
-      // Reemplazar la página actual con el PDF HTML — auto-print en onload
-      setTimeout(()=>{document.open();document.write(html);document.close();},100);
+      // Verificar expiración (48 hs)
+      if(data.expiresAt&&new Date().toISOString()>data.expiresAt){
+        setEstado("expirado");return;
+      }
+      setDespachoData(data);
+      setEstado("generando");
     }).catch(e=>{setErr("Error al cargar: "+e.message);setEstado("error");});
   },[token]);
 
-  const bg="#0a0e1a",tx="#e5e7eb",muted="#6b7280",red="#f87171";
+  // Una vez que el contenido está renderizado, genera el PDF con html2pdf.js
+  useEffect(()=>{
+    if(estado!=="generando"||!contentRef.current)return;
+    const cargarYGenerar=async()=>{
+      // Cargar html2pdf.js dinámicamente
+      if(!window.html2pdf){
+        await new Promise((res,rej)=>{
+          const s=document.createElement("script");
+          s.src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+          s.onload=res; s.onerror=rej;
+          document.head.appendChild(s);
+        });
+      }
+      const orient=despachoData?.pdfOrient||"landscape";
+      const fecha=despachoData?.fecha||"";
+      const nombre=despachoData?.logisticaNombre||despachoData?.logistica||"despacho";
+      const filename=`${nombre}_${fecha||"hoy"}.pdf`;
+      const opt={
+        margin:[8,10,8,10],
+        filename,
+        image:{type:"jpeg",quality:0.98},
+        html2canvas:{scale:2,useCORS:true,logging:false},
+        jsPDF:{unit:"mm",format:"a4",orientation:orient},
+      };
+      try{
+        await window.html2pdf().set(opt).from(contentRef.current).save();
+        setEstado("listo");
+      }catch(e){
+        setErr("Error al generar PDF: "+e.message);setEstado("error");
+      }
+    };
+    cargarYGenerar();
+  },[estado,despachoData]);
+
+  const bg="#0a0e1a",tx="#e5e7eb",muted="#6b7280",red="#f87171",yellow="#fbbf24";
+
+  // Render del contenido del PDF (oculto, lo usa html2pdf)
+  const contenidoPDF=despachoData?(()=>{
+    const d=despachoData;
+    const fs=d.pdfFontSize||14;
+    const totalImp=d.envios.reduce((s,e)=>s+(e.importe||0),0);
+    const cobTotal=d.envios.filter(e=>e.cobranza>0).reduce((s,e)=>s+(e.cobranza||0),0);
+    const hayCobro=d.envios.some(e=>e.cobranza>0);
+    const ahora=new Date();
+    const ts=ahora.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+" "+ahora.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false});
+    const thSt={background:"#e8e8e8",padding:"3px 4px",textAlign:"left",fontSize:(fs-2)+"px",fontWeight:700,textTransform:"uppercase",color:"#555",borderBottom:"1.5px solid #333"};
+    return(
+      <div ref={contentRef} style={{fontFamily:"Arial,sans-serif",fontSize:fs+"px",color:"#111",background:"#fff",padding:"8mm 10mm",width:"277mm",minHeight:"190mm"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:"4px"}}>
+          <span style={{fontWeight:700,fontSize:(fs+2)+"px"}}>{d.logisticaNombre||d.logistica} · {ts}</span>
+          <span style={{fontSize:(fs-1)+"px",color:"#888"}}>{d.envios.length} envios · Total: ${Math.round(totalImp).toLocaleString("es-AR")}{cobTotal?" · A cobrar: $"+cobTotal.toLocaleString("es-AR"):""}</span>
+        </div>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead>
+            <tr>
+              <th style={{...thSt,width:"20px"}}>#</th>
+              <th style={{...thSt,width:"55px",textAlign:"center"}}>Lote</th>
+              <th style={{...thSt,width:"100px"}}>Nro envio / orden</th>
+              <th style={{...thSt,width:"38px",textAlign:"center"}}>Tipo</th>
+              <th style={{...thSt,width:"28px",textAlign:"center"}}>Blts</th>
+              <th style={{...thSt,width:"18px",textAlign:"center"}}>Chk</th>
+              <th style={thSt}>Direccion · Localidad · Partido · CP · Referencia</th>
+              <th style={{...thSt,whiteSpace:"nowrap"}}>Zona</th>
+              <th style={{...thSt,width:"32px",textAlign:"center"}}>Turno</th>
+              <th style={{...thSt,width:"42px",textAlign:"center"}}>Fecha</th>
+              {hayCobro&&<th style={{...thSt,width:"72px",textAlign:"right"}}>Cobrar</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {d.envios.map((e,i)=>{
+              const esFlex=e.origen==="ML";
+              const dir=[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · ");
+              const refExtra=(e.referencia&&!e.direccion.toLowerCase().includes((e.referencia||"").toLowerCase().slice(0,20)))?" — "+e.referencia:"";
+              const nroRef=esFlex?(e.nroSeguimiento||""):("#"+(e.nroOrdenTN||""));
+              const zml=esFlex?(getZonaML(e.partido)||""):(e.partido||"");
+              const loteCell=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"—";
+              const tdSt={borderBottom:"0.5px solid #ddd",padding:"3px 4px",fontSize:fs+"px",background:i%2===0?"#fff":"#f9f9f9"};
+              return(
+                <tr key={e.id||i} style={{background:i%2===0?"#fff":"#f9f9f9"}}>
+                  <td style={{...tdSt,textAlign:"center",color:"#888"}}>{i+1}</td>
+                  <td style={{...tdSt,textAlign:"center",fontSize:(fs-2)+"px",fontWeight:700,color:"#16a34a"}}>{loteCell}</td>
+                  <td style={{...tdSt,fontFamily:"monospace",fontSize:(fs-1)+"px",color:"#444"}}>{nroRef}</td>
+                  <td style={{...tdSt,textAlign:"center",fontSize:(fs-2)+"px",fontWeight:700,color:e.tipoEntrega==="COMERCIAL"?"#1d4ed8":"#15803d",background:e.tipoEntrega==="COMERCIAL"?"#dbeafe":e.tipoEntrega==="RESIDENCIAL"?"#dcfce7":(i%2===0?"#fff":"#f9f9f9")}}>{e.tipoEntrega==="COMERCIAL"?"COM":e.tipoEntrega==="RESIDENCIAL"?"RES":"—"}</td>
+                  <td style={{...tdSt,textAlign:"center",fontWeight:(e.bultos||1)>1?700:400}}>{e.bultos||1}</td>
+                  <td style={{...tdSt,textAlign:"center"}}><div style={{width:"11px",height:"11px",border:"1px solid #aaa",borderRadius:"1px",display:"inline-block"}}/></td>
+                  <td style={{...tdSt,fontWeight:500}}>{dir+refExtra}</td>
+                  <td style={{...tdSt,whiteSpace:"nowrap",fontSize:(fs-1)+"px"}}>{zml}</td>
+                  <td style={{...tdSt,textAlign:"center"}}>{e.turno||"—"}</td>
+                  <td style={{...tdSt,textAlign:"center"}}>{e.fecha?fmtCorta(e.fecha):"—"}</td>
+                  {hayCobro&&<td style={{...tdSt,textAlign:"right",fontWeight:e.cobranza?600:400,color:e.cobranza?"#b45309":"#aaa"}}>{e.cobranza?"$"+Number(e.cobranza).toLocaleString("es-AR"):"—"}</td>}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div style={{borderTop:"1.5px solid #333",marginTop:"4px",paddingTop:"3px",fontSize:(fs-2)+"px",color:"#555"}}>{d.envios.length} envios</div>
+      </div>
+    );
+  })():null;
+
+  if(estado==="expirado")return(
+    <div style={{minHeight:"100vh",background:bg,display:"flex",alignItems:"center",justifyContent:"center",color:tx,fontFamily:"sans-serif",padding:"1rem"}}>
+      <div style={{textAlign:"center",maxWidth:"320px"}}><div style={{fontSize:"2rem",marginBottom:"0.5rem"}}>⏰</div><div style={{color:yellow,fontWeight:700,marginBottom:"0.5rem"}}>Link expirado</div><div style={{color:muted,fontSize:"0.85rem"}}>Este link era válido por 48 hs. Pedí uno nuevo.</div></div>
+    </div>
+  );
   if(estado==="error")return(
     <div style={{minHeight:"100vh",background:bg,display:"flex",alignItems:"center",justifyContent:"center",color:tx,fontFamily:"sans-serif",padding:"1rem"}}>
       <div style={{textAlign:"center",maxWidth:"320px"}}><div style={{fontSize:"2rem",marginBottom:"0.5rem"}}>❌</div><div style={{color:red,fontWeight:700,marginBottom:"0.5rem"}}>No se pudo cargar</div><div style={{color:muted,fontSize:"0.85rem"}}>{err}</div></div>
     </div>
   );
+
   return(
-    <div style={{minHeight:"100vh",background:bg,display:"flex",alignItems:"center",justifyContent:"center",color:tx,fontFamily:"sans-serif"}}>
-      <div style={{textAlign:"center"}}><div style={{fontSize:"2rem",marginBottom:"0.5rem"}}>📄</div><div style={{color:muted}}>Preparando PDF...</div></div>
+    <div style={{minHeight:"100vh",background:bg,color:tx,fontFamily:"sans-serif"}}>
+      {/* Mensaje de estado visible */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",flexDirection:"column",gap:"0.75rem"}}>
+        <div style={{fontSize:"2.5rem"}}>{estado==="listo"?"✅":"📄"}</div>
+        <div style={{fontWeight:700,fontSize:"1rem"}}>{estado==="listo"?"PDF descargado":"Generando PDF..."}</div>
+        {estado==="listo"&&<div style={{color:muted,fontSize:"0.82rem"}}>Revisá tu carpeta de descargas.</div>}
+      </div>
+      {/* Contenido oculto que html2pdf procesa */}
+      <div style={{position:"absolute",left:"-9999px",top:0,visibility:"hidden"}}>
+        {contenidoPDF}
+      </div>
     </div>
   );
 }
