@@ -1156,9 +1156,6 @@ function TabImprimir({envios,setEnvios,zc,lc}){
   const [turno,setTurno]=useState("TODOS");
   const [filZona,setFilZona]=useState("TODAS");
   const [filOrigen,setFilOrigen]=useState("TODOS"); // TODOS | FLEX | NO_FLEX
-  const [filConfirm,setFilConfirm]=useState("TODOS"); // TODOS | PENDIENTE | CONFIRMADO
-  const [confirmando,setConfirmando]=useState(false);
-  const [guardandoConf,setGuardandoConf]=useState(false);
   const [busqueda,setBusqueda]=useState("");
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const tmap=buildTarifaMap(zc);
@@ -1171,8 +1168,6 @@ function TabImprimir({envios,setEnvios,zc,lc}){
     if(filZona!=="TODAS"&&getZonaML(e.partido)!==filZona)return false;
     if(filOrigen==="FLEX"&&e.origen!=="ML")return false;
     if(filOrigen==="NO_FLEX"&&e.origen==="ML")return false;
-    if(filConfirm==="PENDIENTE"&&(e.estadoPago||!e.trans))return false;
-    if(filConfirm==="CONFIRMADO"&&!e.estadoPago)return false;
     if(busqueda){const s=norm(busqueda);if(!(norm(e.direccion).includes(s)||norm(e.partido).includes(s)||norm(e.clienteNombre).includes(s)||(e.nroOrdenTN||"").includes(s)||(e.nroSeguimiento||"").includes(s)))return false;}
     return e.estado!=="cancelado";
   }).sort((a,b)=>{
@@ -1252,34 +1247,6 @@ function TabImprimir({envios,setEnvios,zc,lc}){
       setCierreModal({token,msg,url});
     }catch(err){alert("Error al generar cierre: "+err.message);}
     setCierreSaving(false);
-  };
-
-  // Envíos sin confirmar dentro del filtro actual (solo si hay logística específica)
-  const sinConfirmar=lista.filter(e=>!e.estadoPago&&e.trans);
-  const puedeConfirmar=trans!=="TODOS"&&sinConfirmar.length>0;
-
-  const confirmarEntregas=async()=>{
-    if(guardandoConf)return;
-    setGuardandoConf(true);
-    try{
-      const ids=sinConfirmar.map(e=>e.id);
-      const hoyStr=fechaHoy();
-      const CHUNK=400;
-      for(let i=0;i<ids.length;i+=CHUNK){
-        const batch=writeBatch(db);
-        ids.slice(i,i+CHUNK).forEach(id=>{
-          batch.update(doc(db,"envios",id),{estadoPago:"confirmado",estadoPagoFecha:hoyStr});
-        });
-        await batch.commit();
-      }
-      setEnvios(prev=>prev.map(e=>ids.includes(e.id)?{...e,estadoPago:"confirmado",estadoPagoFecha:hoyStr}:e));
-      setConfirmando(false);
-    }catch(err){
-      console.error("Error confirmando entregas:",err);
-      setConfirmando(false);
-    }finally{
-      setGuardandoConf(false);
-    }
   };
 
   const [pdfOrient,setPdfOrient]=useState("landscape");
@@ -1388,32 +1355,8 @@ function TabImprimir({envios,setEnvios,zc,lc}){
         <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["TODAS",...ZONAS_ML_LIST].map(z=><button key={z} onClick={()=>setFilZona(z)} style={S.btnSm(filZona===z,ZONA_ML_COLOR[z]||"#6366f1")}>{z}</button>)}</div>
         <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
         <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["TODOS",...TURNOS].map(t =><button key={t} onClick={()=>setTurno(t)} style={S.btnSm(turno===t,"#8b5cf6")}>{t}</button>)}</div>
-        <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
-        <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
-          {[{k:"TODOS",l:"Todos"},{k:"PENDIENTE",l:"⏳ Pendiente"},{k:"CONFIRMADO",l:"✓ Confirmado"}].map(o=>(
-            <button key={o.k} onClick={()=>setFilConfirm(o.k)} style={S.btnSm(filConfirm===o.k,o.k==="PENDIENTE"?"#f59e0b":o.k==="CONFIRMADO"?"#10b981":"#6366f1")}>{o.l}</button>
-          ))}
-        </div>
         <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar..." style={{...S.input,width:"160px",padding:"0.3rem 0.65rem",fontSize:"0.78rem"}}/>
         <div style={{marginLeft:"auto",display:"flex",gap:"6px",alignItems:"center"}}>
-          {/* Botón confirmar envíos — solo si hay logística específica seleccionada */}
-          {puedeConfirmar&&!confirmando&&(
-            <button onClick={()=>setConfirmando(true)} style={{...S.btn(false),border:"1px solid #10b981",color:"#10b981",padding:"0.4rem 0.9rem",fontSize:"0.78rem"}}>
-              ✓ Confirmar {sinConfirmar.length} envíos
-            </button>
-          )}
-          {confirmando&&(
-            <div style={{display:"flex",gap:"6px",alignItems:"center",background:"#041f14",border:"1px solid #065f46",borderRadius:"8px",padding:"4px 10px"}}>
-              <span style={{color:"#34d399",fontSize:"0.75rem"}}>¿Confirmar {sinConfirmar.length} envíos de {trans}?</span>
-              <button onClick={confirmarEntregas} disabled={guardandoConf} style={{...S.btnSm(true,"#10b981"),padding:"4px 10px",fontSize:"0.72rem",opacity:guardandoConf?0.5:1}}>
-                {guardandoConf?"...":"Sí"}
-              </button>
-              <button onClick={()=>setConfirmando(false)} style={{...S.btnSm(false),padding:"4px 8px",fontSize:"0.72rem"}}>No</button>
-            </div>
-          )}
-          {trans!=="TODOS"&&sinConfirmar.length===0&&lista.length>0&&(
-            <span style={{color:"#10b981",fontSize:"0.72rem",padding:"0.4rem 0"}}>✓ Todos confirmados</span>
-          )}
           <button onClick={()=>{
             const filas=lista.map((e,i)=>{
               const esFlex=e.origen==="ML";
@@ -2352,17 +2295,12 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
   const [filVista,setFilVista]=useState("pendiente");
   const [filDesde,setFilDesde]=useState("");
   const [filHasta,setFilHasta]=useState("");
-  const [selIds,setSelIds]=useState(new Set());
   const [modalPago,setModalPago]=useState(null);
   const [pago,setPago]=useState({monto:"",fecha:hoy,notas:""});
   const [guardandoPago,setGuardandoPago]=useState(false);
-  const [confirmEliminarPago,setConfirmEliminarPago]=useState(null); // id del pago a eliminar
+  const [confirmEliminarPago,setConfirmEliminarPago]=useState(null);
   const [historial,setHistorial]=useState([]);
-  const [vista,setVista]=useState("envios"); // "envios" | "confirmar" | "historial"
-  const [confDesde,setConfDesde]=useState("");
-  const [confHasta,setConfHasta]=useState("");
-  const [confTrans,setConfTrans]=useState("TODOS");
-  const [confSel,setConfSel]=useState(new Set());
+  const [vista,setVista]=useState("envios"); // "envios" | "historial"
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const tmap=buildTarifaMap(zc);
   const getImp=e=>calcImp(e,tmap,lc,zc);
@@ -2377,47 +2315,19 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
     return()=>unsub();
   },[]);
 
-  const envRelevantes=envios.filter(e=>e.estadoPago==="confirmado"||e.estadoPago==="abonado");
-
-  // Envíos candidatos a confirmar: tienen logística, no cancelados, sin estadoPago
-  const envParaConfirmar=envios.filter(e=>{
-    if(!e.trans||e.estado==="cancelado"||e.estadoPago)return false;
-    if(confTrans!=="TODOS"&&e.trans!==confTrans)return false;
-    const f=e.fecha||e.fechaVenta||"";
-    if(confDesde&&f<confDesde)return false;
-    if(confHasta&&f>confHasta)return false;
-    return true;
-  }).sort((a,b)=>{
-    const la=a.trans||"",lb=b.trans||"";
-    if(la!==lb)return la.localeCompare(lb);
-    return(a.fecha||"").localeCompare(b.fecha||"");
-  });
-  const envParaConfPorLog={};
-  envParaConfirmar.forEach(e=>{if(!envParaConfPorLog[e.trans])envParaConfPorLog[e.trans]=[];envParaConfPorLog[e.trans].push(e);});
-
-  const toggleConfSel=id=>setConfSel(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
-  const toggleConfLogSel=envLog=>{
-    const ids=envLog.map(e=>e.id);
-    const allSel=ids.every(id=>confSel.has(id));
-    setConfSel(p=>{const n=new Set(p);ids.forEach(id=>allSel?n.delete(id):n.add(id));return n;});
-  };
-  const confirmarConfSel=()=>{
-    if(!confSel.size)return;
-    setEnvios(prev=>prev.map(e=>confSel.has(e.id)?{...e,estadoPago:"confirmado",estadoPagoFecha:hoy}:e));
-    setConfSel(new Set());
-  };
+  const envRelevantes=envios.filter(e=>e.trans&&e.estado!=="cancelado");
 
   const cardsPorLog=logActivas.map(l=>{
-    const conf=envRelevantes.filter(e=>e.trans===l&&e.estadoPago==="confirmado");
+    const pend=envRelevantes.filter(e=>e.trans===l&&e.estadoPago!=="abonado");
     const abon=envRelevantes.filter(e=>e.trans===l&&e.estadoPago==="abonado");
-    const saldo=conf.reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
+    const saldo=pend.reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
     const pagado=abon.reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
-    return{l,saldo,pagado,confCount:conf.length,abonCount:abon.length};
-  }).filter(x=>x.confCount>0||x.abonCount>0);
+    return{l,saldo,pagado,pendCount:pend.length,abonCount:abon.length};
+  }).filter(x=>x.pendCount>0||x.abonCount>0);
 
   const envFil=envRelevantes.filter(e=>{
     if(filTrans!=="TODOS"&&e.trans!==filTrans)return false;
-    if(filVista==="pendiente"&&e.estadoPago!=="confirmado")return false;
+    if(filVista==="pendiente"&&e.estadoPago==="abonado")return false;
     if(filVista==="abonado"&&e.estadoPago!=="abonado")return false;
     const f=e.fecha||e.fechaVenta||"";
     if(filDesde&&f<filDesde)return false;
@@ -2431,12 +2341,6 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
 
   const porLog={};
   envFil.forEach(e=>{if(!porLog[e.trans])porLog[e.trans]=[];porLog[e.trans].push(e);});
-
-  const confirmarSeleccionados=()=>{
-    if(!selIds.size)return;
-    setEnvios(prev=>prev.map(e=>selIds.has(e.id)&&!e.estadoPago?{...e,estadoPago:"confirmado",estadoPagoFecha:hoy}:e));
-    setSelIds(new Set());
-  };
 
   const abrirModalPago=(logistica,enviosAPagar)=>{
     const total=enviosAPagar.reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
@@ -2474,12 +2378,11 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
         for(let i=0;i<h.enviosIds.length;i+=CHUNK){
           const batch=writeBatch(db);
           h.enviosIds.slice(i,i+CHUNK).forEach(id=>{
-            batch.update(doc(db,"envios",id),{estadoPago:"confirmado",estadoPagoFecha:null});
+            batch.update(doc(db,"envios",id),{estadoPago:null,estadoPagoFecha:null});
           });
           await batch.commit();
         }
-        // Actualizar estado local para reflejo inmediato
-        setEnvios(prev=>prev.map(e=>h.enviosIds.includes(e.id)?{...e,estadoPago:"confirmado",estadoPagoFecha:null}:e));
+        setEnvios(prev=>prev.map(e=>h.enviosIds.includes(e.id)?{...e,estadoPago:null,estadoPagoFecha:null}:e));
       }
       await deleteDoc(doc(db,"pagosLogistica",h.id));
       setConfirmEliminarPago(null);
@@ -2498,7 +2401,7 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
     setSelIds(p=>{const n=new Set(p);ids.forEach(id=>allSel?n.delete(id):n.add(id));return n;});
   };
 
-  const totalSaldoPendiente=envRelevantes.filter(e=>e.estadoPago==="confirmado").reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
+  const totalSaldoPendiente=envRelevantes.filter(e=>e.estadoPago!=="abonado").reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
 
   return(
     <div>
@@ -2518,7 +2421,7 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
               style={{...S.card,padding:"0.65rem 1rem",cursor:"pointer",border:filTrans===c.l?"1px solid "+(lc[c.l]?.color||"#6366f1"):"1px solid #1e2535",minWidth:"160px",flex:"1 1 160px"}}>
               <Bdg label={c.l} bg={lc[c.l]?.bg||"#1e293b"} t={lc[c.l]?.color||"#94a3b8"} style={{fontSize:"0.7rem",marginBottom:"6px",display:"inline-block"}}/>
               <div style={{color:"#f59e0b",fontWeight:700,fontSize:"1.1rem"}}>{fmt(c.saldo)}</div>
-              <div style={{color:"#4b5563",fontSize:"0.68rem"}}>{c.confCount} pendiente{c.confCount!==1?"s":""} de pago</div>
+              <div style={{color:"#4b5563",fontSize:"0.68rem"}}>{c.pendCount} pendiente{c.pendCount!==1?"s":""} de pago</div>
               {c.abonCount>0&&<div style={{color:"#10b981",fontSize:"0.68rem",marginTop:"2px"}}>✓ {c.abonCount} abonado{c.abonCount!==1?"s":""}</div>}
             </div>
           ))}
@@ -2528,7 +2431,6 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
       {/* Barra principal de vistas */}
       <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"4px",flexWrap:"wrap",alignItems:"center"}}>
         <button onClick={()=>setVista("envios")} style={S.btn(vista==="envios","#6366f1")}>Envíos</button>
-        <button onClick={()=>{setVista("confirmar");setConfSel(new Set());}} style={S.btn(vista==="confirmar","#f59e0b")}>✓ Confirmar envíos{envios.filter(e=>e.trans&&e.estado!=="cancelado"&&!e.estadoPago).length>0?` (${envios.filter(e=>e.trans&&e.estado!=="cancelado"&&!e.estadoPago).length})`:""}</button>
         <button onClick={()=>setVista("historial")} style={S.btn(vista==="historial","#10b981")}>Historial pagos</button>
         {vista==="envios"&&<>
           <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
@@ -2544,66 +2446,7 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
           <input type="date" value={filHasta} onChange={ev=>setFilHasta(ev.target.value)} style={{...S.input,padding:"3px 6px",width:"128px",fontSize:"0.72rem"}}/>
           {(filDesde||filHasta)&&<button onClick={()=>{setFilDesde("");setFilHasta("");}} style={{...S.btnSm(false),fontSize:"0.68rem",color:"#6b7280"}}>✕</button>}
         </>}
-        {vista==="confirmar"&&<>
-          <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
-          {["TODOS",...logActivas].map(t=>(
-            <button key={t} onClick={()=>setConfTrans(t)} style={S.btnSm(confTrans===t,lc[t]?.color||"#6366f1")}>{t}</button>
-          ))}
-          <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
-          <input type="date" value={confDesde} onChange={ev=>setConfDesde(ev.target.value)} style={{...S.input,padding:"3px 6px",width:"128px",fontSize:"0.72rem"}}/>
-          <input type="date" value={confHasta} onChange={ev=>setConfHasta(ev.target.value)} style={{...S.input,padding:"3px 6px",width:"128px",fontSize:"0.72rem"}}/>
-          {(confDesde||confHasta)&&<button onClick={()=>{setConfDesde("");setConfHasta("");}} style={{...S.btnSm(false),fontSize:"0.68rem",color:"#6b7280"}}>✕</button>}
-        </>}
       </div>
-
-      {/* Vista: Confirmar envíos */}
-      {vista==="confirmar"&&(
-        <div style={{display:"flex",flexDirection:"column",gap:"0.75rem"}}>
-          {confSel.size>0&&(
-            <div style={{...S.card,padding:"0.5rem 1rem",background:"#1c1400",border:"1px solid #78350f",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
-              <span style={{color:"#fbbf24",fontWeight:700,fontSize:"0.82rem"}}>{confSel.size} envío{confSel.size!==1?"s":""} seleccionado{confSel.size!==1?"s":""}</span>
-              <div style={{flex:1}}/>
-              <button onClick={confirmarConfSel} style={{...S.btn(true),background:"linear-gradient(135deg,#059669,#10b981)"}}>✓ Confirmar {confSel.size===1?"este envío":`${confSel.size} envíos`}</button>
-            </div>
-          )}
-          {Object.keys(envParaConfPorLog).length===0?(
-            <div style={{...S.card,padding:"2rem",textAlign:"center",color:"#4b5563"}}>
-              {envParaConfirmar.length===0&&!confDesde&&!confHasta?"Todos los envíos con logística asignada ya están confirmados o abonados":"Sin envíos para confirmar con este filtro"}
-            </div>
-          ):Object.entries(envParaConfPorLog).map(([log,envLog])=>{
-            const totalLog=envLog.reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
-            const allSel=envLog.length>0&&envLog.every(e=>confSel.has(e.id));
-            return(
-              <div key={log} style={{...S.card,padding:"0",overflow:"hidden",border:"1px solid #1e2535"}}>
-                <div style={{padding:"0.65rem 1rem",background:"#12172a",borderBottom:"1px solid #252d40",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
-                  <input type="checkbox" checked={allSel} onChange={()=>toggleConfLogSel(envLog)} style={{cursor:"pointer"}}/>
-                  <Bdg label={log} bg={lc[log]?.bg||"#1e293b"} t={lc[log]?.color||"#94a3b8"} style={{fontSize:"0.75rem"}}/>
-                  <span style={{color:"#9ca3af",fontSize:"0.78rem"}}>{envLog.length} envío{envLog.length!==1?"s":""}</span>
-                  <div style={{flex:1}}/>
-                  <span style={{color:"#10b981",fontWeight:700}}>{fmt(totalLog)}</span>
-                </div>
-                <div>
-                  {envLog.map(e=>{
-                    const imp=e.importeOverride||getImp(e)||0;
-                    return(
-                      <div key={e.id} style={{display:"flex",alignItems:"center",gap:"0.6rem",padding:"7px 1rem",borderBottom:"1px solid #1a1f2e",background:confSel.has(e.id)?"#1c1400":"transparent"}}>
-                        <input type="checkbox" checked={confSel.has(e.id)} onChange={()=>toggleConfSel(e.id)} style={{cursor:"pointer",flexShrink:0}}/>
-                        <span style={{color:"#6b7280",fontSize:"0.72rem",flexShrink:0,minWidth:"50px"}}>{fmtF(e.fecha||e.fechaVenta)}</span>
-                        <span style={{color:"#e5e7eb",fontSize:"0.8rem",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}{e.partido?` · ${e.partido}`:""}</span>
-                        {e.nroOrdenTN&&<span style={{color:"#4b5563",fontSize:"0.7rem",flexShrink:0}}>#{e.nroOrdenTN}</span>}
-                        {e.origen==="ML"&&<span style={{color:"#84cc16",fontSize:"0.65rem",flexShrink:0,padding:"1px 5px",border:"1px solid #84cc16",borderRadius:"3px"}}>FLEX</span>}
-                        {e.turno&&<span style={{color:"#6b7280",fontSize:"0.68rem",flexShrink:0}}>{e.turno}</span>}
-                        {e.importeOverride&&<span style={{color:"#fbbf24",fontSize:"0.68rem",flexShrink:0}}>*</span>}
-                        <span style={{color:"#10b981",fontWeight:600,fontSize:"0.82rem",flexShrink:0}}>{fmt(imp)}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
 
       {/* Historial de pagos */}
       {vista==="historial"&&(
@@ -2621,7 +2464,7 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
               <span style={{color:"#10b981",fontWeight:700,fontSize:"1rem",flexShrink:0}}>{fmt(h.montoPagado)}</span>
               {confirmEliminarPago===h.id?(
                 <div style={{display:"flex",gap:"6px",alignItems:"center",flexShrink:0}}>
-                  <span style={{color:"#f87171",fontSize:"0.72rem"}}>¿Eliminar y revertir envíos a confirmado?</span>
+                  <span style={{color:"#f87171",fontSize:"0.72rem"}}>¿Eliminar y revertir envíos a pendiente?</span>
                   <button onClick={()=>eliminarPago(h)} style={{...S.btnSm(false),color:"#f87171",borderColor:"#7f1d1d",fontSize:"0.72rem"}}>Sí</button>
                   <button onClick={()=>setConfirmEliminarPago(null)} style={{...S.btnSm(false),fontSize:"0.72rem"}}>No</button>
                 </div>
@@ -2637,21 +2480,13 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
       {vista==="envios"&&(
         Object.keys(porLog).length===0?(
           <div style={{...S.card,padding:"2rem",textAlign:"center",color:"#4b5563"}}>
-            {envRelevantes.length===0?"Ningún envío confirmado aún. Confirmá envíos desde el tab Imprimir.":filVista==="pendiente"?"No hay envíos confirmados sin abonar en este filtro":"Sin envíos en este filtro"}
+            {envRelevantes.length===0?"Sin envíos asignados a logísticas aún.":filVista==="pendiente"?"No hay envíos pendientes de pago en este filtro":"Sin envíos en este filtro"}
           </div>
         ):(
           <div style={{display:"flex",flexDirection:"column",gap:"0.75rem"}}>
-            {selIds.size>0&&(
-              <div style={{...S.card,padding:"0.5rem 1rem",background:"#0f0b2a",border:"1px solid #4c1d95",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
-                <span style={{color:"#a78bfa",fontWeight:700,fontSize:"0.82rem"}}>{selIds.size} seleccionado{selIds.size!==1?"s":""}</span>
-                <span style={{color:"#6366f1",fontWeight:700}}>{fmt([...selIds].reduce((s,id)=>{const e=envios.find(x=>x.id===id);return s+(e?.importeOverride||getImp(e)||0);},0))}</span>
-                <div style={{flex:1}}/>
-                <button onClick={confirmarSeleccionados} style={S.btn(false,"#6366f1")}>✓ Confirmar seleccionados</button>
-              </div>
-            )}
-            {Object.entries(porLog).map(([log,envLog])=>{
+              {Object.entries(porLog).map(([log,envLog])=>{
               const totalLog=envLog.reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
-              const pendLog=envLog.filter(e=>e.estadoPago==="confirmado");
+              const pendLog=envLog.filter(e=>e.estadoPago!=="abonado");
               const totalPend=pendLog.reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
               const allLogSel=envLog.length>0&&envLog.every(e=>selIds.has(e.id));
               return(
