@@ -5362,10 +5362,10 @@ export default function App(){
   // Cargar lc, zc y cpExtra desde Firebase al iniciar
   useEffect(()=>{
     const unsubLc=onSnapshot(doc(db,"config","logisticas"),snap=>{
-      if(snap.exists()){const data=snap.data();setLc(p=>({...LOGISTICAS_INIT,...p,...data}));}
+      if(snap.exists()){setLc(snap.data());}
     });
     const unsubZc=onSnapshot(doc(db,"config","zonas"),snap=>{
-      if(snap.exists()){const data=snap.data();setZc(p=>({...ZONAS_INIT,...p,...data}));}
+      if(snap.exists()){setZc(snap.data());}
     });
     const unsubCp=onSnapshot(doc(db,"config","cp_extra"),snap=>{
       let data={};
