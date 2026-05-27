@@ -1669,34 +1669,13 @@ function TabTarifas({zc,setZc,lc,setLc}){
   const [moverModal,setMoverModal]=useState(null);
   const [addModal,setAddModal]=useState(false);
   const [newZona,setNewZona]=useState({nombre:"",color:"#6366f1",precio:0});
-  const [renaming,setRenaming]=useState(null); // {key,nombre}
-  const [renameSaving,setRenameSaving]=useState(false);
-  const doRename=async(oldKey,newNombre)=>{
-    const nombre=newNombre.trim().toUpperCase();
-    const newKey=nombre.replace(/\s+/g,"_");
-    if(!nombre||newKey===oldKey){setRenaming(null);return;}
-    if(lc[newKey]){alert("Ya existe una logística con ese nombre");return;}
-    setRenameSaving(true);
-    try{
-      const newLc={...lc,[newKey]:{...lc[oldKey],nombre}};
-      delete newLc[oldKey];
-      setLc(newLc);
-      await setDoc(doc(db,"config","logisticas"),newLc);
-      // Batch update envíos
-      const snap=await getDocs(query(collection(db,"envios"),where("trans","==",oldKey)));
-      if(!snap.empty){
-        const CHUNK=400;const docs=snap.docs;
-        for(let i=0;i<docs.length;i+=CHUNK){
-          const batch=writeBatch(db);
-          docs.slice(i,i+CHUNK).forEach(d=>batch.update(d.ref,{trans:newKey}));
-          await batch.commit();
-        }
-      }
-      // También actualizar zonas si el logSel era el oldKey
-      if(logSel===oldKey)setLogSel(newKey);
-      setRenaming(null);
-    }catch(err){console.error("Error renombrando:",err);alert("Error al renombrar: "+err.message);}
-    finally{setRenameSaving(false);}
+  const elimLog=async(k,nombre)=>{
+    if(!window.confirm(`¿Eliminar "${nombre}"? Esta acción no se puede deshacer.`))return;
+    const newLc={...lc};
+    delete newLc[k];
+    setLc(newLc);
+    await setDoc(doc(db,"config","logisticas"),newLc);
+    if(logSel===k)setLogSel(Object.keys(newLc).find(x=>newLc[x].activa)||"");
   };
   const logActivas=Object.keys(lc).filter(k =>lc[k].activa);
   useEffect(()=>{if((!logSel||!lc[logSel]?.activa)&&logActivas.length>0)setLogSel(logActivas[0]);},[lc]);
@@ -1848,10 +1827,9 @@ function TabTarifas({zc,setZc,lc,setLc}){
           {Object.entries(lc).map(([k,v])=>(
             <div key={k} style={{...S.card,borderTop:"3px solid "+(v.activa?v.color:"#374151"),overflow:"hidden",opacity:v.activa?1:0.6}}>
               <div style={{padding:"0.75rem 1rem",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"6px"}}>
-                {renaming?.key===k
-                  ?<><input autoFocus value={renaming.nombre} onChange={ev=>setRenaming(p=>({...p,nombre:ev.target.value}))} onKeyDown={ev=>{if(ev.key==="Enter")doRename(k,renaming.nombre);if(ev.key==="Escape")setRenaming(null);}} style={{...S.input,flex:1,fontWeight:800,fontSize:"0.9rem",padding:"2px 8px",color:v.color,border:"1px solid "+v.color}}/><button onClick={()=>doRename(k,renaming.nombre)} disabled={renameSaving} style={{...S.btnSm(true,"#10b981"),padding:"4px 10px",fontSize:"0.7rem"}}>{renameSaving?"...":"OK"}</button><button onClick={()=>setRenaming(null)} style={{...S.btnSm(false),padding:"4px 8px",fontSize:"0.7rem"}}>✕</button></>
-                  :<><span style={{color:v.activa?v.color:"#6b7280",fontWeight:800,fontSize:"1rem",flex:1}}>{v.nombre}</span><button onClick={()=>setRenaming({key:k,nombre:v.nombre||k})} title="Renombrar" style={{background:"none",border:"none",color:"#4b5563",cursor:"pointer",fontSize:"0.78rem",padding:"2px 4px"}}>✏️</button><button onClick={()=>toggleLog(k)} style={{...S.btnSm(v.activa,v.color),padding:"4px 12px"}}>{v.activa?"Activa":"Desactivar"}</button></>
-                }
+                <span style={{color:v.activa?v.color:"#6b7280",fontWeight:800,fontSize:"1rem",flex:1}}>{v.nombre}</span>
+                <button onClick={()=>elimLog(k,v.nombre||k)} title="Eliminar" style={{background:"none",border:"none",color:"#4b5563",cursor:"pointer",fontSize:"0.78rem",padding:"2px 4px"}}>🗑️</button>
+                <button onClick={()=>toggleLog(k)} style={{...S.btnSm(v.activa,v.color),padding:"4px 12px"}}>{v.activa?"Activa":"Desactivar"}</button>
               </div>
               <div style={{padding:"0 1rem 0.75rem",display:"flex",flexDirection:"column",gap:"6px"}}>
                 <div style={{color:"#4b5563",fontSize:"0.75rem"}}>{v.activa?"Visible en la app":"No aparece en asignacion ni filtros"}</div>
