@@ -1504,11 +1504,6 @@ function TabImprimir({envios,setEnvios,zc,lc}){
               <button onClick={()=>{navigator.clipboard.writeText(waModal.msg).catch(()=>{});setWaCopied(true);setTimeout(()=>setWaCopied(false),2500);}} style={{flex:2,padding:"0.6rem",borderRadius:"9px",background:waCopied?"#0d1c14":"#1e2640",border:`1px solid ${waCopied?"#10b981":"#374151"}`,color:waCopied?"#10b981":"#e5e7eb",fontWeight:700,cursor:"pointer",fontSize:"0.82rem"}}>
                 {waCopied?"✓ Copiado":"📋 Copiar mensaje"}
               </button>
-              {lc[trans]?.waGroup&&(
-                <button onClick={()=>window.open(lc[trans].waGroup,"_blank")} style={{flex:1,padding:"0.6rem",borderRadius:"9px",background:"#0a1a10",border:"1px solid #128c7e",color:"#25d366",fontWeight:700,cursor:"pointer",fontSize:"0.82rem"}}>
-                  📲 Abrir grupo
-                </button>
-              )}
               <button onClick={()=>{setWaModal(null);setWaCopied(false);}} style={{padding:"0.6rem 1rem",borderRadius:"9px",background:"transparent",border:"1px solid #374151",color:"#6b7280",fontWeight:600,cursor:"pointer",fontSize:"0.82rem"}}>
                 Cerrar
               </button>
@@ -1527,11 +1522,6 @@ function TabImprimir({envios,setEnvios,zc,lc}){
               <button onClick={()=>{navigator.clipboard.writeText(cierreModal.msg).catch(()=>{});setCierreCopied(true);setTimeout(()=>setCierreCopied(false),2500);}} style={{flex:2,padding:"0.6rem",borderRadius:"9px",background:cierreCopied?"#0d1c14":"#1e2640",border:`1px solid ${cierreCopied?"#10b981":"#374151"}`,color:cierreCopied?"#10b981":"#e5e7eb",fontWeight:700,cursor:"pointer",fontSize:"0.82rem"}}>
                 {cierreCopied?"✓ Copiado":"📋 Copiar mensaje"}
               </button>
-              {lc[trans]?.waGroup&&(
-                <button onClick={()=>window.open(lc[trans].waGroup,"_blank")} style={{flex:1,padding:"0.6rem",borderRadius:"9px",background:"#0a1a10",border:"1px solid #128c7e",color:"#25d366",fontWeight:700,cursor:"pointer",fontSize:"0.82rem"}}>
-                  📲 Abrir grupo
-                </button>
-              )}
               <button onClick={()=>{setCierreModal(null);setCierreCopied(false);}} style={{padding:"0.6rem 1rem",borderRadius:"9px",background:"transparent",border:"1px solid #374151",color:"#6b7280",fontWeight:600,cursor:"pointer",fontSize:"0.82rem"}}>
                 Cerrar
               </button>
@@ -1869,10 +1859,6 @@ function TabTarifas({zc,setZc,lc,setLc}){
                     <div style={{position:"absolute",top:"2px",left:v.mostrarImporteLg?"14px":"2px",width:"14px",height:"14px",borderRadius:"50%",background:"white",transition:"left 0.2s"}}/>
                   </div>
                   <span style={{color:"#6b7280",fontSize:"0.7rem"}}>Mostrar importe a logistica</span>
-                </div>}
-                {v.activa&&<div>
-                  <div style={{fontSize:"0.62rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Grupo WhatsApp</div>
-                  <input value={v.waGroup||""} onChange={ev=>setLc(p=>({...p,[k]:{...p[k],waGroup:ev.target.value.trim()}}))} placeholder="https://chat.whatsapp.com/..." style={{...S.input,width:"100%",fontSize:"0.7rem",padding:"4px 8px"}}/>
                 </div>}
               </div>
             </div>
