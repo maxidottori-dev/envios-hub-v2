@@ -1103,11 +1103,15 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
   const resumenNoFlex=(()=>{
     if(mostrarResumenFlex)return{};
     const r={sinAsignar:0};
-    logActivas.forEach(l=>{r[l]=0;});
-    noFlexHoy.forEach(e=>{if(e.trans&&r[e.trans]!==undefined)r[e.trans]++;else if(!e.trans)r.sinAsignar++;});
+    logActivas.forEach(l=>{r[l]={};[...TURNOS,"—"].forEach(t=>{r[l][t]=0;});});
+    noFlexHoy.forEach(e=>{
+      const t=e.turno||"—";
+      if(e.trans&&r[e.trans]!==undefined)r[e.trans][t]=(r[e.trans][t]||0)+1;
+      else if(!e.trans)r.sinAsignar++;
+    });
     return r;
   })();
-  const logsConNoFlex=!mostrarResumenFlex?logActivas.filter(l=>(resumenNoFlex[l]||0)>0):[];
+  const logsConNoFlex=!mostrarResumenFlex?logActivas.filter(l=>[...TURNOS,"—"].some(t=>(resumenNoFlex[l]?.[t]||0)>0)):[];
   // Ordenar por nroOrdenTN descendente (mas nuevo arriba)
   const filtradosOrdenados=[...filtrados].sort((a,b)=>{
     const nA=parseInt(a.nroOrdenTN||a.id)||0;
@@ -1254,7 +1258,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
 
       {/* ── Panel NO FLEX hoy (derecha, cuando NO es tab FLEX) ── */}
       {!mostrarResumenFlex&&noFlexHoy.length>0&&(
-        <div style={{...S.card,padding:0,overflow:"hidden",border:"1px solid #252d40",width:"220px",flexShrink:0}}>
+        <div style={{...S.card,padding:0,overflow:"hidden",border:"1px solid #252d40",width:"260px",flexShrink:0}}>
           <div onClick={()=>setResumenOpen(p=>!p)} style={{padding:"0.4rem 0.75rem",background:"#111827",borderBottom:resumenOpen?"1px solid #252d40":"none",display:"flex",alignItems:"center",gap:"0.5rem",cursor:"pointer",userSelect:"none"}}>
             <span style={{color:"#6366f1",fontWeight:700,fontSize:"0.75rem"}}>Hoy</span>
             <span style={{background:"#1a1f2e",border:"1px solid #252d40",borderRadius:"4px",padding:"1px 6px",fontSize:"0.62rem",color:"#9ca3af"}}>{noFlexHoy.length} env</span>
@@ -1268,31 +1272,46 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                 :<table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.68rem"}}>
                   <thead>
                     <tr style={{borderBottom:"1px solid #252d40"}}>
-                      <th style={{textAlign:"left",padding:"3px 8px",color:"#4b5563",fontWeight:700,fontSize:"0.6rem",textTransform:"uppercase"}}>Logística</th>
-                      <th style={{textAlign:"center",padding:"3px 8px",color:"#6366f1",fontWeight:700,fontSize:"0.6rem",width:"40px"}}>Tot</th>
+                      <th style={{textAlign:"left",padding:"3px 8px",color:"#4b5563",fontWeight:700,fontSize:"0.6rem",textTransform:"uppercase"}}>Log.</th>
+                      {TURNOS.map(t=><th key={t} style={{textAlign:"center",padding:"3px 4px",color:"#4b5563",fontWeight:700,fontSize:"0.6rem",width:"32px"}}>{t}</th>)}
+                      <th style={{textAlign:"center",padding:"3px 4px",color:"#4b5563",fontWeight:700,fontSize:"0.6rem",width:"32px"}}>Sin</th>
+                      <th style={{textAlign:"center",padding:"3px 5px",color:"#6366f1",fontWeight:700,fontSize:"0.6rem",width:"32px"}}>Tot</th>
                     </tr>
                   </thead>
                   <tbody>
                     {logsConNoFlex.map(l=>{
                       const col=lc[l]?.color||"#6366f1";
+                      const total=[...TURNOS,"—"].reduce((s,t)=>s+(resumenNoFlex[l]?.[t]||0),0);
                       return(
                         <tr key={l} style={{borderBottom:"1px solid #0d1117"}}>
-                          <td style={{padding:"3px 8px",fontWeight:700,color:col,fontSize:"0.65rem"}}>{l}</td>
-                          <td style={{textAlign:"center",padding:"3px 8px",color:"#6366f1",fontWeight:700}}>{resumenNoFlex[l]}</td>
+                          <td style={{padding:"3px 8px",fontWeight:700,color:col,fontSize:"0.65rem",maxWidth:"70px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l}</td>
+                          {TURNOS.map(t=>{
+                            const n=resumenNoFlex[l]?.[t]||0;
+                            return<td key={t} style={{textAlign:"center",padding:"3px 4px",color:n>0?"#e5e7eb":"#1e2535",fontWeight:n>0?600:400}}>{n>0?n:"—"}</td>;
+                          })}
+                          <td style={{textAlign:"center",padding:"3px 4px",color:(resumenNoFlex[l]?.["—"]||0)>0?"#f59e0b":"#1e2535",fontWeight:600}}>{(resumenNoFlex[l]?.["—"]||0)>0?resumenNoFlex[l]["—"]:"—"}</td>
+                          <td style={{textAlign:"center",padding:"3px 5px",color:"#6366f1",fontWeight:700}}>{total}</td>
                         </tr>
                       );
                     })}
                     {resumenNoFlex.sinAsignar>0&&(
                       <tr style={{borderBottom:"1px solid #0d1117"}}>
                         <td style={{padding:"3px 8px",color:"#f59e0b",fontWeight:700,fontSize:"0.65rem"}}>Sin asignar</td>
-                        <td style={{textAlign:"center",padding:"3px 8px",color:"#f59e0b",fontWeight:700}}>{resumenNoFlex.sinAsignar}</td>
+                        {TURNOS.map(t=><td key={t} style={{textAlign:"center",padding:"3px 4px",color:"#1e2535"}}>—</td>)}
+                        <td style={{textAlign:"center",padding:"3px 4px",color:"#1e2535"}}>—</td>
+                        <td style={{textAlign:"center",padding:"3px 5px",color:"#f59e0b",fontWeight:700}}>{resumenNoFlex.sinAsignar}</td>
                       </tr>
                     )}
                   </tbody>
                   <tfoot>
                     <tr style={{borderTop:"1px solid #252d40"}}>
                       <td style={{padding:"3px 8px",color:"#4b5563",fontSize:"0.62rem",fontWeight:600}}>Total</td>
-                      <td style={{textAlign:"center",padding:"3px 8px",color:"#6366f1",fontWeight:800,fontSize:"0.72rem"}}>{noFlexHoy.length}</td>
+                      {TURNOS.map(t=>{
+                        const s=logsConNoFlex.reduce((acc,l)=>acc+(resumenNoFlex[l]?.[t]||0),0);
+                        return<td key={t} style={{textAlign:"center",padding:"3px 4px",color:s>0?"#9ca3af":"#1e2535",fontWeight:s>0?700:400,fontSize:"0.65rem"}}>{s>0?s:"—"}</td>;
+                      })}
+                      <td style={{textAlign:"center",padding:"3px 4px",color:logsConNoFlex.reduce((s,l)=>s+(resumenNoFlex[l]?.["—"]||0),0)>0?"#f59e0b":"#1e2535",fontWeight:700,fontSize:"0.65rem"}}>{(()=>{const s=logsConNoFlex.reduce((acc,l)=>acc+(resumenNoFlex[l]?.["—"]||0),0);return s>0?s:"—";})()}</td>
+                      <td style={{textAlign:"center",padding:"3px 5px",color:"#6366f1",fontWeight:800,fontSize:"0.72rem"}}>{noFlexHoy.length}</td>
                     </tr>
                   </tfoot>
                 </table>
