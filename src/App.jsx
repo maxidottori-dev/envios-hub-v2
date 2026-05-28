@@ -2018,9 +2018,8 @@ function TabInforme({envios,zc,lc}){
         const porZona={};
         envLNormal.forEach(e=>{const zi=getZonaLogistica(zc,l,e.partido);const k=zi?zi.nombre:"Sin zona";if(!porZona[k])porZona[k]={nombre:k,color:zi?.color||"#374151",envios:[]};porZona[k].envios.push(e);});
         if(envLNoAbonado.length){if(!porZona["_no_abonado"])porZona["_no_abonado"]={nombre:"No abonados / Cancelados",color:"#f87171",envios:[]};envLNoAbonado.forEach(e=>porZona["_no_abonado"].envios.push(e));}
-        const totalLNormal=envLNormal.reduce((s,e)=>s+getImp(e),0);
+        const totalL=envLNormal.reduce((s,e)=>s+getImp(e),0);
         const totalNoAbonado=envLNoAbonado.reduce((s,e)=>s+getImp(e),0);
-        const totalL=totalLNormal+totalNoAbonado; // total real = normal + no_abonado (igual que Liquidacion Log)
         return(
           <div key={l} style={{...S.card,marginBottom:"1rem",overflow:"hidden"}}>
             <div style={{padding:"0.7rem 1rem",background:"#12172a",borderBottom:"1px solid #252d40",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
@@ -2443,7 +2442,14 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false,sesion=null}){
     return()=>unsub();
   },[]);
 
-  const envRelevantes=envios.filter(e=>e.trans&&e.estado!=="cancelado");
+  // Excluir cancelados y envíos marcados como incumplidos (no_abonado / cancelado_liq)
+  // — esos no se le pagan a la logística
+  const envRelevantes=envios.filter(e=>
+    e.trans&&
+    e.estado!=="cancelado"&&
+    e.estadoLiq!=="cancelado_liq"&&
+    e.estadoLiq!=="no_abonado"
+  );
 
   const cardsPorLog=logActivas.map(l=>{
     const pend=envRelevantes.filter(e=>e.trans===l&&e.estadoPago!=="abonado");
