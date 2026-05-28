@@ -1120,64 +1120,10 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
   return(
     <div style={{width:"100%",overflow:"hidden",boxSizing:"border-box"}}>
 
-      {/* ── Panel resumen FLEX hoy (solo en tab FLEX) ── */}
-      {mostrarResumenFlex&&(
-        <div style={{...S.card,padding:0,marginBottom:"0.7rem",overflow:"hidden",border:"1px solid #1a3008"}}>
-          <div onClick={()=>setResumenOpen(p=>!p)} style={{padding:"0.5rem 1rem",background:"#0a1a04",borderBottom:resumenOpen?"1px solid #1a3008":"none",display:"flex",alignItems:"center",gap:"0.6rem",cursor:"pointer",userSelect:"none"}}>
-            <span style={{color:"#84cc16",fontWeight:700,fontSize:"0.8rem"}}>📦 FLEX hoy</span>
-            <span style={{background:"#0d1c04",border:"1px solid #1a3008",borderRadius:"5px",padding:"1px 8px",fontSize:"0.68rem",color:"#9ca3af"}}>{flexHoy.length} envíos</span>
-            <span style={{color:"#4b7a10",fontSize:"0.65rem",fontWeight:600,marginLeft:"4px"}}>{flexHoy.filter(e=>e.turno).length} con turno · {flexHoy.filter(e=>!e.turno).length} sin turno</span>
-            <span style={{marginLeft:"auto",color:"#4b7a10",fontSize:"0.72rem"}}>{resumenOpen?"▲":"▼"}</span>
-          </div>
-          {resumenOpen&&(
-            <div style={{padding:"0.5rem 0.75rem",overflowX:"auto"}}>
-              {logsConFlex.length===0
-                ?<div style={{color:"#374151",fontSize:"0.72rem",padding:"4px 0"}}>Sin envíos FLEX asignados hoy</div>
-                :<table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.75rem"}}>
-                  <thead>
-                    <tr style={{borderBottom:"1px solid #1a3008"}}>
-                      <th style={{textAlign:"left",padding:"3px 8px",color:"#4b7a10",fontWeight:700,fontSize:"0.65rem",textTransform:"uppercase"}}>Logística</th>
-                      {TURNOS.map(t=><th key={t} style={{textAlign:"center",padding:"3px 6px",color:"#4b7a10",fontWeight:700,fontSize:"0.65rem",width:"48px"}}>{t}</th>)}
-                      <th style={{textAlign:"center",padding:"3px 6px",color:"#4b7a10",fontWeight:700,fontSize:"0.65rem",width:"48px"}}>Sin turno</th>
-                      <th style={{textAlign:"center",padding:"3px 6px",color:"#84cc16",fontWeight:700,fontSize:"0.65rem",width:"48px"}}>Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {logsConFlex.map(l=>{
-                      const col=lc[l]?.color||"#6366f1";
-                      const total=[...TURNOS,"—"].reduce((s,t)=>s+(resumenFlex[l]?.[t]||0),0);
-                      return(
-                        <tr key={l} style={{borderBottom:"1px solid #0d1c04"}}>
-                          <td style={{padding:"4px 8px",fontWeight:700,color:col}}>{l}</td>
-                          {TURNOS.map(t=>{
-                            const n=resumenFlex[l]?.[t]||0;
-                            return<td key={t} style={{textAlign:"center",padding:"4px 4px",color:n>0?"#e5e7eb":"#1e2535",fontWeight:n>0?600:400}}>{n>0?n:"—"}</td>;
-                          })}
-                          <td style={{textAlign:"center",padding:"4px 4px",color:(resumenFlex[l]?.["—"]||0)>0?"#f59e0b":"#1e2535",fontWeight:600}}>{(resumenFlex[l]?.["—"]||0)>0?resumenFlex[l]["—"]:"—"}</td>
-                          <td style={{textAlign:"center",padding:"4px 6px",color:"#84cc16",fontWeight:700}}>{total}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{borderTop:"1px solid #1a3008"}}>
-                      <td style={{padding:"4px 8px",color:"#6b7280",fontSize:"0.68rem",fontWeight:600}}>Total</td>
-                      {TURNOS.map(t=>{
-                        const s=logsConFlex.reduce((acc,l)=>acc+(resumenFlex[l]?.[t]||0),0);
-                        return<td key={t} style={{textAlign:"center",padding:"4px 4px",color:s>0?"#9ca3af":"#1e2535",fontWeight:s>0?700:400,fontSize:"0.72rem"}}>{s>0?s:"—"}</td>;
-                      })}
-                      <td style={{textAlign:"center",padding:"4px 4px",color:logsConFlex.reduce((s,l)=>s+(resumenFlex[l]?.["—"]||0),0)>0?"#f59e0b":"#1e2535",fontWeight:700,fontSize:"0.72rem"}}>{(()=>{const s=logsConFlex.reduce((acc,l)=>acc+(resumenFlex[l]?.["—"]||0),0);return s>0?s:"—";})()}</td>
-                      <td style={{textAlign:"center",padding:"4px 6px",color:"#84cc16",fontWeight:800,fontSize:"0.8rem"}}>{flexHoy.length}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              }
-            </div>
-          )}
-        </div>
-      )}
+      {/* ── Filtros + Panel FLEX hoy lado a lado ── */}
+      <div style={{display:"flex",gap:"0.7rem",marginBottom:"0.7rem",alignItems:"flex-start"}}>
 
-      <div style={{...S.card,padding:"0.6rem 1rem",marginBottom:"0.7rem",display:"flex",flexDirection:"column",gap:"6px"}}>
+      <div style={{...S.card,padding:"0.6rem 1rem",flex:1,display:"flex",flexDirection:"column",gap:"6px"}}>
         {/* Fila 1: Fecha + Estado + Origen */}
         <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}}>
           <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"38px"}}>Fecha</span>
@@ -1238,6 +1184,66 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
           {modoSel&&seleccionados.size>0&&<button onClick={()=>setSeleccionados(new Set())} style={S.btnSm(false)}>Ninguno</button>}
         </div>
       </div>
+
+      {/* ── Panel FLEX hoy (derecha, mismo nivel que filtros) ── */}
+      {mostrarResumenFlex&&(
+        <div style={{...S.card,padding:0,overflow:"hidden",border:"1px solid #1a3008",width:"260px",flexShrink:0}}>
+          <div onClick={()=>setResumenOpen(p=>!p)} style={{padding:"0.4rem 0.75rem",background:"#0a1a04",borderBottom:resumenOpen?"1px solid #1a3008":"none",display:"flex",alignItems:"center",gap:"0.5rem",cursor:"pointer",userSelect:"none"}}>
+            <span style={{color:"#84cc16",fontWeight:700,fontSize:"0.75rem"}}>FLEX hoy</span>
+            <span style={{background:"#0d1c04",border:"1px solid #1a3008",borderRadius:"4px",padding:"1px 6px",fontSize:"0.62rem",color:"#9ca3af"}}>{flexHoy.length} env</span>
+            <span style={{color:"#4b7a10",fontSize:"0.6rem",fontWeight:600}}>{flexHoy.filter(e=>e.turno).length}✓ · {flexHoy.filter(e=>!e.turno).length}✗</span>
+            <span style={{marginLeft:"auto",color:"#4b7a10",fontSize:"0.65rem"}}>{resumenOpen?"▲":"▼"}</span>
+          </div>
+          {resumenOpen&&(
+            <div style={{overflowX:"auto"}}>
+              {logsConFlex.length===0
+                ?<div style={{color:"#374151",fontSize:"0.68rem",padding:"6px 10px"}}>Sin envíos FLEX asignados hoy</div>
+                :<table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.68rem"}}>
+                  <thead>
+                    <tr style={{borderBottom:"1px solid #1a3008"}}>
+                      <th style={{textAlign:"left",padding:"3px 8px",color:"#4b7a10",fontWeight:700,fontSize:"0.6rem",textTransform:"uppercase"}}>Log.</th>
+                      {TURNOS.map(t=><th key={t} style={{textAlign:"center",padding:"3px 4px",color:"#4b7a10",fontWeight:700,fontSize:"0.6rem",width:"32px"}}>{t}</th>)}
+                      <th style={{textAlign:"center",padding:"3px 4px",color:"#4b7a10",fontWeight:700,fontSize:"0.6rem",width:"32px"}}>Sin</th>
+                      <th style={{textAlign:"center",padding:"3px 5px",color:"#84cc16",fontWeight:700,fontSize:"0.6rem",width:"32px"}}>Tot</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {logsConFlex.map(l=>{
+                      const col=lc[l]?.color||"#6366f1";
+                      const total=[...TURNOS,"—"].reduce((s,t)=>s+(resumenFlex[l]?.[t]||0),0);
+                      return(
+                        <tr key={l} style={{borderBottom:"1px solid #0d1c04"}}>
+                          <td style={{padding:"3px 8px",fontWeight:700,color:col,fontSize:"0.65rem",maxWidth:"80px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l}</td>
+                          {TURNOS.map(t=>{
+                            const n=resumenFlex[l]?.[t]||0;
+                            return<td key={t} style={{textAlign:"center",padding:"3px 4px",color:n>0?"#e5e7eb":"#1e2535",fontWeight:n>0?600:400}}>{n>0?n:"—"}</td>;
+                          })}
+                          <td style={{textAlign:"center",padding:"3px 4px",color:(resumenFlex[l]?.["—"]||0)>0?"#f59e0b":"#1e2535",fontWeight:600}}>{(resumenFlex[l]?.["—"]||0)>0?resumenFlex[l]["—"]:"—"}</td>
+                          <td style={{textAlign:"center",padding:"3px 5px",color:"#84cc16",fontWeight:700}}>{total}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{borderTop:"1px solid #1a3008"}}>
+                      <td style={{padding:"3px 8px",color:"#4b5563",fontSize:"0.62rem",fontWeight:600}}>Total</td>
+                      {TURNOS.map(t=>{
+                        const s=logsConFlex.reduce((acc,l)=>acc+(resumenFlex[l]?.[t]||0),0);
+                        return<td key={t} style={{textAlign:"center",padding:"3px 4px",color:s>0?"#9ca3af":"#1e2535",fontWeight:s>0?700:400,fontSize:"0.65rem"}}>{s>0?s:"—"}</td>;
+                      })}
+                      <td style={{textAlign:"center",padding:"3px 4px",color:logsConFlex.reduce((s,l)=>s+(resumenFlex[l]?.["—"]||0),0)>0?"#f59e0b":"#1e2535",fontWeight:700,fontSize:"0.65rem"}}>{(()=>{const s=logsConFlex.reduce((acc,l)=>acc+(resumenFlex[l]?.["—"]||0),0);return s>0?s:"—";})()}</td>
+                      <td style={{textAlign:"center",padding:"3px 5px",color:"#84cc16",fontWeight:800,fontSize:"0.72rem"}}>{flexHoy.length}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              }
+            </div>
+          )}
+        </div>
+      )}
+
+      </div>{/* fin wrapper filtros+panel */}
+
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))",gap:"0.55rem",marginBottom:"0.7rem"}}>
         <div onClick={()=>{setFilTrans("TODOS");setFilEstado("TODOS");}} style={{...S.card,padding:"0.75rem 1rem",cursor:"pointer",borderLeft:(filTrans==="TODOS"&&filEstado==="TODOS")?"3px solid #6366f1":"3px solid transparent"}}><div style={{color:"#6366f1",fontWeight:800,fontSize:"1.8rem",lineHeight:1}}>{filtrados.length}</div><div style={{color:"#6b7280",fontSize:"0.62rem",marginTop:"2px"}}>Todos</div></div>
         <div style={{...S.card,padding:"0.75rem 1rem"}}><div style={{color:"#10b981",fontWeight:800,fontSize:"1.05rem"}}>{fmt(totalImp)}</div><div style={{color:"#6b7280",fontSize:"0.62rem",marginTop:"2px"}}>Total</div></div>
