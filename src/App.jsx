@@ -2018,8 +2018,9 @@ function TabInforme({envios,zc,lc}){
         const porZona={};
         envLNormal.forEach(e=>{const zi=getZonaLogistica(zc,l,e.partido);const k=zi?zi.nombre:"Sin zona";if(!porZona[k])porZona[k]={nombre:k,color:zi?.color||"#374151",envios:[]};porZona[k].envios.push(e);});
         if(envLNoAbonado.length){if(!porZona["_no_abonado"])porZona["_no_abonado"]={nombre:"No abonados / Cancelados",color:"#f87171",envios:[]};envLNoAbonado.forEach(e=>porZona["_no_abonado"].envios.push(e));}
-        const totalL=envLNormal.reduce((s,e)=>s+getImp(e),0);
+        const totalLNormal=envLNormal.reduce((s,e)=>s+getImp(e),0);
         const totalNoAbonado=envLNoAbonado.reduce((s,e)=>s+getImp(e),0);
+        const totalL=totalLNormal+totalNoAbonado; // total real = normal + no_abonado (igual que Liquidacion Log)
         return(
           <div key={l} style={{...S.card,marginBottom:"1rem",overflow:"hidden"}}>
             <div style={{padding:"0.7rem 1rem",background:"#12172a",borderBottom:"1px solid #252d40",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
