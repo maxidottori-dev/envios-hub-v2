@@ -1927,7 +1927,7 @@ function TabInforme({envios,zc,lc}){
   const toggleTipo=t=>setFilTipos(prev=>{const n=new Set(prev);n.has(t)?n.delete(t):n.add(t);return n;});
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const tmap=buildTarifaMap(zc);
-  const getImp=e=>calcImp(e,tmap,lc,zc);
+  const getImp=e=>e.importeOverride>0?e.importeOverride:calcImp(e,tmap,lc,zc);
   const getTipo=e=>e.origen==="ML"?"FLEX":e.origen==="Tienda Nube"?"TN":"Manual";
   const envSem=envios.filter(e=>{
     const ds=e.fecha||e.fechaVenta||"";
