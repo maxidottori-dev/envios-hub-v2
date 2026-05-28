@@ -1089,7 +1089,6 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
   const cancelarSel=async()=>{if(!window.confirm(`Cancelar ${seleccionados.size} envio(s)?`))return;await Promise.all([...seleccionados].map(id=>setDoc(doc(db,"envios",id),{estado:"cancelado"},{merge:true})));setEnvios(p=>p.map(e=>seleccionados.has(e.id)?{...e,estado:"cancelado"}:e));setSeleccionados(new Set());setModoSel(false);};
   // Resumen FLEX hoy (solo cuando mostrarResumenFlex=true)
   const [resumenOpen,setResumenOpen]=useState(true);
-  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const flexHoy=mostrarResumenFlex?envios.filter(e=>e.trans&&e.estado!=="cancelado"&&(e.fecha||e.fechaVenta||"")===hoy):[];
   const resumenFlex=(()=>{
     if(!mostrarResumenFlex)return{};
