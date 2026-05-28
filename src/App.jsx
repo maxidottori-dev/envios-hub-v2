@@ -2416,7 +2416,7 @@ function TabMapa({ envios, lc }) {
 // ════════════════════════════════════════════════════════════════════
 // TAB LIQUIDACION LOG — envíos confirmados y pagos a logísticas
 // ════════════════════════════════════════════════════════════════════
-function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
+function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false,sesion=null}){
   const hoy=fechaHoy();
   const [filTrans,setFilTrans]=useState("TODOS");
   const [filVista,setFilVista]=useState("pendiente");
@@ -5834,7 +5834,7 @@ export default function App(){
         {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZcPersist} lc={lc} setLc={setLcPersist}/>}
         {tab==="informe"     &&<TabInforme     envios={envios} zc={zc} lc={lc}/>}
         {tab==="liquidacion"    &&<TabLiquidacion    envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>}
-        {tab==="liquidacionlog" &&<TabLiquidacionLog envios={envios} setEnvios={setEnvios} zc={zc} lc={lc} esAdmin={esAdmin}/>}
+        {tab==="liquidacionlog" &&<TabLiquidacionLog envios={envios} setEnvios={setEnvios} zc={zc} lc={lc} esAdmin={esAdmin} sesion={sesion}/>}
         {tab==="ctasctes"       &&<TabCtasCtes       envios={envios} lc={lc}/>}
         {tab==="localidades" &&<TabLocalidades cpExtra={cpExtra} setCpExtra={setCpExtra}/>}
         {tab==="usuarios"   &&<TabUsuarios lc={lc} setLc={setLcPersist}/>}
