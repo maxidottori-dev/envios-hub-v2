@@ -1098,6 +1098,16 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
     return r;
   })();
   const logsConFlex=mostrarResumenFlex?logActivas.filter(l=>[...TURNOS,"—"].some(t=>resumenFlex[l]?.[t]>0)):[];
+  // Resumen NO FLEX hoy (solo cuando !mostrarResumenFlex)
+  const noFlexHoy=!mostrarResumenFlex?envios.filter(e=>e.origen!=="ML"&&e.estado!=="cancelado"&&(e.fecha||e.fechaVenta||"")===hoy):[];
+  const resumenNoFlex=(()=>{
+    if(mostrarResumenFlex)return{};
+    const r={sinAsignar:0};
+    logActivas.forEach(l=>{r[l]=0;});
+    noFlexHoy.forEach(e=>{if(e.trans&&r[e.trans]!==undefined)r[e.trans]++;else if(!e.trans)r.sinAsignar++;});
+    return r;
+  })();
+  const logsConNoFlex=!mostrarResumenFlex?logActivas.filter(l=>(resumenNoFlex[l]||0)>0):[];
   // Ordenar por nroOrdenTN descendente (mas nuevo arriba)
   const filtradosOrdenados=[...filtrados].sort((a,b)=>{
     const nA=parseInt(a.nroOrdenTN||a.id)||0;
@@ -1233,6 +1243,56 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                       })}
                       <td style={{textAlign:"center",padding:"3px 4px",color:logsConFlex.reduce((s,l)=>s+(resumenFlex[l]?.["—"]||0),0)>0?"#f59e0b":"#1e2535",fontWeight:700,fontSize:"0.65rem"}}>{(()=>{const s=logsConFlex.reduce((acc,l)=>acc+(resumenFlex[l]?.["—"]||0),0);return s>0?s:"—";})()}</td>
                       <td style={{textAlign:"center",padding:"3px 5px",color:"#84cc16",fontWeight:800,fontSize:"0.72rem"}}>{flexHoy.length}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              }
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Panel NO FLEX hoy (derecha, cuando NO es tab FLEX) ── */}
+      {!mostrarResumenFlex&&noFlexHoy.length>0&&(
+        <div style={{...S.card,padding:0,overflow:"hidden",border:"1px solid #252d40",width:"220px",flexShrink:0}}>
+          <div onClick={()=>setResumenOpen(p=>!p)} style={{padding:"0.4rem 0.75rem",background:"#111827",borderBottom:resumenOpen?"1px solid #252d40":"none",display:"flex",alignItems:"center",gap:"0.5rem",cursor:"pointer",userSelect:"none"}}>
+            <span style={{color:"#6366f1",fontWeight:700,fontSize:"0.75rem"}}>Hoy</span>
+            <span style={{background:"#1a1f2e",border:"1px solid #252d40",borderRadius:"4px",padding:"1px 6px",fontSize:"0.62rem",color:"#9ca3af"}}>{noFlexHoy.length} env</span>
+            {resumenNoFlex.sinAsignar>0&&<span style={{color:"#f59e0b",fontSize:"0.6rem",fontWeight:600}}>{resumenNoFlex.sinAsignar} sin asig.</span>}
+            <span style={{marginLeft:"auto",color:"#4b5563",fontSize:"0.65rem"}}>{resumenOpen?"▲":"▼"}</span>
+          </div>
+          {resumenOpen&&(
+            <div>
+              {logsConNoFlex.length===0&&resumenNoFlex.sinAsignar===0
+                ?<div style={{color:"#374151",fontSize:"0.68rem",padding:"6px 10px"}}>Sin envíos hoy</div>
+                :<table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.68rem"}}>
+                  <thead>
+                    <tr style={{borderBottom:"1px solid #252d40"}}>
+                      <th style={{textAlign:"left",padding:"3px 8px",color:"#4b5563",fontWeight:700,fontSize:"0.6rem",textTransform:"uppercase"}}>Logística</th>
+                      <th style={{textAlign:"center",padding:"3px 8px",color:"#6366f1",fontWeight:700,fontSize:"0.6rem",width:"40px"}}>Tot</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {logsConNoFlex.map(l=>{
+                      const col=lc[l]?.color||"#6366f1";
+                      return(
+                        <tr key={l} style={{borderBottom:"1px solid #0d1117"}}>
+                          <td style={{padding:"3px 8px",fontWeight:700,color:col,fontSize:"0.65rem"}}>{l}</td>
+                          <td style={{textAlign:"center",padding:"3px 8px",color:"#6366f1",fontWeight:700}}>{resumenNoFlex[l]}</td>
+                        </tr>
+                      );
+                    })}
+                    {resumenNoFlex.sinAsignar>0&&(
+                      <tr style={{borderBottom:"1px solid #0d1117"}}>
+                        <td style={{padding:"3px 8px",color:"#f59e0b",fontWeight:700,fontSize:"0.65rem"}}>Sin asignar</td>
+                        <td style={{textAlign:"center",padding:"3px 8px",color:"#f59e0b",fontWeight:700}}>{resumenNoFlex.sinAsignar}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{borderTop:"1px solid #252d40"}}>
+                      <td style={{padding:"3px 8px",color:"#4b5563",fontSize:"0.62rem",fontWeight:600}}>Total</td>
+                      <td style={{textAlign:"center",padding:"3px 8px",color:"#6366f1",fontWeight:800,fontSize:"0.72rem"}}>{noFlexHoy.length}</td>
                     </tr>
                   </tfoot>
                 </table>
