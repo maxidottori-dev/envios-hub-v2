@@ -1024,7 +1024,7 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
   );
 }
 
-function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null}){
+function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null,mostrarResumenFlex=false}){
   const hoy=fechaHoy();
   const [modFecha,setModFecha]=useState("hoy");
   const [rangoD,setRangoD]=useState(hoy);
@@ -1087,6 +1087,18 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
   const eliminarSel=async()=>{if(!window.confirm(`Eliminar ${seleccionados.size} envio(s)?`))return;await Promise.all([...seleccionados].map(id=>deleteDoc(doc(db,"envios",id))));setEnvios(p=>p.filter(e=>!seleccionados.has(e.id)));setSeleccionados(new Set());setModoSel(false);};
   const reasignarSel=()=>{const items=envios.filter(e=>seleccionados.has(e.id));onReasignar(items);setSeleccionados(new Set());setModoSel(false);};
   const cancelarSel=async()=>{if(!window.confirm(`Cancelar ${seleccionados.size} envio(s)?`))return;await Promise.all([...seleccionados].map(id=>setDoc(doc(db,"envios",id),{estado:"cancelado"},{merge:true})));setEnvios(p=>p.map(e=>seleccionados.has(e.id)?{...e,estado:"cancelado"}:e));setSeleccionados(new Set());setModoSel(false);};
+  // Resumen FLEX hoy (solo cuando mostrarResumenFlex=true)
+  const [resumenOpen,setResumenOpen]=useState(true);
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
+  const flexHoy=mostrarResumenFlex?envios.filter(e=>e.trans&&e.estado!=="cancelado"&&(e.fecha||e.fechaVenta||"")===hoy):[];
+  const resumenFlex=(()=>{
+    if(!mostrarResumenFlex)return{};
+    const r={};
+    logActivas.forEach(l=>{r[l]={};[...TURNOS,"—"].forEach(t=>{r[l][t]=0;});});
+    flexHoy.forEach(e=>{const t=e.turno||"—";if(r[e.trans]&&r[e.trans][t]!==undefined)r[e.trans][t]++;});
+    return r;
+  })();
+  const logsConFlex=mostrarResumenFlex?logActivas.filter(l=>[...TURNOS,"—"].some(t=>resumenFlex[l]?.[t]>0)):[];
   // Ordenar por nroOrdenTN descendente (mas nuevo arriba)
   const filtradosOrdenados=[...filtrados].sort((a,b)=>{
     const nA=parseInt(a.nroOrdenTN||a.id)||0;
@@ -1108,6 +1120,64 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
 
   return(
     <div style={{width:"100%",overflow:"hidden",boxSizing:"border-box"}}>
+
+      {/* ── Panel resumen FLEX hoy (solo en tab FLEX) ── */}
+      {mostrarResumenFlex&&(
+        <div style={{...S.card,padding:0,marginBottom:"0.7rem",overflow:"hidden",border:"1px solid #1a3008"}}>
+          <div onClick={()=>setResumenOpen(p=>!p)} style={{padding:"0.5rem 1rem",background:"#0a1a04",borderBottom:resumenOpen?"1px solid #1a3008":"none",display:"flex",alignItems:"center",gap:"0.6rem",cursor:"pointer",userSelect:"none"}}>
+            <span style={{color:"#84cc16",fontWeight:700,fontSize:"0.8rem"}}>📦 FLEX hoy</span>
+            <span style={{background:"#0d1c04",border:"1px solid #1a3008",borderRadius:"5px",padding:"1px 8px",fontSize:"0.68rem",color:"#9ca3af"}}>{flexHoy.length} envíos</span>
+            <span style={{color:"#4b7a10",fontSize:"0.65rem",fontWeight:600,marginLeft:"4px"}}>{flexHoy.filter(e=>e.turno).length} con turno · {flexHoy.filter(e=>!e.turno).length} sin turno</span>
+            <span style={{marginLeft:"auto",color:"#4b7a10",fontSize:"0.72rem"}}>{resumenOpen?"▲":"▼"}</span>
+          </div>
+          {resumenOpen&&(
+            <div style={{padding:"0.5rem 0.75rem",overflowX:"auto"}}>
+              {logsConFlex.length===0
+                ?<div style={{color:"#374151",fontSize:"0.72rem",padding:"4px 0"}}>Sin envíos FLEX asignados hoy</div>
+                :<table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.75rem"}}>
+                  <thead>
+                    <tr style={{borderBottom:"1px solid #1a3008"}}>
+                      <th style={{textAlign:"left",padding:"3px 8px",color:"#4b7a10",fontWeight:700,fontSize:"0.65rem",textTransform:"uppercase"}}>Logística</th>
+                      {TURNOS.map(t=><th key={t} style={{textAlign:"center",padding:"3px 6px",color:"#4b7a10",fontWeight:700,fontSize:"0.65rem",width:"48px"}}>{t}</th>)}
+                      <th style={{textAlign:"center",padding:"3px 6px",color:"#4b7a10",fontWeight:700,fontSize:"0.65rem",width:"48px"}}>Sin turno</th>
+                      <th style={{textAlign:"center",padding:"3px 6px",color:"#84cc16",fontWeight:700,fontSize:"0.65rem",width:"48px"}}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {logsConFlex.map(l=>{
+                      const col=lc[l]?.color||"#6366f1";
+                      const total=[...TURNOS,"—"].reduce((s,t)=>s+(resumenFlex[l]?.[t]||0),0);
+                      return(
+                        <tr key={l} style={{borderBottom:"1px solid #0d1c04"}}>
+                          <td style={{padding:"4px 8px",fontWeight:700,color:col}}>{l}</td>
+                          {TURNOS.map(t=>{
+                            const n=resumenFlex[l]?.[t]||0;
+                            return<td key={t} style={{textAlign:"center",padding:"4px 4px",color:n>0?"#e5e7eb":"#1e2535",fontWeight:n>0?600:400}}>{n>0?n:"—"}</td>;
+                          })}
+                          <td style={{textAlign:"center",padding:"4px 4px",color:(resumenFlex[l]?.["—"]||0)>0?"#f59e0b":"#1e2535",fontWeight:600}}>{(resumenFlex[l]?.["—"]||0)>0?resumenFlex[l]["—"]:"—"}</td>
+                          <td style={{textAlign:"center",padding:"4px 6px",color:"#84cc16",fontWeight:700}}>{total}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{borderTop:"1px solid #1a3008"}}>
+                      <td style={{padding:"4px 8px",color:"#6b7280",fontSize:"0.68rem",fontWeight:600}}>Total</td>
+                      {TURNOS.map(t=>{
+                        const s=logsConFlex.reduce((acc,l)=>acc+(resumenFlex[l]?.[t]||0),0);
+                        return<td key={t} style={{textAlign:"center",padding:"4px 4px",color:s>0?"#9ca3af":"#1e2535",fontWeight:s>0?700:400,fontSize:"0.72rem"}}>{s>0?s:"—"}</td>;
+                      })}
+                      <td style={{textAlign:"center",padding:"4px 4px",color:logsConFlex.reduce((s,l)=>s+(resumenFlex[l]?.["—"]||0),0)>0?"#f59e0b":"#1e2535",fontWeight:700,fontSize:"0.72rem"}}>{(()=>{const s=logsConFlex.reduce((acc,l)=>acc+(resumenFlex[l]?.["—"]||0),0);return s>0?s:"—";})()}</td>
+                      <td style={{textAlign:"center",padding:"4px 6px",color:"#84cc16",fontWeight:800,fontSize:"0.8rem"}}>{flexHoy.length}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              }
+            </div>
+          )}
+        </div>
+      )}
+
       <div style={{...S.card,padding:"0.6rem 1rem",marginBottom:"0.7rem",display:"flex",flexDirection:"column",gap:"6px"}}>
         {/* Fila 1: Fecha + Estado + Origen */}
         <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}}>
@@ -5835,7 +5905,7 @@ export default function App(){
         {error&&<div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.8rem",background:"#1c0a0a",border:"1px solid #7f1d1d",color:"#fca5a5",fontSize:"0.8rem"}}>{error}</div>}
         {tab==="tablero" &&<TabTablero envios={envios} lc={lc} zc={zc}/>}
         {tab==="envios"  &&<TabEnvios   envios={envios.filter(e=>e.origen!=="ML")} setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin} sesion={sesion}/>}
-        {tab==="flex"    &&<TabEnvios   envios={envios.filter(e=>e.origen==="ML")}  setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin} sesion={sesion}/>}
+        {tab==="flex"    &&<TabEnvios   envios={envios.filter(e=>e.origen==="ML")}  setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin} sesion={sesion} mostrarResumenFlex={true}/>}
         {tab==="imprimir"&&<TabImprimir envios={envios} setEnvios={setEnvios} zc={zc} lc={lc}/>}
         {tab==="manual"  &&<TabManual   setEnvios={setEnvios} onSuccess={()=>{mostrarToast("Envio agregado");}} lc={lc} enviosExistentes={envios}/>}
         {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZcPersist} lc={lc} setLc={setLcPersist}/>}
