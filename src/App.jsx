@@ -38,6 +38,46 @@ async function loginUsuario(usuario, password) {
 
 
 // ════════════════════════════════════════════════════════════════════
+// SISTEMA DE PERMISOS — features por usuario
+// ════════════════════════════════════════════════════════════════════
+const FEATURES=[
+  // ── Tabs ─────────────────────────────────────────────────────────
+  {key:"tab_tablero",     grupo:"tabs",    label:"Tablero",           desc:"Dashboard principal: métricas, resumen de envíos del día y estadísticas rápidas"},
+  {key:"tab_noflex",      grupo:"tabs",    label:"NO FLEX",           desc:"Lista de envíos NO FLEX: Tienda Nube y manuales. Permite editar, filtrar y exportar"},
+  {key:"tab_flex",        grupo:"tabs",    label:"FLEX",              desc:"Lista de envíos FLEX (Mercado Libre). Permite editar, filtrar y exportar"},
+  {key:"tab_despacho",    grupo:"tabs",    label:"Despacho",          desc:"Preparar despachos del día: confirmar envíos, generar hojas de ruta y notificar por WhatsApp"},
+  {key:"tab_manual",      grupo:"tabs",    label:"+ Manual",          desc:"Formulario para agregar envíos manualmente al sistema"},
+  {key:"tab_tarifas",     grupo:"tabs",    label:"Tarifas / Log.",    desc:"Configurar logísticas activas, zonas de reparto y tarifas por zona y bultos"},
+  {key:"tab_informe",     grupo:"tabs",    label:"Informe",           desc:"Informes y estadísticas de envíos por período, logística y zona"},
+  {key:"tab_cobranzaslog",grupo:"tabs",    label:"Cobranzas Log.",    desc:"Gestionar cobranzas de envíos y ver pagos de logísticas a clientes"},
+  {key:"tab_liquidacionlog",grupo:"tabs",  label:"Liquidación Log.",  desc:"Registrar y controlar los pagos que se le realizan a cada logística"},
+  {key:"tab_ctasctes",    grupo:"tabs",    label:"Ctas. Ctes.",       desc:"Estado de cuenta corriente por cliente: saldo pendiente, deuda y pagos"},
+  {key:"tab_localidades", grupo:"tabs",    label:"Localidades",       desc:"Administrar localidades y partidos: agregar CPs y reglas de mapeo"},
+  {key:"tab_expedicion",  grupo:"tabs",    label:"Expedición",        desc:"Vista de expedición para preparar bultos y controlar salidas"},
+  {key:"tab_usuarios",    grupo:"tabs",    label:"Usuarios",          desc:"Administrar usuarios del sistema, sus roles, contraseñas y permisos"},
+  // ── Acciones ─────────────────────────────────────────────────────
+  {key:"accion_cargaexcel",   grupo:"acciones", label:"Cargar Excel",       desc:"Importar envíos desde un archivo Excel con fecha de entrega seleccionable"},
+  {key:"accion_asignartN",    grupo:"acciones", label:"Asignar TN",         desc:"Asignar logística a pedidos de Tienda Nube que aún no tienen transportista"},
+  {key:"accion_editarenvio",  grupo:"acciones", label:"Editar envío",       desc:"Abrir el panel de edición de un envío: cambiar logística, turno, zona, cobranza, etc."},
+  {key:"accion_cancelarenvio",grupo:"acciones", label:"Cancelar envíos",    desc:"Cancelar envíos seleccionados en modo selección múltiple"},
+  {key:"accion_verimportes",  grupo:"acciones", label:"Ver importes",       desc:"Ver el importe calculado de cada envío en la lista"},
+  {key:"accion_exportar",     grupo:"acciones", label:"Exportar Excel",     desc:"Exportar la lista filtrada de envíos o informes a un archivo Excel descargable"},
+  {key:"accion_imprimir",     grupo:"acciones", label:"Imprimir etiquetas", desc:"Imprimir etiquetas de envíos individuales con código QR y datos de entrega"},
+  {key:"accion_abonar",       grupo:"acciones", label:"Abonar logística",   desc:"Registrar el pago de una liquidación completa o parcial a la logística"},
+];
+
+// Devuelve true si la sesión puede usar esa feature
+// Admin: siempre true. Colaborador: true por defecto, salvo que permisos[key]===false.
+function puedeVer(sesion,feature){
+  if(!sesion)return false;
+  if(sesion.rol==="admin")return true;
+  if(sesion.rol!=="colaborador")return false;
+  const p=sesion.permisos||{};
+  return p[feature]!==false;
+}
+
+
+// ════════════════════════════════════════════════════════════════════
 // IMPORTAR ETIQUETAS FLEX (PDF)
 // ════════════════════════════════════════════════════════════════════
 const cargarPDFLib=()=>new Promise(resolve=>{
@@ -752,7 +792,7 @@ function ModalOpcionesPDF({onConfirm, onCancel}){
   );
 }
 
-function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAdmin=false}){
+function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAdmin=false,sesion=null}){
   const [e,setE]=useState({...envio});
   const set=(k,v)=>setE(p=>({...p,[k]:v}));
   const [costoOverride,setCostoOverride]=useState(envio.importeOverride>0?envio.importeOverride:null);
@@ -960,7 +1000,7 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
       {/* Etiquetas por bulto */}
       {e.bultos>0&&e.trans&&<div style={{marginBottom:"0.65rem",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div style={{color:"#6b7280",fontSize:"0.72rem"}}>{e.bultos} bulto{e.bultos>1?"s":""} — {e.trans}</div>
-        <button onClick={()=>imprimirEtiquetas(e,lc)} style={{...S.btnSm(false),color:"#6366f1",border:"1px solid #6366f1",padding:"3px 12px",fontSize:"0.72rem"}}>🖨 Imprimir etiquetas</button>
+        {puedeVer(sesion,"accion_imprimir")&&<button onClick={()=>imprimirEtiquetas(e,lc)} style={{...S.btnSm(false),color:"#6366f1",border:"1px solid #6366f1",padding:"3px 12px",fontSize:"0.72rem"}}>🖨 Imprimir etiquetas</button>}
       </div>}
       {/* Nota del envio */}
       <div style={{marginBottom:"0.65rem"}}>
@@ -984,7 +1024,7 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
   );
 }
 
-function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
+function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null}){
   const hoy=fechaHoy();
   const [modFecha,setModFecha]=useState("hoy");
   const [rangoD,setRangoD]=useState(hoy);
@@ -1119,7 +1159,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
               EstadoLiq:e.estadoLiq||"normal",NotaLiq:e.notaLiq||"",
             }));
             exportarXLSX(filas,"envios_"+fechaHoy());
-          }} style={{...S.btnSm(false),color:"#10b981",border:"1px solid #10b981",padding:"4px 10px",fontSize:"0.72rem"}}>⬇ Excel</button>
+          }} style={{...S.btnSm(false),color:"#10b981",border:"1px solid #10b981",padding:"4px 10px",fontSize:"0.72rem",display:puedeVer(sesion,"accion_exportar")?"":"none"}}>⬇ Excel</button>
         </div>
         {/* Fila 4: Acciones */}
         <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap",borderTop:"1px solid #252d40",paddingTop:"5px"}}>
@@ -1151,7 +1191,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
             <div key={e.id} style={{width:"100%",minWidth:0,overflow:"hidden"}}>
               <div style={{...S.card,padding:"0.55rem 0.75rem",display:"flex",alignItems:"flex-start",gap:"0.5rem",opacity:getEstado(e)==="cancelado"?0.45:1,borderColor:isEdit||isSel?"#6366f1":e.alertaDireccion||!e.partido?"#f59e0b":"#252d40",background:isSel?"#12172a":"#1a1f2e",minWidth:0,overflow:"hidden"}}>
                 {modoSel?<div style={{paddingTop:"2px"}}><Chk checked={isSel} onChange={()=>toggleSel(e.id)}/></div>:<span style={{color:"#374151",fontSize:"0.65rem",minWidth:"20px",textAlign:"right",paddingTop:"3px"}}>{i+1}</span>}
-                <div style={{flex:1,cursor:"pointer",minWidth:0}} onClick={()=>{if(modoSel)toggleSel(e.id);else setEditId(isEdit?null:e.id);}}>
+                <div style={{flex:1,cursor:puedeVer(sesion,"accion_editarenvio")?"pointer":"default",minWidth:0}} onClick={()=>{if(modoSel)toggleSel(e.id);else if(puedeVer(sesion,"accion_editarenvio"))setEditId(isEdit?null:e.id);}}>
                   <div style={{display:"flex",gap:"3px",flexWrap:"wrap",alignItems:"center",marginBottom:"3px"}}>
                     {origenBadge(e)}
                     <Bdg label={estC.label} bg={estC.bg} t={estC.t}/>
@@ -1194,12 +1234,12 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
                     {e.linkML&&<a href={e.linkML} target="_blank" rel="noreferrer" onClick={ev=>ev.stopPropagation()} title="Ver en ML" style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:"26px",height:"26px",borderRadius:"6px",background:"#0f1420",border:"1px solid #252d40",textDecoration:"none",flexShrink:0}}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>}
                     {!modoSel&&esAdmin&&<button onClick={ev=>{ev.stopPropagation();eliminar(e.id);}} style={{...S.btnSm(false),padding:"1px 6px",fontSize:"0.68rem",color:"#f87171"}}>x</button>}
                   </div>
-                  {imp>0&&<span style={{color:e.importeOverride>0?"#fbbf24":"#10b981",fontWeight:700,fontSize:"0.82rem"}}>{fmt(imp)}{e.importeOverride>0&&<span style={{fontSize:"0.62rem",opacity:.65,marginLeft:"2px"}}>*</span>}</span>}
-                  {esTN&&e.importeOrden>0&&<span style={{color:"#6b7280",fontSize:"0.7rem"}}>{fmt(e.importeOrden)}</span>}
+                  {imp>0&&puedeVer(sesion,"accion_verimportes")&&<span style={{color:e.importeOverride>0?"#fbbf24":"#10b981",fontWeight:700,fontSize:"0.82rem"}}>{fmt(imp)}{e.importeOverride>0&&<span style={{fontSize:"0.62rem",opacity:.65,marginLeft:"2px"}}>*</span>}</span>}
+                  {esTN&&e.importeOrden>0&&puedeVer(sesion,"accion_verimportes")&&<span style={{color:"#6b7280",fontSize:"0.7rem"}}>{fmt(e.importeOrden)}</span>}
                   {e.origen==="ML"&&ML_FINAL[e.partido]&&<span style={{color:"#64748b",fontSize:"0.68rem",marginTop:"1px"}}>ML {fmt(ML_FINAL[e.partido])}</span>}
                 </div>
               </div>
-              {isEdit&&!modoSel&&<PanelEdit envio={e} onSave={saveEnvio} onSaveMultiple={saveMultipleEnvios} onClose={()=>setEditId(null)} lc={lc} envios={envios} getImp={getImp} esAdmin={esAdmin}/>}
+              {isEdit&&!modoSel&&puedeVer(sesion,"accion_editarenvio")&&<PanelEdit envio={e} onSave={saveEnvio} onSaveMultiple={saveMultipleEnvios} onClose={()=>setEditId(null)} lc={lc} envios={envios} getImp={getImp} esAdmin={esAdmin} sesion={sesion}/>}
             </div>
           );
         })}
@@ -1215,7 +1255,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false}){
           {accionMasiva?.tipo==="turno"
             ?<><div style={{display:"flex",gap:"3px"}}>{TURNOS.map(t=><button key={t} onClick={()=>setAccionMasiva(p=>({...p,valor:t}))} style={{...S.btnSm(accionMasiva.valor===t,"#a78bfa"),fontSize:"0.72rem"}}>{t}</button>)}</div><button onClick={aplicarAccionMasiva} disabled={!accionMasiva.valor} style={{...S.btn(true),padding:"0.3rem 0.7rem",fontSize:"0.75rem",opacity:accionMasiva.valor?1:0.5}}>OK</button><button onClick={()=>setAccionMasiva(null)} style={{...S.btn(false),padding:"0.3rem 0.7rem",fontSize:"0.75rem"}}>✕</button></>
             :<button onClick={()=>setAccionMasiva({tipo:"turno",valor:""})} style={{...S.btn(false),padding:"0.4rem 0.9rem",fontSize:"0.75rem"}}>Cambiar turno</button>}
-          <button onClick={cancelarSel} style={{...S.btn(true),background:"#7f1d1d",padding:"0.4rem 0.9rem",fontSize:"0.75rem"}}>Cancelar</button>
+          {puedeVer(sesion,"accion_cancelarenvio")&&<button onClick={cancelarSel} style={{...S.btn(true),background:"#7f1d1d",padding:"0.4rem 0.9rem",fontSize:"0.75rem"}}>Cancelar</button>}
           {esAdmin&&<button onClick={eliminarSel} style={{...S.btn(true),background:"#450a0a",padding:"0.4rem 0.9rem",fontSize:"0.75rem",color:"#fca5a5"}}>Eliminar</button>}
           <button onClick={()=>{setModoSel(false);setSeleccionados(new Set());}} style={{...S.btn(false),padding:"0.4rem 0.9rem",fontSize:"0.75rem"}}>Salir</button>
         </div>
@@ -2576,7 +2616,7 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
                     <div style={{flex:1}}/>
                     {pendLog.length>0&&<span style={{color:"#f59e0b",fontWeight:700}}>{fmt(totalPend)} pendiente</span>}
                     <span style={{color:"#10b981",fontWeight:700,fontSize:"0.95rem"}}>{fmt(totalLog)}</span>
-                    {pendLog.length>0&&(
+                    {pendLog.length>0&&puedeVer(sesion,"accion_abonar")&&(
                       <button onClick={()=>abrirModalPago(log,pendLog)} style={{...S.btn(false,"#10b981"),padding:"0.3rem 0.8rem",fontSize:"0.75rem"}}>💳 Pagar {pendLog.length===envLog.length?"todos":pendLog.length}</button>
                     )}
                   </div>
@@ -2593,7 +2633,7 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
                           {e.origen==="ML"&&<span style={{color:"#84cc16",fontSize:"0.65rem",flexShrink:0,padding:"1px 5px",border:"1px solid #84cc16",borderRadius:"3px"}}>FLEX</span>}
                           {e.importeOverride&&<span style={{color:"#fbbf24",fontSize:"0.68rem",flexShrink:0}}>*</span>}
                           <span style={{color:abonado?"#4b5563":"#10b981",fontWeight:600,fontSize:"0.82rem",flexShrink:0,textDecoration:abonado?"line-through":"none"}}>{fmt(imp)}</span>
-                          {!abonado&&<button onClick={()=>abrirModalPago(log,[e])} style={{...S.btnSm(false),padding:"1px 7px",fontSize:"0.68rem",color:"#10b981",borderColor:"#065f46",flexShrink:0}}>Pagar</button>}
+                          {!abonado&&puedeVer(sesion,"accion_abonar")&&<button onClick={()=>abrirModalPago(log,[e])} style={{...S.btnSm(false),padding:"1px 7px",fontSize:"0.68rem",color:"#10b981",borderColor:"#065f46",flexShrink:0}}>Pagar</button>}
                         </div>
                       );
                     })}
@@ -2645,7 +2685,7 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false}){
 // ════════════════════════════════════════════════════════════════════
 // TAB LIQUIDACION — cobranzas y cambios/retiros pendientes
 // ════════════════════════════════════════════════════════════════════
-function TabLiquidacion({ envios, setEnvios, lc }) {
+function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
   const hoy=fechaHoy();
   const [seccion, setSeccion] = useState("cobranzas"); // cobranzas | retiros
   const [filTrans, setFilTrans] = useState("TODOS");
@@ -3845,7 +3885,9 @@ function TabUsuarios({lc}){
   const [form,setForm]=useState({usuario:"",password:"",rol:"colaborador",logistica:"",esChofer:false,activo:true});
   const [editId,setEditId]=useState(null);
   const [toast,setToast]=useState("");
-  const logActivas=Object.keys(lc).filter(k =>lc[k].activa);
+  const [permsOpenId,setPermsOpenId]=useState(null); // qué usuario tiene el panel de permisos abierto
+  const [tooltipKey,setTooltipKey]=useState(null);   // feature key con tooltip visible
+  const logActivas=Object.keys(lc).filter(k=>lc[k].activa);
 
   const mostrarToast=msg=>{setToast(msg);setTimeout(()=>setToast(""),2500);};
 
@@ -3873,7 +3915,80 @@ function TabUsuarios({lc}){
 
   const editar=u=>{setForm({usuario:u.usuario,password:u.password,rol:u.rol,logistica:u.logistica||"",activo:u.activo});setEditId(u.id);};
 
+  const togglePerm=async(u,featureKey)=>{
+    const actual=(u.permisos||{})[featureKey];
+    const nuevoVal=actual===false?true:false; // si era false → true; si era undefined/true → false
+    const nuevosPermisos={...(u.permisos||{}),[featureKey]:nuevoVal};
+    setUsuarios(prev=>prev.map(x=>x.id===u.id?{...x,permisos:nuevosPermisos}:x));
+    await setDoc(doc(db,"usuarios",u.id),{permisos:nuevosPermisos},{merge:true});
+  };
+
   const ROL_C={admin:{label:"Admin",color:"#6366f1"},colaborador:{label:"Colaborador",color:"#10b981"},logistica:{label:"Logistica",color:"#8b5cf6"},expedicion:{label:"Expedicion",color:"#f59e0b"}};
+
+  // Componente inline para el panel de permisos de un colaborador
+  const PanelPermisos=({u})=>{
+    const perms=u.permisos||{};
+    const grupos=[
+      {id:"tabs",   label:"Vistas (Tabs)",  color:"#6366f1"},
+      {id:"acciones",label:"Acciones",       color:"#10b981"},
+    ];
+    return(
+      <div style={{background:"#0d1221",borderTop:"1px solid #252d40",padding:"1rem"}}>
+        <div style={{fontSize:"0.72rem",fontWeight:700,color:"#9ca3af",marginBottom:"0.75rem",textTransform:"uppercase",letterSpacing:"0.06em"}}>
+          Permisos de <span style={{color:"#e5e7eb"}}>{u.usuario}</span>
+          <span style={{color:"#4b5563",fontWeight:400,marginLeft:"8px"}}>— por defecto todos habilitados; desactivá los que no apliquen</span>
+        </div>
+        {grupos.map(g=>{
+          const feats=FEATURES.filter(f=>f.grupo===g.id);
+          return(
+            <div key={g.id} style={{marginBottom:"0.85rem"}}>
+              <div style={{color:g.color,fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:"6px",paddingBottom:"4px",borderBottom:"1px solid #1a1f2e"}}>{g.label}</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:"4px"}}>
+                {feats.map(f=>{
+                  const habilitado=perms[f.key]!==false;
+                  const ttId=u.id+"_"+f.key;
+                  return(
+                    <div key={f.key} style={{display:"flex",alignItems:"center",gap:"8px",padding:"5px 8px",borderRadius:"6px",background:habilitado?"#0f1a10":"#1c0a0a",border:"1px solid "+(habilitado?"#1a3a1a":"#3a1a1a"),cursor:"pointer",userSelect:"none"}}
+                      onClick={()=>togglePerm(u,f.key)}>
+                      {/* Toggle visual */}
+                      <div style={{width:"32px",height:"18px",borderRadius:"9px",background:habilitado?"#10b981":"#374151",position:"relative",flexShrink:0,transition:"background 0.2s"}}>
+                        <div style={{position:"absolute",top:"2px",left:habilitado?"14px":"2px",width:"14px",height:"14px",borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+                      </div>
+                      <span style={{color:habilitado?"#d1fae5":"#6b7280",fontSize:"0.78rem",fontWeight:habilitado?600:400,flex:1}}>{f.label}</span>
+                      {/* Tooltip button */}
+                      <div style={{position:"relative",flexShrink:0}}
+                        onMouseEnter={e=>{e.stopPropagation();setTooltipKey(ttId);}}
+                        onMouseLeave={()=>setTooltipKey(null)}
+                        onClick={e=>e.stopPropagation()}>
+                        <span style={{color:"#4b5563",fontSize:"0.72rem",cursor:"default",padding:"0 3px"}}>ℹ</span>
+                        {tooltipKey===ttId&&(
+                          <div style={{position:"absolute",bottom:"calc(100% + 6px)",right:0,background:"#1a1f2e",border:"1px solid #374151",borderRadius:"8px",padding:"7px 10px",width:"230px",fontSize:"0.72rem",color:"#d1d5db",lineHeight:1.4,zIndex:200,pointerEvents:"none",boxShadow:"0 4px 16px rgba(0,0,0,0.6)"}}>
+                            {f.desc}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+        <div style={{display:"flex",gap:"8px",marginTop:"4px"}}>
+          <button onClick={async()=>{
+            const todo={};FEATURES.forEach(f=>{todo[f.key]=true;});
+            setUsuarios(prev=>prev.map(x=>x.id===u.id?{...x,permisos:todo}:x));
+            await setDoc(doc(db,"usuarios",u.id),{permisos:todo},{merge:true});
+          }} style={{...S.btnSm(false),color:"#10b981",borderColor:"#065f46",fontSize:"0.7rem"}}>Habilitar todo</button>
+          <button onClick={async()=>{
+            const nada={};FEATURES.forEach(f=>{nada[f.key]=false;});
+            setUsuarios(prev=>prev.map(x=>x.id===u.id?{...x,permisos:nada}:x));
+            await setDoc(doc(db,"usuarios",u.id),{permisos:nada},{merge:true});
+          }} style={{...S.btnSm(false),color:"#f87171",borderColor:"#7f1d1d",fontSize:"0.7rem"}}>Deshabilitar todo</button>
+        </div>
+      </div>
+    );
+  };
 
   if(loading)return<div style={{textAlign:"center",padding:"2rem",color:"#4b5563"}}>Cargando...</div>;
 
@@ -3899,7 +4014,7 @@ function TabUsuarios({lc}){
               <option value="admin">Administrador</option>
               <option value="colaborador">Colaborador</option>
               <option value="logistica">Logistica</option>
-                  <option value="expedicion">Expedicion</option>
+              <option value="expedicion">Expedicion</option>
             </select>
           </div>
           {form.rol==="logistica"&&<div>
@@ -3910,7 +4025,7 @@ function TabUsuarios({lc}){
             <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Logistica asignada</div>
             <select value={form.logistica} onChange={e=>setForm(p=>({...p,logistica:e.target.value}))} style={{...S.input,width:"100%"}}>
               <option value="">Elegir...</option>
-              {logActivas.map(l =><option key={l} value={l}>{l}</option>)}
+              {logActivas.map(l=><option key={l} value={l}>{l}</option>)}
             </select>
           </div>}
         </div>
@@ -3926,21 +4041,35 @@ function TabUsuarios({lc}){
         {usuarios.length===0&&<div style={{padding:"2rem",textAlign:"center",color:"#4b5563"}}>No hay usuarios creados</div>}
         {usuarios.map(u=>{
           const rc=ROL_C[u.rol]||ROL_C.colaborador;
+          const permsOpen=permsOpenId===u.id;
           return(
-            <div key={u.id} style={{padding:"0.75rem 1rem",borderBottom:"1px solid #1a1f2e",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap",opacity:u.activo?1:0.5}}>
-              <div style={{flex:1,minWidth:"120px"}}>
-                <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
-                  <span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.88rem"}}>{u.usuario}</span>
-                  <span style={{padding:"1px 8px",background:rc.color+"22",color:rc.color,borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>{rc.label}</span>
-                  {u.rol==="logistica"&&u.logistica&&<span style={{padding:"1px 8px",background:lc[u.logistica]?.bg||"#1a1f2e",color:lc[u.logistica]?.color||"#6b7280",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>{u.logistica}</span>}
-                  {u.esChofer&&<span style={{padding:"1px 8px",background:"#1c1500",color:"#f59e0b",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>🛵 Chofer</span>}
-                  {!u.activo&&<span style={{padding:"1px 8px",background:"#1c0a0a",color:"#f87171",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>Inactivo</span>}
+            <div key={u.id} style={{borderBottom:"1px solid #1a1f2e",opacity:u.activo?1:0.55}}>
+              {/* Fila principal del usuario */}
+              <div style={{padding:"0.75rem 1rem",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
+                <div style={{flex:1,minWidth:"120px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
+                    <span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.88rem"}}>{u.usuario}</span>
+                    <span style={{padding:"1px 8px",background:rc.color+"22",color:rc.color,borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>{rc.label}</span>
+                    {u.rol==="logistica"&&u.logistica&&<span style={{padding:"1px 8px",background:lc[u.logistica]?.bg||"#1a1f2e",color:lc[u.logistica]?.color||"#6b7280",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>{u.logistica}</span>}
+                    {u.esChofer&&<span style={{padding:"1px 8px",background:"#1c1500",color:"#f59e0b",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>🛵 Chofer</span>}
+                    {!u.activo&&<span style={{padding:"1px 8px",background:"#1c0a0a",color:"#f87171",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>Inactivo</span>}
+                    {u.rol==="colaborador"&&u.permisos&&Object.values(u.permisos).some(v=>v===false)&&(
+                      <span style={{padding:"1px 8px",background:"#1c1500",color:"#f59e0b",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>Permisos personalizados</span>
+                    )}
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:"0.4rem",flexWrap:"wrap"}}>
+                  {u.rol==="colaborador"&&(
+                    <button onClick={()=>setPermsOpenId(permsOpen?null:u.id)} style={{...S.btnSm(permsOpen,"#8b5cf6"),fontSize:"0.72rem"}}>
+                      {permsOpen?"▲ Permisos":"▼ Permisos"}
+                    </button>
+                  )}
+                  <button onClick={()=>editar(u)} style={{...S.btnSm(false),color:"#6366f1"}}>Editar</button>
+                  <button onClick={()=>toggleActivo(u)} style={S.btnSm(u.activo,u.activo?"#ef4444":"#10b981")}>{u.activo?"Desactivar":"Activar"}</button>
                 </div>
               </div>
-              <div style={{display:"flex",gap:"0.4rem"}}>
-                <button onClick={()=>editar(u)} style={{...S.btnSm(false),color:"#6366f1"}}>Editar</button>
-                <button onClick={()=>toggleActivo(u)} style={S.btnSm(u.activo,u.activo?"#ef4444":"#10b981")}>{u.activo?"Desactivar":"Activar"}</button>
-              </div>
+              {/* Panel de permisos — solo colaboradores */}
+              {permsOpen&&u.rol==="colaborador"&&<PanelPermisos u={u}/>}
             </div>
           );
         })}
@@ -5342,12 +5471,19 @@ export default function App(){
   const [pantalla,setPantalla]=useState("dashboard");
 
   // Validar sesión contra Firebase al arrancar — si el usuario fue desactivado, forzar logout
+  // También sincroniza los permisos más recientes para que puedeVer() tenga datos frescos
   useEffect(()=>{
     if(!sesion?.id) return;
     getDoc(doc(db,"usuarios",sesion.id)).then(snap=>{
       if(!snap.exists()||snap.data().activo===false){
         clearSession();
         setSesion(null);
+      } else {
+        // Actualizar sesion con permisos frescos de Firestore
+        const data=snap.data();
+        const sesionActualizada={...sesion,permisos:data.permisos||{}};
+        setSession(sesionActualizada);
+        setSesion(sesionActualizada);
       }
     }).catch(()=>{}); // si no hay internet, dejar pasar (no bloquear)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -5501,20 +5637,32 @@ export default function App(){
 
   const esAdmin=sesion?.rol==="admin";
   const esColaborador=sesion?.rol==="colaborador";
+  // Mapa tab id → feature key para filtrado de permisos
+  const TAB_FEATURE_MAP={
+    tablero:"tab_tablero",envios:"tab_noflex",flex:"tab_flex",
+    imprimir:"tab_despacho",manual:"tab_manual",tarifas:"tab_tarifas",
+    informe:"tab_informe",liquidacion:"tab_cobranzaslog",
+    liquidacionlog:"tab_liquidacionlog",ctasctes:"tab_ctasctes",
+    localidades:"tab_localidades",expedicion:"tab_expedicion",usuarios:"tab_usuarios",
+  };
   const TABS=[
     {id:"tablero",l:"📊 Tablero"},
     {id:"envios",l:"NO FLEX"},
     {id:"flex",l:"FLEX"},
     {id:"imprimir",l:"Despacho"},
     {id:"manual",l:"+ Manual"},
-    ...(esAdmin?[{id:"tarifas",l:"Tarifas / Log."}]:[]),
+    {id:"tarifas",l:"Tarifas / Log."},
     {id:"informe",l:"Informe"},
     {id:"liquidacion",l:"Cobranzas Log."},
     {id:"liquidacionlog",l:"Liquidacion Log."},
     {id:"ctasctes",l:"Ctas. Ctes."},
     {id:"localidades",l:"Localidades"},
-    ...(esAdmin?[{id:"expedicion",l:"Expedicion"},{id:"usuarios",l:"Usuarios"}]:[]),
-  ];
+    {id:"expedicion",l:"Expedicion"},
+    {id:"usuarios",l:"Usuarios"},
+  ].filter(t=>{
+    const fk=TAB_FEATURE_MAP[t.id];
+    return fk?puedeVer(sesion,fk):true;
+  });
 
   return(
     <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif"}}>
@@ -5557,7 +5705,7 @@ export default function App(){
           return <button key={t.id} onClick={()=>setTab(t.id)} style={style}>{t.l}</button>;
         })}</div>
         <div style={{marginLeft:"auto",display:"flex",gap:"0.35rem",flexWrap:"wrap"}}>
-          <button onClick={()=>{const tnSinAsignar=envios.filter(e=>e.origen==="Tienda Nube"&&getEstado(e)==="sin_asignar");if(!tnSinAsignar.length){mostrarToast("No hay pedidos TN sin asignar");return;}setBorrador(tnSinAsignar);setFileName("Pedidos TN sin asignar");setPantalla("asignacion-tn");}} style={{padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#0d1c2e",border:"1px solid #38bdf8",color:"#38bdf8",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>Asignar TN</button>
+          {puedeVer(sesion,"accion_asignartN")&&<button onClick={()=>{const tnSinAsignar=envios.filter(e=>e.origen==="Tienda Nube"&&getEstado(e)==="sin_asignar");if(!tnSinAsignar.length){mostrarToast("No hay pedidos TN sin asignar");return;}setBorrador(tnSinAsignar);setFileName("Pedidos TN sin asignar");setPantalla("asignacion-tn");}} style={{padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#0d1c2e",border:"1px solid #38bdf8",color:"#38bdf8",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>Asignar TN</button>}
           <button onClick={descargarTemplate} style={{padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#0f1420",border:"1px solid #252d40",color:"#9ca3af",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}} title="Descargar plantilla Excel">⬇ Plantilla</button>
           <label style={{cursor:"pointer"}}>
             <input type="file" accept=".pdf" style={{display:"none"}} onChange={async ev=>{
@@ -5664,13 +5812,13 @@ export default function App(){
             }}/>
             <span style={{display:"inline-block",padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#1a0d2e",border:"1px solid #a78bfa",color:"#a78bfa",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>{loading?"...":"📋 Colecta"}</span>
           </label>
-          <div style={{display:"flex",alignItems:"center",gap:"3px",background:"#12172a",border:"1px solid #6366f1",borderRadius:"7px",overflow:"hidden"}}>
+          {puedeVer(sesion,"accion_cargaexcel")&&<div style={{display:"flex",alignItems:"center",gap:"3px",background:"#12172a",border:"1px solid #6366f1",borderRadius:"7px",overflow:"hidden"}}>
             <input type="date" value={fechaImport} onChange={e=>setFechaImport(e.target.value)} style={{...S.input,border:"none",borderRadius:0,padding:"0.28rem 0.5rem",fontSize:"0.72rem",width:"130px",color:"#a5b4fc"}} title="Fecha de entrega para los envios del Excel"/>
             <label style={{cursor:"pointer",margin:0}}>
               <input type="file" accept=".xlsx,.xls" style={{display:"none"}} onChange={e=>{if(e.target.files[0]){cargarArchivo(e.target.files[0],fechaImport);e.target.value="";}}}/>
               <span style={{display:"inline-block",padding:"0.33rem 0.75rem",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",color:"#fff",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>{loading?"...":"Cargar Excel"}</span>
             </label>
-          </div>
+          </div>}
           <span style={{color:"#4b5563",fontSize:"0.7rem",borderLeft:"1px solid #1a1f2e",paddingLeft:"0.5rem"}}>{sesion?.usuario}</span>
           <button onClick={()=>{clearSession();setSesion(null);}} style={{...S.btnSm(false),color:"#f87171",fontSize:"0.7rem"}}>Salir</button>
         </div>
@@ -5679,18 +5827,18 @@ export default function App(){
       <div style={{padding:"0.85rem 1rem",maxWidth:"1400px",margin:"0 auto"}}>
         {error&&<div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.8rem",background:"#1c0a0a",border:"1px solid #7f1d1d",color:"#fca5a5",fontSize:"0.8rem"}}>{error}</div>}
         {tab==="tablero" &&<TabTablero envios={envios} lc={lc} zc={zc}/>}
-        {tab==="envios"  &&<TabEnvios   envios={envios.filter(e=>e.origen!=="ML")} setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin}/>}
-        {tab==="flex"    &&<TabEnvios   envios={envios.filter(e=>e.origen==="ML")}  setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin}/>}
+        {tab==="envios"  &&<TabEnvios   envios={envios.filter(e=>e.origen!=="ML")} setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin} sesion={sesion}/>}
+        {tab==="flex"    &&<TabEnvios   envios={envios.filter(e=>e.origen==="ML")}  setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin} sesion={sesion}/>}
         {tab==="imprimir"&&<TabImprimir envios={envios} setEnvios={setEnvios} zc={zc} lc={lc}/>}
         {tab==="manual"  &&<TabManual   setEnvios={setEnvios} onSuccess={()=>{mostrarToast("Envio agregado");}} lc={lc} enviosExistentes={envios}/>}
         {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZcPersist} lc={lc} setLc={setLcPersist}/>}
         {tab==="informe"     &&<TabInforme     envios={envios} zc={zc} lc={lc}/>}
-        {tab==="liquidacion"    &&<TabLiquidacion    envios={envios} setEnvios={setEnvios} lc={lc}/>}
+        {tab==="liquidacion"    &&<TabLiquidacion    envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>}
         {tab==="liquidacionlog" &&<TabLiquidacionLog envios={envios} setEnvios={setEnvios} zc={zc} lc={lc} esAdmin={esAdmin}/>}
         {tab==="ctasctes"       &&<TabCtasCtes       envios={envios} lc={lc}/>}
         {tab==="localidades" &&<TabLocalidades cpExtra={cpExtra} setCpExtra={setCpExtra}/>}
-        {tab==="usuarios"   &&esAdmin&&<TabUsuarios lc={lc} setLc={setLcPersist}/>}
-        {tab==="expedicion" &&esAdmin&&<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>}
+        {tab==="usuarios"   &&<TabUsuarios lc={lc} setLc={setLcPersist}/>}
+        {tab==="expedicion" &&<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>}
       </div>
     </div>
   );
