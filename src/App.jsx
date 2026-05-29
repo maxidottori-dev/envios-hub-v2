@@ -813,7 +813,10 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
     setDividido(true);
   };
   const audit=mkAudit(sesion);
-  const handleSave=()=>onSave({...e,importeOverride:costoOverride||null,...(audit?{ultimaEdicionPor:audit}:{}),
+  const transAsignado=e.trans&&e.trans!==envio.trans;
+  const handleSave=()=>onSave({...e,importeOverride:costoOverride||null,
+    ...(audit?{ultimaEdicionPor:audit}:{}),
+    ...(transAsignado&&audit?{asignadoPor:audit}:{}),
     ...(costoOverride!==null&&costoOverride!==(envio.importeOverride||null)&&audit?{importeEditadoPor:audit}:{})});
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const handleTrans=l=>{const t=e.trans===l?"":l;setE(p=>({...p,trans:t,estado:t?"asignado":(p.estado==="cancelado"?"cancelado":"sin_asignar")}));};
@@ -3114,7 +3117,7 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
                     {e.turno && <Bdg label={e.turno} bg={TURNO_C[e.turno]?.bg || "#130d2a"} t={TURNO_C[e.turno]?.c || "#a78bfa"} />}
                     {e.fechaVenta && <Bdg label={"V:"+fmtCorta(e.fechaVenta)} bg="#0d1a12" t="#4ade80" />}
                     {e.fecha && <Bdg label={"E:"+fmtCorta(e.fecha)} bg="#12172a" t="#6b7280" />}
-                    {recibido && <Bdg label={"Recibido" + (fecha ? " " + fmtCorta(fecha) : "")} bg="#041f14" t="#34d399" />}
+                    {recibido && <Bdg label={"Recibido" + (fecha ? " " + fmtCorta(fecha) : "") + (seccion==="cobranzas"&&e.cobranzaRecibidaPor ? " · " + e.cobranzaRecibidaPor.nombre : seccion==="retiros"&&e.retiroRecibidoPor ? " · " + e.retiroRecibidoPor.nombre : "")} bg="#041f14" t="#34d399" />}
                   </div>
                   <div style={{ color: "#e5e7eb", fontSize: "0.82rem", lineHeight: 1.35 }}>{e.direccion}</div>
                   <div style={{ color: "#374151", fontSize: "0.68rem", marginTop: "2px" }}>
