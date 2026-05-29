@@ -1181,7 +1181,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
               "#":i+1,Origen:e.origen,Estado:getEstado(e),
               NroOrdenTN:e.nroOrdenTN||"",Cliente:e.clienteNombre||"",
               Direccion:e.direccion,Localidad:e.localidad||"",Partido:e.partido,CP:e.cp||"",
-              Logistica:e.trans||"",Zona:getZonaML(e.partido)||"",Turno:e.turno||"",
+              Logistica:lc[e.trans]?.nombreFormal||e.trans||"",Zona:getZonaML(e.partido)||"",Turno:e.turno||"",
               Fecha:e.fecha||"",FechaVenta:e.fechaVenta||"",Bultos:e.bultos||1,
               Importe:calcImp(e,tmap2,lc,zc),Cobranza:e.cobranza||"",
               Cambio:e.cambio||"",Retiro:e.retiro||"",Nota:e.nota||"",
@@ -1468,11 +1468,12 @@ function TabImprimir({envios,setEnvios,zc,lc}){
       const cfg=lc[trans];
       const fechaStr=fecha?new Date(fecha+"T00:00:00").toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long"}):"hoy";
       const url=window.location.origin+"/?d="+token;
-      const msg=`🛵 *${cfg?.nombre||trans} — ${fechaStr}*\n📋 ${lista.length} envío${lista.length!==1?"s":""} para entregar.\n\n📄 Descargá el detalle acá:\n${url}\n\n_EnviosHub_`;
+      const nombreMostrar=cfg?.nombreFormal||cfg?.nombre||trans;
+      const msg=`🛵 *${nombreMostrar} — ${fechaStr}*\n📋 ${lista.length} envío${lista.length!==1?"s":""} para entregar.\n\n📄 Descargá el detalle acá:\n${url}\n\n_EnviosHub_`;
       await setDoc(doc(db,"despachos",token),{
         token,
         logistica:trans,
-        logisticaNombre:cfg?.nombre||trans,
+        logisticaNombre:nombreMostrar,
         fecha:fecha||fechaHoy(),
         envios:lista.map(e=>({
           id:e.id,
@@ -1516,11 +1517,12 @@ function TabImprimir({envios,setEnvios,zc,lc}){
       const cfg=lc[trans];
       const fechaStr=fecha?new Date(fecha+"T00:00:00").toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long"}):"hoy";
       const url=window.location.origin+"/?t="+token;
-      const msg=`🛵 *${cfg?.nombre||trans} — Cierre del ${fechaStr}*\n📋 ${lista.length} envío${lista.length!==1?"s":""} asignados.\n\n✅ Confirmá las entregas acá:\n${url}\n\n_EnviosHub · Solo confirmación_`;
+      const nombreMostrarC=cfg?.nombreFormal||cfg?.nombre||trans;
+      const msg=`🛵 *${nombreMostrarC} — Cierre del ${fechaStr}*\n📋 ${lista.length} envío${lista.length!==1?"s":""} asignados.\n\n✅ Confirmá las entregas acá:\n${url}\n\n_EnviosHub · Solo confirmación_`;
       await setDoc(doc(db,"cierres",token),{
         token,
         logistica:trans,
-        logisticaNombre:cfg?.nombre||trans,
+        logisticaNombre:nombreMostrarC,
         fecha:fecha||fechaHoy(),
         envios:lista.map(e=>({
           id:e.id,
@@ -1615,7 +1617,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
       @media print{button{display:none!important;}.page-header{page-break-inside:avoid;}}
     </style></head><body>
     <div class="page-header" style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
-      <span style="font-weight:700;font-size:${fs+2}px;">${trans!=="TODOS"?trans:origenLabel} · ${ts}</span>
+      <span style="font-weight:700;font-size:${fs+2}px;">${trans!=="TODOS"?(lc[trans]?.nombreFormal||trans):origenLabel} · ${ts}</span>
       <span style="font-size:${fs-1}px;color:#888;">${lista.length} envios · Total: $${totalImp.toLocaleString("es-AR")}${cobTotal?" · A cobrar: $"+cobTotal.toLocaleString("es-AR"):""}</span>
     </div>
     <table>
@@ -1885,6 +1887,7 @@ function TabTarifas({zc,setZc,lc,setLc}){
   const quitarP=p=>upd(zs=>zs.map(z=>({...z,partidos:z.partidos.filter(x=>x!==p)})));
   const addZ=()=>{if(!newZona.nombre.trim())return;const id=newZona.nombre.toUpperCase().replace(/\s+/g,"_")+"_"+Date.now();upd(zs=>[...zs,{id,...newZona,partidos:[]}]);setAddModal(false);setNewZona({nombre:"",color:"#6366f1",precio:0});};
   const toggleLog=k=>setLc(p=>({...p,[k]:{...p[k],activa:!p[k].activa}}));
+  const updNombreFormal=(k,v)=>setLc(p=>({...p,[k]:{...p[k],nombreFormal:v}}));
   const updBulto=(k,b,p2)=>setLc(p=>({...p,[k]:{...p[k],preciosBultos:p[k].preciosBultos.map(x =>x.b===b?{...x,p:parseInt(p2)||0}:x)}}));
   const addBulto=k=>setLc(p=>{const lk=p[k];const maxB=Math.max(...(lk.preciosBultos||[]).map(x =>x.b),0);return{...p,[k]:{...lk,preciosBultos:[...(lk.preciosBultos||[]),{b:maxB+1,p:0}]}};});
   const delBulto=(k,b)=>setLc(p=>({...p,[k]:{...p[k],preciosBultos:p[k].preciosBultos.filter(x =>x.b!==b)}}));
@@ -2027,6 +2030,10 @@ function TabTarifas({zc,setZc,lc,setLc}){
               </div>
               <div style={{padding:"0 1rem 0.75rem",display:"flex",flexDirection:"column",gap:"6px"}}>
                 <div style={{color:"#4b5563",fontSize:"0.75rem"}}>{v.activa?"Visible en la app":"No aparece en asignacion ni filtros"}</div>
+                {v.activa&&<div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
+                  <span style={{color:"#4b5563",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase"}}>Nombre formal (reportes)</span>
+                  <input value={v.nombreFormal||""} onChange={e=>updNombreFormal(k,e.target.value)} placeholder={k} style={{...S.input,fontSize:"0.78rem",padding:"4px 8px"}}/>
+                </div>}
                 {v.activa&&<div style={{display:"flex",alignItems:"center",gap:"8px"}}>
                   <div onClick={()=>setLc(p=>({...p,[k]:{...p[k],mostrarImporteLg:!p[k].mostrarImporteLg}}))} style={{width:"32px",height:"18px",borderRadius:"9px",background:v.mostrarImporteLg?"#6366f1":"#252d40",cursor:"pointer",position:"relative",transition:"background 0.2s"}}>
                     <div style={{position:"absolute",top:"2px",left:v.mostrarImporteLg?"14px":"2px",width:"14px",height:"14px",borderRadius:"50%",background:"white",transition:"left 0.2s"}}/>
@@ -2143,7 +2150,7 @@ function TabInforme({envios,zc,lc}){
               NroSeguimiento:e.nroSeguimiento||"",
               NroOrden:e.nroOrdenTN||"",
               Cliente:e.clienteNombre||"",
-              Logistica:e.trans||"",
+              Logistica:lc[e.trans]?.nombreFormal||e.trans||"",
               Partido:e.partido||"",
               Localidad:e.localidad||"",
               Direccion:e.direccion||"",
@@ -2961,7 +2968,7 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
           const filas=lista.map((e,i)=>{
             const recibido=seccion==="cobranzas"?!!e.cobranzaRecibida:!!e.retiroRecibido;
             const fechaR=seccion==="cobranzas"?e.cobranzaFecha:e.retiroFecha;
-            return{"#":i+1,Logistica:e.trans||"",Direccion:e.direccion,Partido:e.partido,
+            return{"#":i+1,Logistica:lc[e.trans]?.nombreFormal||e.trans||"",Direccion:e.direccion,Partido:e.partido,
               NroOrden:e.nroOrdenTN?"#"+e.nroOrdenTN:e.id.slice(-8),
               Fecha:e.fecha||"",Turno:e.turno||"",
               Monto:seccion==="cobranzas"?(e.cobranza||""):"",
