@@ -206,6 +206,7 @@ function getZonaML(p) { return ZONA_ML[p] || ""; }
 
 function fechaLocal()  { const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().split("T")[0]; }
 function fechaHoy()    { return fechaLocal(); }
+function mkAudit(sesion){return sesion?{id:sesion.id,nombre:sesion.nombre,fecha:new Date().toISOString()}:null;}
 function fechaAyer()   { const d=new Date();d.setDate(d.getDate()-1);return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().split("T")[0]; }
 function fechaManana() { const d=new Date();d.setDate(d.getDate()+1);return d.toISOString().split("T")[0]; }
 function fechaInicioSemana() { const d=new Date();d.setDate(d.getDate()-((d.getDay()||7)-1));return d.toISOString().split("T")[0]; }
@@ -546,7 +547,7 @@ function PantallaLogin({onLogin}){
   );
 }
 
-function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc,envios=[]}){
+function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc,envios=[],sesion=null}){
   const hoy=fechaHoy();
   const [asig,setAsig]=useState({});
   const [modo,setModo]=useState("zona");
@@ -565,7 +566,8 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc,envios=
   // Envíos sin partido — bloquean la confirmación porque el costo no se puede calcular
   const sinPartido=borrador.filter(e=>!e.partido);
   const puedeConfirmar=incompletos.length===0&&sinPartido.length===0;
-  const confirmar=()=>{if(!puedeConfirmar)return;onConfirmar(borrador.map(e=>({...e,...getA(e.id),estado:getA(e.id).trans?"asignado":"sin_asignar"})));};
+  const audit=mkAudit(sesion);
+  const confirmar=()=>{if(!puedeConfirmar)return;onConfirmar(borrador.map(e=>({...e,...getA(e.id),estado:getA(e.id).trans?"asignado":"sin_asignar",...(getA(e.id).trans&&audit?{asignadoPor:audit}:{})})));};
 
   // === Resumen flotante: FLEX hoy ya en sistema + borrador en curso ===
   const flexHoy=envios.filter(e=>e.origen==="ML"&&e.trans&&e.estado!=="cancelado"&&(e.fecha||e.fechaVenta||"")===hoy);
@@ -810,7 +812,9 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
     if(onSaveMultiple)onSaveMultiple(duplicados.map(d=>({...d,importeOverride:porPedido})));
     setDividido(true);
   };
-  const handleSave=()=>onSave({...e,importeOverride:costoOverride||null});
+  const audit=mkAudit(sesion);
+  const handleSave=()=>onSave({...e,importeOverride:costoOverride||null,...(audit?{ultimaEdicionPor:audit}:{}),
+    ...(costoOverride!==null&&costoOverride!==(envio.importeOverride||null)&&audit?{importeEditadoPor:audit}:{})});
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const handleTrans=l=>{const t=e.trans===l?"":l;setE(p=>({...p,trans:t,estado:t?"asignado":(p.estado==="cancelado"?"cancelado":"sin_asignar")}));};
   const esTN = e.origen === "Tienda Nube";
@@ -1016,6 +1020,24 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
         {e.retiro!==null&&<textarea value={e.retiro||""} onChange={ev=>set("retiro",ev.target.value)} placeholder="Que tiene que retirar..." style={{...S.input,display:"block",width:"100%",marginTop:"4px",height:"42px",resize:"vertical",fontSize:"0.8rem"}}/>}
       </div>
       </div>{/* fin wrapper bloqueo */}
+      {/* Auditoría */}
+      {(envio.creadoPor||envio.asignadoPor||envio.ultimaEdicionPor||envio.canceladoPor||envio.importeEditadoPor)&&(
+        <div style={{borderTop:"1px solid #1e2535",marginTop:"0.6rem",paddingTop:"0.5rem",display:"flex",flexWrap:"wrap",gap:"6px 16px"}}>
+          {[
+            {label:"Creado por",data:envio.creadoPor},
+            {label:"Asignado por",data:envio.asignadoPor},
+            {label:"Editado por",data:envio.ultimaEdicionPor},
+            {label:"Importe editado por",data:envio.importeEditadoPor},
+            {label:"Cancelado por",data:envio.canceladoPor},
+          ].filter(x=>x.data).map(x=>(
+            <div key={x.label} style={{fontSize:"0.62rem"}}>
+              <span style={{color:"#374151",fontWeight:700,textTransform:"uppercase"}}>{x.label}: </span>
+              <span style={{color:"#9ca3af"}}>{x.data.nombre}</span>
+              <span style={{color:"#4b5563",marginLeft:"4px"}}>{x.data.fecha?new Date(x.data.fecha).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):"" }</span>
+            </div>
+          ))}
+        </div>
+      )}
       <div style={{display:"flex",gap:"0.5rem",justifyContent:"flex-end",flexWrap:"wrap",marginTop:"0.5rem"}}>
         <button onClick={onClose} style={S.btn(false)}>Cancelar</button>
         {!bloqueado&&<button onClick={handleSave} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)"}}>Guardar</button>}
@@ -1086,7 +1108,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
   const eliminar=async id=>{if(window.confirm("Eliminar este envio?")){await deleteDoc(doc(db,"envios",id));setEnvios(p=>p.filter(e=>e.id!==id));}};
   const eliminarSel=async()=>{if(!window.confirm(`Eliminar ${seleccionados.size} envio(s)?`))return;await Promise.all([...seleccionados].map(id=>deleteDoc(doc(db,"envios",id))));setEnvios(p=>p.filter(e=>!seleccionados.has(e.id)));setSeleccionados(new Set());setModoSel(false);};
   const reasignarSel=()=>{const items=envios.filter(e=>seleccionados.has(e.id));onReasignar(items);setSeleccionados(new Set());setModoSel(false);};
-  const cancelarSel=async()=>{if(!window.confirm(`Cancelar ${seleccionados.size} envio(s)?`))return;await Promise.all([...seleccionados].map(id=>setDoc(doc(db,"envios",id),{estado:"cancelado"},{merge:true})));setEnvios(p=>p.map(e=>seleccionados.has(e.id)?{...e,estado:"cancelado"}:e));setSeleccionados(new Set());setModoSel(false);};
+  const cancelarSel=async()=>{if(!window.confirm(`Cancelar ${seleccionados.size} envio(s)?`))return;const auditC=mkAudit(sesion);await Promise.all([...seleccionados].map(id=>setDoc(doc(db,"envios",id),{estado:"cancelado",...(auditC?{canceladoPor:auditC}:{})},{merge:true})));setEnvios(p=>p.map(e=>seleccionados.has(e.id)?{...e,estado:"cancelado"}:e));setSeleccionados(new Set());setModoSel(false);};
   // Resumen FLEX hoy (solo cuando mostrarResumenFlex=true)
   const [resumenOpen,setResumenOpen]=useState(true);
   const flexHoy=mostrarResumenFlex?envios.filter(e=>e.trans&&e.estado!=="cancelado"&&(e.fecha||e.fechaVenta||"")===hoy):[];
@@ -1784,7 +1806,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
   );
 }
 
-function TabManual({setEnvios,onSuccess,lc,enviosExistentes}){
+function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
   const hoy=fechaHoy();
   const vacio={id:"",nroSeguimiento:"",linkML:"",direccion:"",ciudad:"",cp:"",origen:"Manual",trans:"",fecha:hoy,turno:"",estado:"sin_asignar",cobranza:null,cambio:null,retiro:null,observaciones:"",bultos:null,partido:"",importe:0,fechaVenta:hoy,clienteNombre:"",telefono:"",esCC:false,importeCC:0};
   const [f,setF]=useState(vacio);
@@ -1811,7 +1833,8 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes}){
     if(!f.direccion.trim()){setErr("La direccion es obligatoria.");return;}
     if(!f.fecha){setErr("La fecha es obligatoria.");return;}
     if(dupWarn){setErr(dupWarn);return;}
-    setEnvios(p=>[{...f,id:f.id.trim(),partido:f.partido||(cpAPartido(f.cp)||f.ciudad)},...p]);
+    const audit=mkAudit(sesion);
+    setEnvios(p=>[{...f,id:f.id.trim(),partido:f.partido||(cpAPartido(f.cp)||f.ciudad),...(audit?{creadoPor:audit}:{})},...p]);
     setF(vacio);setErr("");setDupWarn("");onSuccess();
   };
   return(
@@ -2649,6 +2672,7 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false,sesion=null}){
     const monto=parseFloat((pago.monto||"").toString().replace(",","."))||0;
     const ids=modalPago.envios.map(e=>e.id);
     setEnvios(prev=>prev.map(e=>ids.includes(e.id)?{...e,estadoPago:"abonado",estadoPagoFecha:hoy}:e));
+    const auditPL=mkAudit(sesion);
     await addDoc(collection(db,"pagosLogistica"),{
       logistica:modalPago.logistica,
       enviosIds:ids,
@@ -2658,6 +2682,7 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false,sesion=null}){
       fecha:pago.fecha,
       notas:pago.notas,
       creadoEn:serverTimestamp(),
+      ...(auditPL?{abonoPor:auditPL}:{}),
     });
     setGuardandoPago(false);
     setModalPago(null);
@@ -2749,6 +2774,7 @@ function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false,sesion=null}){
               {h.montoSistema!==h.montoPagado&&<span style={{color:"#4b5563",fontSize:"0.7rem"}}>Sistema: {fmt(h.montoSistema)}</span>}
               <div style={{flex:1}}/>
               {h.notas&&<span style={{color:"#4b5563",fontSize:"0.7rem",fontStyle:"italic"}}>{h.notas}</span>}
+              {h.abonoPor&&<span style={{color:"#374151",fontSize:"0.65rem"}}>por {h.abonoPor.nombre}</span>}
               <span style={{color:"#10b981",fontWeight:700,fontSize:"1rem",flexShrink:0}}>{fmt(h.montoPagado)}</span>
               {confirmEliminarPago===h.id?(
                 <div style={{display:"flex",gap:"6px",alignItems:"center",flexShrink:0}}>
@@ -2929,11 +2955,13 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
   }).filter(x => x.total > 0);
 
   const marcarCobranza = (id, recibido) => {
-    setEnvios(p => p.map(e => e.id === id ? { ...e, cobranzaRecibida: recibido, cobranzaFecha: recibido ? fechaHoy() : null } : e));
+    const a=mkAudit(sesion);
+    setEnvios(p => p.map(e => e.id === id ? { ...e, cobranzaRecibida: recibido, cobranzaFecha: recibido ? fechaHoy() : null, ...(recibido&&a?{cobranzaRecibidaPor:a}:{}) } : e));
   };
 
   const marcarRetiro = (id, recibido) => {
-    setEnvios(p => p.map(e => e.id === id ? { ...e, retiroRecibido: recibido, retiroFecha: recibido ? fechaHoy() : null } : e));
+    const a=mkAudit(sesion);
+    setEnvios(p => p.map(e => e.id === id ? { ...e, retiroRecibido: recibido, retiroFecha: recibido ? fechaHoy() : null, ...(recibido&&a?{retiroRecibidoPor:a}:{}) } : e));
   };
 
   const guardarNota = () => {
@@ -3155,7 +3183,7 @@ const CP_P_INIT = {"1601":"La Plata","1607":"San Isidro","1608":"Tigre","1609":"
 // ════════════════════════════════════════════════════════════════════
 // TAB CUENTAS CORRIENTES
 // ════════════════════════════════════════════════════════════════════
-function TabCtasCtes({envios,lc}){
+function TabCtasCtes({envios,lc,sesion=null}){
   const [pagos,setPagos]=useState([]);
   const [loadingPagos,setLoadingPagos]=useState(true);
   const [vistaCliente,setVistaCliente]=useState(null);
@@ -3464,6 +3492,7 @@ function TabCtasCtes({envios,lc}){
                   <div style={{fontSize:"0.82rem",color:"#10b981",fontWeight:700}}>{fmt(p.monto)}</div>
                   {p.nota&&<div style={{fontSize:"0.7rem",color:"#6b7280",marginTop:"1px"}}>{p.nota}</div>}
                   {p.envioIds?.length>0&&<div style={{fontSize:"0.65rem",color:"#4b5563",marginTop:"1px"}}>{p.envioIds.length} pedido{p.envioIds.length!==1?"s":""}</div>}
+                  {p.registradoPor&&<div style={{fontSize:"0.62rem",color:"#374151",marginTop:"1px"}}>por {p.registradoPor.nombre}</div>}
                 </div>
                 <div style={{display:"flex",gap:"0.5rem",alignItems:"center"}}>
                   <div style={{fontSize:"0.72rem",color:"#4b5563"}}>{p.fechaCobro||p.creadoEn?.toDate?.()?.toLocaleDateString("es-AR")||"—"}</div>
@@ -3473,7 +3502,7 @@ function TabCtasCtes({envios,lc}){
             ))}
           </div>
         )}
-      {modalPago&&<ModalRegistrarPago {...modalPago} onClose={()=>setModalPago(null)} envios={envios.filter(e=>{const deuda=getDeudaEnvio(e);return deuda&&getClienteKey(e)===modalPago.clienteKey;})} pagos={pagos.filter(p=>p.clienteKey===modalPago.clienteKey)} getDeudaEnvio={getDeudaEnvio}/>}
+      {modalPago&&<ModalRegistrarPago {...modalPago} onClose={()=>setModalPago(null)} envios={envios.filter(e=>{const deuda=getDeudaEnvio(e);return deuda&&getClienteKey(e)===modalPago.clienteKey;})} pagos={pagos.filter(p=>p.clienteKey===modalPago.clienteKey)} getDeudaEnvio={getDeudaEnvio} sesion={sesion}/>}
       </div>
     );
   }
@@ -3696,12 +3725,12 @@ function TabCtasCtes({envios,lc}){
       </div>
 
       {/* Modal registro de pago */}
-      {modalPago&&<ModalRegistrarPago {...modalPago} onClose={()=>setModalPago(null)} envios={envios.filter(e=>{const deuda=getDeudaEnvio(e);return deuda&&getClienteKey(e)===modalPago.clienteKey;})} pagos={pagos.filter(p=>p.clienteKey===modalPago.clienteKey)} getDeudaEnvio={getDeudaEnvio}/>}
+      {modalPago&&<ModalRegistrarPago {...modalPago} onClose={()=>setModalPago(null)} envios={envios.filter(e=>{const deuda=getDeudaEnvio(e);return deuda&&getClienteKey(e)===modalPago.clienteKey;})} pagos={pagos.filter(p=>p.clienteKey===modalPago.clienteKey)} getDeudaEnvio={getDeudaEnvio} sesion={sesion}/>}
     </div>
   );
 }
 
-function ModalRegistrarPago({clienteKey,clienteNombre,saldoPendiente,onClose,envios,pagos,getDeudaEnvio}){
+function ModalRegistrarPago({clienteKey,clienteNombre,saldoPendiente,onClose,envios,pagos,getDeudaEnvio,sesion=null}){
   const hoy=new Date().toISOString().slice(0,10);
   const [seleccion,setSeleccion]=useState({});
   const [monto,setMonto]=useState("");
@@ -3759,12 +3788,14 @@ function ModalRegistrarPago({clienteKey,clienteNombre,saldoPendiente,onClose,env
       }
     }
     try{
+      const auditCC=mkAudit(sesion);
       await addDoc(collection(db,"pagosCC"),{
         clienteKey,clienteNombre,monto:m,nota:nota.trim(),
         envioIds:enviosIds,
         ...(montosPorEnvio?{montosPorEnvio}:{}),
         fechaCobro,
         creadoEn:serverTimestamp(),
+        ...(auditCC?{registradoPor:auditCC}:{}),
       });
       onClose();
     }catch(err){console.error(err);alert("Error al guardar el pago.");}
@@ -3954,7 +3985,7 @@ function TabLocalidades({cpExtra,setCpExtra}) {
 // ════════════════════════════════════════════════════════════════════
 // PANTALLA ASIGNACION TN — agrupa por fecha+turno, pre-rellena fecha/turno
 // ════════════════════════════════════════════════════════════════════
-function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc}){
+function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc,sesion=null}){
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   // Pre-inicializar asig con fecha y turno del datepicker
   const initAsig=()=>{const a={};borrador.forEach(e=>{a[e.id]={trans:"",fecha:e.fecha||fechaHoy(),turno:e.turno||""};});return a;};
@@ -3974,7 +4005,8 @@ function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc}){
   });
   const grupoKeys=Object.keys(grupos).sort();
   const totalAsig=borrador.filter(e=>getA(e.id).trans).length;
-  const confirmar=()=>onConfirmar(borrador.map(e=>({...e,...getA(e.id),estado:getA(e.id).trans?"asignado":"sin_asignar"})));
+  const auditTN=mkAudit(sesion);
+  const confirmar=()=>onConfirmar(borrador.map(e=>({...e,...getA(e.id),estado:getA(e.id).trans?"asignado":"sin_asignar",...(getA(e.id).trans&&auditTN?{asignadoPor:auditTN}:{})})));
 
   return(
     <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif"}}>
@@ -5800,8 +5832,8 @@ export default function App(){
   }
   if(sesion.rol==="expedicion")return<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>;
 
-  if(pantalla==="asignacion"){return<PantallaAsignacion borrador={borrador} fileName={fileName} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc} envios={envios}/>;}
-  if(pantalla==="asignacion-tn"){return<PantallaAsignacionTN borrador={borrador} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc}/>;}
+  if(pantalla==="asignacion"){return<PantallaAsignacion borrador={borrador} fileName={fileName} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc} envios={envios} sesion={sesion}/>;}
+  if(pantalla==="asignacion-tn"){return<PantallaAsignacionTN borrador={borrador} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc} sesion={sesion}/>;}
 
   const esAdmin=sesion?.rol==="admin";
   const esColaborador=sesion?.rol==="colaborador";
@@ -5998,12 +6030,12 @@ export default function App(){
         {tab==="envios"  &&<TabEnvios   envios={envios.filter(e=>e.origen!=="ML")} setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin} sesion={sesion}/>}
         {tab==="flex"    &&<TabEnvios   envios={envios.filter(e=>e.origen==="ML")}  setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin} sesion={sesion} mostrarResumenFlex={true}/>}
         {tab==="imprimir"&&<TabImprimir envios={envios} setEnvios={setEnvios} zc={zc} lc={lc}/>}
-        {tab==="manual"  &&<TabManual   setEnvios={setEnvios} onSuccess={()=>{mostrarToast("Envio agregado");}} lc={lc} enviosExistentes={envios}/>}
+        {tab==="manual"  &&<TabManual   setEnvios={setEnvios} onSuccess={()=>{mostrarToast("Envio agregado");}} lc={lc} enviosExistentes={envios} sesion={sesion}/>}
         {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZcPersist} lc={lc} setLc={setLcPersist}/>}
         {tab==="informe"     &&<TabInforme     envios={envios} zc={zc} lc={lc}/>}
         {tab==="liquidacion"    &&<TabLiquidacion    envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>}
         {tab==="liquidacionlog" &&<TabLiquidacionLog envios={envios} setEnvios={setEnvios} zc={zc} lc={lc} esAdmin={esAdmin} sesion={sesion}/>}
-        {tab==="ctasctes"       &&<TabCtasCtes       envios={envios} lc={lc}/>}
+        {tab==="ctasctes"       &&<TabCtasCtes       envios={envios} lc={lc} sesion={sesion}/>}
         {tab==="localidades" &&<TabLocalidades cpExtra={cpExtra} setCpExtra={setCpExtra}/>}
         {tab==="usuarios"   &&<TabUsuarios lc={lc} setLc={setLcPersist}/>}
         {tab==="expedicion" &&<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>}
