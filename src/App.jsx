@@ -206,7 +206,7 @@ function getZonaML(p) { return ZONA_ML[p] || ""; }
 
 function fechaLocal()  { const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().split("T")[0]; }
 function fechaHoy()    { return fechaLocal(); }
-function mkAudit(sesion){return sesion?{id:sesion.id,nombre:sesion.nombre,fecha:new Date().toISOString()}:null;}
+function mkAudit(sesion){return sesion?{id:sesion.id,nombre:sesion.nombre||sesion.usuario||sesion.email||sesion.id,fecha:new Date().toISOString()}:null;}
 function fechaAyer()   { const d=new Date();d.setDate(d.getDate()-1);return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().split("T")[0]; }
 function fechaManana() { const d=new Date();d.setDate(d.getDate()+1);return d.toISOString().split("T")[0]; }
 function fechaInicioSemana() { const d=new Date();d.setDate(d.getDate()-((d.getDay()||7)-1));return d.toISOString().split("T")[0]; }
@@ -1025,7 +1025,7 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
       </div>{/* fin wrapper bloqueo */}
       {/* Auditoría */}
       {(envio.creadoPor||envio.asignadoPor||envio.ultimaEdicionPor||envio.canceladoPor||envio.importeEditadoPor)&&(
-        <div style={{borderTop:"1px solid #1e2535",marginTop:"0.6rem",paddingTop:"0.5rem",display:"flex",flexWrap:"wrap",gap:"6px 16px"}}>
+        <div style={{borderTop:"1px solid #1e2535",marginTop:"0.65rem",paddingTop:"0.6rem",display:"flex",flexWrap:"wrap",gap:"6px 20px"}}>
           {[
             {label:"Creado por",data:envio.creadoPor},
             {label:"Asignado por",data:envio.asignadoPor},
@@ -1033,10 +1033,10 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
             {label:"Importe editado por",data:envio.importeEditadoPor},
             {label:"Cancelado por",data:envio.canceladoPor},
           ].filter(x=>x.data).map(x=>(
-            <div key={x.label} style={{fontSize:"0.62rem"}}>
-              <span style={{color:"#374151",fontWeight:700,textTransform:"uppercase"}}>{x.label}: </span>
-              <span style={{color:"#9ca3af"}}>{x.data.nombre}</span>
-              <span style={{color:"#4b5563",marginLeft:"4px"}}>{x.data.fecha?new Date(x.data.fecha).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):"" }</span>
+            <div key={x.label} style={{display:"flex",alignItems:"center",gap:"5px"}}>
+              <span style={{color:"#6b7280",fontSize:"0.68rem",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.04em"}}>{x.label}:</span>
+              <span style={{color:"#e2e8f0",fontSize:"0.75rem",fontWeight:700}}>{x.data.nombre}</span>
+              <span style={{color:"#4b5563",fontSize:"0.68rem"}}>{x.data.fecha?new Date(x.data.fecha).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):""}</span>
             </div>
           ))}
         </div>
