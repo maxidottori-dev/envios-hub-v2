@@ -3296,7 +3296,7 @@ function TabCtasCtes({envios,lc,sesion=null}){
     const dias=diasDeuda(c.fechaMin);
     const limite=limites[c.key]||15;
     // Cobrado y count solo de ordenes con saldo pendiente
-    let cobradoConSaldo=0,pendienteCount=0;
+    let cobradoConSaldo=0,pendienteCount=0,fechaMinPendiente="";
     c.envios.forEach(e=>{
       const pagEnvio=pagos.filter(p=>p.envioIds?.includes(e.id)).reduce((s,p)=>{
         if(p.montosPorEnvio)return s+(p.montosPorEnvio[e.id]||0);
@@ -3304,9 +3304,15 @@ function TabCtasCtes({envios,lc,sesion=null}){
         return s;
       },0);
       const saldoE=Math.max(0,(e._deuda?.monto||0)-pagEnvio);
-      if(saldoE>0){pendienteCount++;cobradoConSaldo+=((e._deuda?.monto||0)-saldoE);}
+      if(saldoE>0){
+        pendienteCount++;
+        cobradoConSaldo+=((e._deuda?.monto||0)-saldoE);
+        const fe=e.fecha||e.fechaVenta||"";
+        if(fe&&(!fechaMinPendiente||fe<fechaMinPendiente))fechaMinPendiente=fe;
+      }
     });
-    return{...c,cobrado,cobradoConSaldo,pendienteCount,saldo,dias,limite,logisticas:[...c.logisticas]};
+    const diasReal=diasDeuda(fechaMinPendiente||c.fechaMin);
+    return{...c,cobrado,cobradoConSaldo,pendienteCount,saldo,dias:diasReal,limite,logisticas:[...c.logisticas]};
   });
 
   const fmt=(n)=>"$"+Math.round(n).toLocaleString("es-AR");
