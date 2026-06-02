@@ -566,8 +566,9 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc,envios=
   // Envíos sin partido — bloquean la confirmación porque el costo no se puede calcular
   const sinPartido=borrador.filter(e=>!e.partido);
   const puedeConfirmar=incompletos.length===0&&sinPartido.length===0;
+  const [confirmando,setConfirmando]=useState(false);
   const audit=mkAudit(sesion);
-  const confirmar=()=>{if(!puedeConfirmar)return;onConfirmar(borrador.map(e=>({...e,...getA(e.id),estado:getA(e.id).trans?"asignado":"sin_asignar",...(getA(e.id).trans&&audit?{asignadoPor:audit}:{})})));};
+  const confirmar=()=>{if(!puedeConfirmar||confirmando)return;setConfirmando(true);onConfirmar(borrador.map(e=>({...e,...getA(e.id),estado:getA(e.id).trans?"asignado":"sin_asignar",...(getA(e.id).trans&&audit?{asignadoPor:audit}:{})})));};
 
   // === Resumen flotante: FLEX hoy ya en sistema + borrador en curso ===
   const flexHoy=envios.filter(e=>e.origen==="ML"&&e.trans&&e.estado!=="cancelado"&&(e.fecha||e.fechaVenta||"")===hoy);
@@ -600,7 +601,7 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc,envios=
   };
   return(
     <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif"}}>
-      <style>{`*{box-sizing:border-box;}select option{background:#1a1f2e;}`}</style>
+      <style>{`*{box-sizing:border-box;}select option{background:#1a1f2e;}@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.3;}}@keyframes spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}`}</style>
       <div style={{position:"sticky",top:0,zIndex:100,background:"#0f1420",borderBottom:"1px solid #1a1f2e",padding:"0.75rem 1rem",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
         <div style={{width:"28px",height:"28px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:"7px",display:"flex",alignItems:"center",justifyContent:"center"}}>🛵</div>
         <div><div style={{fontWeight:800,fontSize:"0.95rem"}}>Asignar envios</div><div style={{color:"#4b5563",fontSize:"0.62rem"}}>{fileName} · {borrador.length} envios</div></div>
@@ -683,7 +684,11 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc,envios=
         <div style={{display:"flex",justifyContent:"flex-end",gap:"0.75rem",marginTop:"1rem",paddingBottom:"5rem"}}>
           <button onClick={imprimirLote} disabled={totalAsig===0} style={{...S.btn(false),color:totalAsig>0?"#84cc16":"#4b5563",borderColor:totalAsig>0?"#84cc16":"#252d40",opacity:totalAsig>0?1:0.5}}>Imprimir lote</button>
           <button onClick={onCancelar} style={S.btn(false)}>Cancelar</button>
-          <button onClick={confirmar} disabled={!puedeConfirmar} title={!puedeConfirmar?[incompletos.length>0&&`${incompletos.length} incompletos`,sinPartido.length>0&&`${sinPartido.length} sin partido`].filter(Boolean).join(" · "):""} style={{...S.btn(true),background:puedeConfirmar?"linear-gradient(135deg,#6366f1,#8b5cf6)":"#1e2535",color:puedeConfirmar?"#fff":"#4b5563",border:puedeConfirmar?"none":"1px solid #374151",padding:"0.55rem 1.4rem",cursor:puedeConfirmar?"pointer":"not-allowed",opacity:1}}>Confirmar ({totalAsig}/{borrador.length}){!puedeConfirmar&&<span style={{fontSize:"0.68rem",marginLeft:"5px",color:"#f59e0b"}}>⚠ {incompletos.length+sinPartido.length}</span>}</button>
+          <button onClick={confirmar} disabled={!puedeConfirmar||confirmando} title={!puedeConfirmar?[incompletos.length>0&&`${incompletos.length} incompletos`,sinPartido.length>0&&`${sinPartido.length} sin partido`].filter(Boolean).join(" · "):""} style={{...S.btn(true),background:puedeConfirmar&&!confirmando?"linear-gradient(135deg,#6366f1,#8b5cf6)":"#1e2535",color:puedeConfirmar&&!confirmando?"#fff":"#4b5563",border:puedeConfirmar&&!confirmando?"none":"1px solid #374151",padding:"0.55rem 1.4rem",cursor:puedeConfirmar&&!confirmando?"pointer":"not-allowed",opacity:1,display:"flex",alignItems:"center",gap:"6px"}}>
+            {confirmando&&<span style={{width:"11px",height:"11px",border:"2px solid #a5b4fc",borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin 0.7s linear infinite"}}/>}
+            {confirmando?`Guardando ${borrador.length} envíos...`:`Confirmar (${totalAsig}/${borrador.length})`}
+            {!puedeConfirmar&&!confirmando&&<span style={{fontSize:"0.68rem",marginLeft:"5px",color:"#f59e0b"}}>⚠ {incompletos.length+sinPartido.length}</span>}
+          </button>
         </div>
       </div>
 
@@ -812,12 +817,13 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
     if(onSaveMultiple)onSaveMultiple(duplicados.map(d=>({...d,importeOverride:porPedido})));
     setDividido(true);
   };
+  const [guardando,setGuardando]=useState(false);
   const audit=mkAudit(sesion);
   const transAsignado=e.trans&&e.trans!==envio.trans;
-  const handleSave=()=>onSave({...e,importeOverride:costoOverride||null,
+  const handleSave=()=>{setGuardando(true);onSave({...e,importeOverride:costoOverride||null,
     ...(audit?{ultimaEdicionPor:audit}:{}),
     ...(transAsignado&&audit?{asignadoPor:audit}:{}),
-    ...(costoOverride!==null&&costoOverride!==(envio.importeOverride||null)&&audit?{importeEditadoPor:audit}:{})});
+    ...(costoOverride!==null&&costoOverride!==(envio.importeOverride||null)&&audit?{importeEditadoPor:audit}:{})});}
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const handleTrans=l=>{const t=e.trans===l?"":l;setE(p=>({...p,trans:t,estado:t?"asignado":(p.estado==="cancelado"?"cancelado":"sin_asignar")}));};
   const esTN = e.origen === "Tienda Nube";
@@ -1043,7 +1049,7 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
       )}
       <div style={{display:"flex",gap:"0.5rem",justifyContent:"flex-end",flexWrap:"wrap",marginTop:"0.5rem"}}>
         <button onClick={onClose} style={S.btn(false)}>Cancelar</button>
-        {!bloqueado&&<button onClick={handleSave} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)"}}>Guardar</button>}
+        {!bloqueado&&<button onClick={handleSave} disabled={guardando} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",opacity:guardando?0.7:1,display:"flex",alignItems:"center",gap:"6px"}}>{guardando&&<span style={{width:"10px",height:"10px",border:"2px solid #a5b4fc",borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin 0.7s linear infinite"}}/>}{guardando?"Guardando...":"Guardar"}</button>}
       </div>
     </div>
   );
@@ -1111,7 +1117,8 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
   const eliminar=async id=>{if(window.confirm("Eliminar este envio?")){await deleteDoc(doc(db,"envios",id));setEnvios(p=>p.filter(e=>e.id!==id));}};
   const eliminarSel=async()=>{if(!window.confirm(`Eliminar ${seleccionados.size} envio(s)?`))return;await Promise.all([...seleccionados].map(id=>deleteDoc(doc(db,"envios",id))));setEnvios(p=>p.filter(e=>!seleccionados.has(e.id)));setSeleccionados(new Set());setModoSel(false);};
   const reasignarSel=()=>{const items=envios.filter(e=>seleccionados.has(e.id));onReasignar(items);setSeleccionados(new Set());setModoSel(false);};
-  const cancelarSel=async()=>{if(!window.confirm(`Cancelar ${seleccionados.size} envio(s)?`))return;const auditC=mkAudit(sesion);await Promise.all([...seleccionados].map(id=>setDoc(doc(db,"envios",id),{estado:"cancelado",...(auditC?{canceladoPor:auditC}:{})},{merge:true})));setEnvios(p=>p.map(e=>seleccionados.has(e.id)?{...e,estado:"cancelado"}:e));setSeleccionados(new Set());setModoSel(false);};
+  const [cancelando,setCancelando]=useState(false);
+  const cancelarSel=async()=>{if(!window.confirm(`Cancelar ${seleccionados.size} envio(s)?`))return;setCancelando(true);const auditC=mkAudit(sesion);await Promise.all([...seleccionados].map(id=>setDoc(doc(db,"envios",id),{estado:"cancelado",...(auditC?{canceladoPor:auditC}:{})},{merge:true})));setEnvios(p=>p.map(e=>seleccionados.has(e.id)?{...e,estado:"cancelado"}:e));setSeleccionados(new Set());setModoSel(false);setCancelando(false);};
   // Resumen FLEX hoy (solo cuando mostrarResumenFlex=true)
   const [resumenOpen,setResumenOpen]=useState(true);
   const flexHoy=mostrarResumenFlex?envios.filter(e=>e.trans&&e.estado!=="cancelado"&&(e.fecha||e.fechaVenta||"")===hoy):[];
@@ -1434,7 +1441,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
           {accionMasiva?.tipo==="turno"
             ?<><div style={{display:"flex",gap:"3px"}}>{TURNOS.map(t=><button key={t} onClick={()=>setAccionMasiva(p=>({...p,valor:t}))} style={{...S.btnSm(accionMasiva.valor===t,"#a78bfa"),fontSize:"0.72rem"}}>{t}</button>)}</div><button onClick={aplicarAccionMasiva} disabled={!accionMasiva.valor} style={{...S.btn(true),padding:"0.3rem 0.7rem",fontSize:"0.75rem",opacity:accionMasiva.valor?1:0.5}}>OK</button><button onClick={()=>setAccionMasiva(null)} style={{...S.btn(false),padding:"0.3rem 0.7rem",fontSize:"0.75rem"}}>✕</button></>
             :<button onClick={()=>setAccionMasiva({tipo:"turno",valor:""})} style={{...S.btn(false),padding:"0.4rem 0.9rem",fontSize:"0.75rem"}}>Cambiar turno</button>}
-          {puedeVer(sesion,"accion_cancelarenvio")&&<button onClick={cancelarSel} style={{...S.btn(true),background:"#7f1d1d",padding:"0.4rem 0.9rem",fontSize:"0.75rem"}}>Cancelar</button>}
+          {puedeVer(sesion,"accion_cancelarenvio")&&<button onClick={cancelarSel} disabled={cancelando} style={{...S.btn(true),background:"#7f1d1d",padding:"0.4rem 0.9rem",fontSize:"0.75rem",display:"flex",alignItems:"center",gap:"5px",opacity:cancelando?0.7:1}}>{cancelando&&<span style={{width:"9px",height:"9px",border:"2px solid #fca5a5",borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin 0.7s linear infinite"}}/>}{cancelando?"Cancelando...":"Cancelar"}</button>}
           {esAdmin&&<button onClick={eliminarSel} style={{...S.btn(true),background:"#450a0a",padding:"0.4rem 0.9rem",fontSize:"0.75rem",color:"#fca5a5"}}>Eliminar</button>}
           <button onClick={()=>{setModoSel(false);setSeleccionados(new Set());}} style={{...S.btn(false),padding:"0.4rem 0.9rem",fontSize:"0.75rem"}}>Salir</button>
         </div>
@@ -5794,8 +5801,9 @@ export default function App(){
     return()=>unsub();
   },[]);
 
-  const guardarEnvio=async(e)=>{try{await setDoc(doc(db,"envios",e.id),e);}catch(err){console.error(err);}};
-  const eliminarEnvio=async(id)=>{try{await deleteDoc(doc(db,"envios",id));}catch(err){console.error(err);}};
+  const [pendingSaves,setPendingSaves]=useState(0);
+  const guardarEnvio=async(e)=>{setPendingSaves(p=>p+1);try{await setDoc(doc(db,"envios",e.id),e);}catch(err){console.error(err);}finally{setPendingSaves(p=>Math.max(0,p-1));}};
+  const eliminarEnvio=async(id)=>{setPendingSaves(p=>p+1);try{await deleteDoc(doc(db,"envios",id));}catch(err){console.error(err);}finally{setPendingSaves(p=>Math.max(0,p-1));}};
 
   const setEnvios=useCallback((updater)=>{
     setEnviosLocal(prev=>{
@@ -5900,7 +5908,10 @@ export default function App(){
         <div style={{width:"26px",height:"26px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:"7px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>🛵</div>
         <div style={{marginRight:"0.2rem"}}>
           <div style={{fontWeight:800,fontSize:"0.92rem"}}>EnviosHub <span style={{color:"#374151",fontSize:"0.6rem",fontWeight:400}}>v{VERSION}</span></div>
-          <div style={{color:"#374151",fontSize:"0.58rem"}}>{syncLoading?"Conectando...":(envios.length>0?envios.length+" envios":"Sin envios")}</div>
+          <div style={{color:"#374151",fontSize:"0.58rem",display:"flex",alignItems:"center",gap:"4px"}}>
+            {pendingSaves>0&&<span style={{display:"inline-block",width:"6px",height:"6px",borderRadius:"50%",background:"#6366f1",animation:"pulse 1s infinite"}}/>}
+            {syncLoading?"Conectando...":pendingSaves>0?"Guardando...":(envios.length>0?envios.length+" envios":"Sin envios")}
+          </div>
         </div>
         <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{TABS.map(t =>{
           const isFlex=t.id==="flex";
