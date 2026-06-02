@@ -2898,6 +2898,7 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
   const [rangoD, setRangoD] = useState(hoy);
   const [rangoH, setRangoH] = useState(hoy);
   const [notaModal, setNotaModal] = useState(null); // {id, tipo, nota}
+  const [confirmModal, setConfirmModal] = useState(null); // {id, tipo:"cobranza"|"retiro", envio}
   const [busqueda, setBusqueda] = useState("");
   const logActivas = Object.entries(lc).filter(([,v]) => v.activa).map(([k]) => k);
 
@@ -3116,7 +3117,13 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
               <div key={e.id} style={{ ...S.card, padding: "0.6rem 1rem", display: "flex", alignItems: "flex-start", gap: "0.6rem", flexWrap: "wrap", opacity: recibido ? 0.6 : 1 }}>
                 {/* Checkbox recibido */}
                 <div style={{ paddingTop: "2px" }}>
-                  <Chk checked={recibido} onChange={() => seccion === "cobranzas" ? marcarCobranza(e.id, !recibido) : marcarRetiro(e.id, !recibido)} size={18} />
+                  <Chk checked={recibido} onChange={() => {
+                    if(recibido){
+                      seccion==="cobranzas"?marcarCobranza(e.id,false):marcarRetiro(e.id,false);
+                    } else {
+                      setConfirmModal({id:e.id, tipo:seccion==="cobranzas"?"cobranza":"retiro", envio:e});
+                    }
+                  }} size={18} />
                 </div>
                 <div style={{ flex: 1, minWidth: "160px" }}>
                   <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginBottom: "3px", alignItems: "center" }}>
@@ -3176,6 +3183,49 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
             <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
               <button onClick={() => setNotaModal(null)} style={S.btn(false)}>Cancelar</button>
               <button onClick={guardarNota} style={{ ...S.btn(true), background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}>Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal confirmación cobranza/retiro ── */}
+      {confirmModal&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
+          <div style={{background:"#12172a",border:"1px solid #252d40",borderRadius:"12px",padding:"1.4rem 1.5rem",width:"100%",maxWidth:"320px",display:"flex",flexDirection:"column",gap:"1rem"}}>
+            <div style={{fontSize:"0.7rem",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",color:confirmModal.tipo==="cobranza"?"#f59e0b":"#f97316"}}>
+              {confirmModal.tipo==="cobranza"?"Confirmar cobro recibido":"Confirmar retiro recibido"}
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+                <span style={{fontSize:"0.62rem",color:"#4b5563",fontWeight:700,textTransform:"uppercase"}}>Dirección</span>
+                <span style={{fontSize:"0.82rem",color:"#e2e8f0",fontWeight:600,maxWidth:"200px",textAlign:"right"}}>{confirmModal.envio.direccion}</span>
+              </div>
+              {confirmModal.envio.trans&&(
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+                  <span style={{fontSize:"0.62rem",color:"#4b5563",fontWeight:700,textTransform:"uppercase"}}>Logística</span>
+                  <span style={{fontSize:"0.82rem",fontWeight:700,color:lc[confirmModal.envio.trans]?.color||"#9ca3af"}}>{confirmModal.envio.trans}</span>
+                </div>
+              )}
+              <div style={{borderTop:"1px solid #1a2640",marginTop:"4px",paddingTop:"8px",display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+                <span style={{fontSize:"0.62rem",color:"#4b5563",fontWeight:700,textTransform:"uppercase"}}>{confirmModal.tipo==="cobranza"?"Monto":"Retira"}</span>
+                {confirmModal.tipo==="cobranza"
+                  ?<span style={{fontSize:"1.3rem",color:"#f59e0b",fontWeight:800}}>${Math.round(confirmModal.envio.cobranza||0).toLocaleString("es-AR")}</span>
+                  :<span style={{fontSize:"0.85rem",color:"#f97316",fontWeight:700,maxWidth:"200px",textAlign:"right"}}>{confirmModal.envio.retiro||confirmModal.envio.cambio||"—"}</span>
+                }
+              </div>
+            </div>
+            <div style={{display:"flex",gap:"8px"}}>
+              <button onClick={()=>setConfirmModal(null)} style={{...S.btn(false),flex:1}}>Cancelar</button>
+              <button onClick={()=>{
+                confirmModal.tipo==="cobranza"?marcarCobranza(confirmModal.id,true):marcarRetiro(confirmModal.id,true);
+                setConfirmModal(null);
+              }} style={{flex:2,padding:"0.5rem",borderRadius:"8px",border:"none",fontWeight:700,fontSize:"0.82rem",cursor:"pointer",
+                background:confirmModal.tipo==="cobranza"?"#0d2b0d":"#1c0d00",
+                color:confirmModal.tipo==="cobranza"?"#4ade80":"#f97316",
+                border:confirmModal.tipo==="cobranza"?"1px solid #1a4a1a":"1px solid #3d1f00"
+              }}>
+                {confirmModal.tipo==="cobranza"?"Confirmar cobro":"Confirmar retiro"}
+              </button>
             </div>
           </div>
         </div>
