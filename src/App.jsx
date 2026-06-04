@@ -3256,7 +3256,8 @@ function TabCtasCtes({envios,lc,sesion=null}){
   const [modalPago,setModalPago]=useState(null);
   const [limites,setLimites]=useState({});
   const [loadingLim,setLoadingLim]=useState(true);
-  const [syncPagos,setSyncPagos]=useState(null); // null | "confirm" | "cargando" | {actualizados, pendientes, errores}
+  const [syncPagos,setSyncPagos]=useState(null); // null | "confirm" | "cargando" | {actualizados, pendientes, errores, detalle}
+  const [syncDetalleOpen,setSyncDetalleOpen]=useState(false);
   const [borrandoPago,setBorrandoPago]=useState(null);
   const [mostrarTodosEnvios,setMostrarTodosEnvios]=useState(false);
 
@@ -3274,6 +3275,7 @@ function TabCtasCtes({envios,lc,sesion=null}){
   };
   const confirmarSync=async()=>{
     setSyncPagos("cargando");
+    setSyncDetalleOpen(false);
     try{
       const resp=await fetch("/api/sync-pagos-tn",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})});
       const d=await resp.json();
@@ -3593,13 +3595,81 @@ function TabCtasCtes({envios,lc,sesion=null}){
           </button>
         )}
         {syncPagos&&syncPagos!=="cargando"&&syncPagos!=="confirm"&&(
-          <span style={{fontSize:"0.75rem",color:syncPagos.error?"#fca5a5":"#6b7280"}}>
-            {syncPagos.error
-              ? "Error: "+syncPagos.error
-              : `✅ ${syncPagos.actualizados} actualizados · ${syncPagos.pendientes} pendientes · ${syncPagos.errores} errores (${syncPagos.totalCC??""} CC + ${syncPagos.totalEfectivo??""} efectivo)`}
-          </span>
+          syncPagos.error
+            ? <span style={{fontSize:"0.75rem",color:"#fca5a5"}}>Error: {syncPagos.error}</span>
+            : <span style={{fontSize:"0.75rem",color:"#6b7280",display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
+                <span style={{color:"#34d399"}}>✓ {syncPagos.actualizados} actualizados</span>
+                <span>· {syncPagos.pendientes} pendientes ·</span>
+                <span style={{color:syncPagos.errores>0?"#f87171":"#6b7280"}}>{syncPagos.errores} errores</span>
+                <span style={{color:"#4b5563"}}>({syncPagos.totalCC??0} CC + {syncPagos.totalEfectivo??0} efectivo)</span>
+                <button onClick={()=>setSyncDetalleOpen(p=>!p)} style={{...S.btnSm(syncDetalleOpen,"#6366f1"),padding:"1px 8px",fontSize:"0.68rem"}}>
+                  {syncDetalleOpen?"Ocultar detalle":"Ver detalle"}
+                </button>
+              </span>
         )}
       </div>
+
+      {/* Panel detalle sync */}
+      {syncPagos&&syncPagos.detalle&&syncDetalleOpen&&(()=>{
+        const errores=(syncPagos.detalle||[]).filter(d=>d.error);
+        const actualizados=(syncPagos.detalle||[]).filter(d=>d.resultado==="pagado");
+        const pendientes=(syncPagos.detalle||[]).filter(d=>d.resultado&&d.resultado!=="pagado");
+        return(
+          <div style={{...S.card,padding:0,marginBottom:"1rem",overflow:"hidden"}}>
+            {/* Header */}
+            <div style={{padding:"0.6rem 1rem",background:"#0b1220",borderBottom:"1px solid #1a2640",display:"flex",alignItems:"center",gap:"1rem",flexWrap:"wrap"}}>
+              <span style={{fontWeight:700,fontSize:"0.78rem",color:"#e2e8f0"}}>Detalle sincronización</span>
+              <span style={{fontSize:"0.72rem",color:"#34d399"}}>✓ {actualizados.length} pagados</span>
+              <span style={{fontSize:"0.72rem",color:"#6b7280"}}>⏳ {pendientes.length} pendientes</span>
+              {errores.length>0&&<span style={{fontSize:"0.72rem",color:"#f87171"}}>✗ {errores.length} errores</span>}
+              {errores.length>0&&<button onClick={()=>{
+                const filas=errores.map(d=>({"Nro Orden":d.nro||"","Cliente":d.cliente||"","Error":d.error||"","ID":d.id||""}));
+                exportarXLSX(filas,"errores_sync_tn_"+fechaHoy());
+              }} style={{...S.btnSm(false),color:"#10b981",borderColor:"#10b981",padding:"2px 8px",fontSize:"0.68rem",marginLeft:"auto"}}>⬇ Exportar errores</button>}
+            </div>
+            {/* Errores */}
+            {errores.length>0&&(
+              <div style={{borderBottom:"1px solid #1a2640"}}>
+                <div style={{padding:"5px 1rem",background:"#1c0a0a",fontSize:"0.65rem",fontWeight:700,color:"#f87171",textTransform:"uppercase",letterSpacing:"0.05em"}}>Errores ({errores.length})</div>
+                {errores.map((d,i)=>(
+                  <div key={i} style={{padding:"6px 1rem",borderBottom:"1px solid #0d1117",display:"flex",gap:"1rem",alignItems:"center",flexWrap:"wrap"}}>
+                    <span style={{fontSize:"0.72rem",color:"#f87171",fontFamily:"monospace",fontWeight:700}}>#{d.nro||d.id||"—"}</span>
+                    {d.cliente&&<span style={{fontSize:"0.72rem",color:"#9ca3af"}}>{d.cliente}</span>}
+                    <span style={{fontSize:"0.72rem",color:"#6b7280",marginLeft:"auto",fontFamily:"monospace"}}>
+                      {typeof d.error==="number"?`HTTP ${d.error}`:d.error}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Actualizados */}
+            {actualizados.length>0&&(
+              <div style={{borderBottom:"1px solid #1a2640"}}>
+                <div style={{padding:"5px 1rem",background:"#041f14",fontSize:"0.65rem",fontWeight:700,color:"#34d399",textTransform:"uppercase",letterSpacing:"0.05em"}}>Marcados como pagados ({actualizados.length})</div>
+                {actualizados.map((d,i)=>(
+                  <div key={i} style={{padding:"6px 1rem",borderBottom:"1px solid #0d1117",display:"flex",gap:"1rem",alignItems:"center"}}>
+                    <span style={{fontSize:"0.72rem",color:"#34d399",fontFamily:"monospace",fontWeight:700}}>#{d.nro||"—"}</span>
+                    {d.cliente&&<span style={{fontSize:"0.72rem",color:"#9ca3af"}}>{d.cliente}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Pendientes */}
+            {pendientes.length>0&&(
+              <div>
+                <div style={{padding:"5px 1rem",background:"#0b1220",fontSize:"0.65rem",fontWeight:700,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.05em"}}>Pendientes en TN ({pendientes.length})</div>
+                {pendientes.map((d,i)=>(
+                  <div key={i} style={{padding:"6px 1rem",borderBottom:"1px solid #0d1117",display:"flex",gap:"1rem",alignItems:"center"}}>
+                    <span style={{fontSize:"0.72rem",color:"#6b7280",fontFamily:"monospace",fontWeight:700}}>#{d.nro||"—"}</span>
+                    {d.cliente&&<span style={{fontSize:"0.72rem",color:"#4b5563"}}>{d.cliente}</span>}
+                    <span style={{fontSize:"0.72rem",color:"#374151",marginLeft:"auto",fontFamily:"monospace"}}>{d.resultado}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Alerta vencidos */}
       {clientes.filter(c=>c.dias>=c.limite&&c.saldo>0).length>0&&(
