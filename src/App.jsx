@@ -3633,11 +3633,10 @@ function TabCtasCtes({envios,lc,sesion=null}){
                 <div style={{padding:"5px 1rem",background:"#1c0a0a",fontSize:"0.65rem",fontWeight:700,color:"#f87171",textTransform:"uppercase",letterSpacing:"0.05em"}}>Errores ({errores.length})</div>
                 {errores.map((d,i)=>(
                   <div key={i} style={{padding:"6px 1rem",borderBottom:"1px solid #0d1117",display:"flex",gap:"1rem",alignItems:"center",flexWrap:"wrap"}}>
-                    <span style={{fontSize:"0.72rem",color:"#f87171",fontFamily:"monospace",fontWeight:700}}>#{d.nro||d.id||"—"}</span>
+                    <span style={{fontSize:"0.72rem",color:"#f87171",fontFamily:"monospace",fontWeight:700}}>#{d.nro||d.idFirestore||d.id||"—"}</span>
                     {d.cliente&&<span style={{fontSize:"0.72rem",color:"#9ca3af"}}>{d.cliente}</span>}
-                    <span style={{fontSize:"0.72rem",color:"#6b7280",marginLeft:"auto",fontFamily:"monospace"}}>
-                      {typeof d.error==="number"?`HTTP ${d.error}`:d.error}
-                    </span>
+                    {d.idFirestore&&!d.nro&&<span style={{fontSize:"0.65rem",color:"#374151",fontFamily:"monospace"}}>id: {d.idFirestore.slice(-8)}</span>}
+                    <span style={{fontSize:"0.72rem",color:"#6b7280",marginLeft:"auto",fontFamily:"monospace"}}>{d.error}</span>
                   </div>
                 ))}
               </div>

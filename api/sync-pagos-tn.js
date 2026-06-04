@@ -39,14 +39,22 @@ export default async function handler(req, res) {
     for (const docSnap of todos) {
       const data = docSnap.data();
       const idTN  = data.idTN || data.id;
-      if (!idTN) { errores++; continue; }
+      if (!idTN) {
+        errores++;
+        detalle.push({ nro: data.nroOrdenTN || docSnap.id, cliente: data.clienteNombre, error: "Sin ID de TN" });
+        continue;
+      }
 
       try {
         const resp = await fetch(
           `https://api.tiendanube.com/v1/${TN_STOREID}/orders/${idTN}`,
           { headers: { "Authentication": `bearer ${TN_TOKEN}`, "User-Agent": "EnviosHub-sync (maxidottori@gmail.com)" } }
         );
-        if (!resp.ok) { errores++; detalle.push({ nro: data.nroOrdenTN, error: resp.status }); continue; }
+        if (!resp.ok) {
+          errores++;
+          detalle.push({ nro: data.nroOrdenTN || idTN, cliente: data.clienteNombre, idFirestore: docSnap.id, error: `HTTP ${resp.status}` });
+          continue;
+        }
 
         const orden = await resp.json();
 
@@ -60,7 +68,7 @@ export default async function handler(req, res) {
         }
       } catch(eTN) {
         errores++;
-        detalle.push({ id: docSnap.id, error: eTN.message });
+        detalle.push({ nro: data.nroOrdenTN || idTN, cliente: data.clienteNombre, idFirestore: docSnap.id, error: eTN.message });
       }
     }
 
