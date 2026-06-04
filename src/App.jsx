@@ -613,7 +613,10 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc,envios=
           <span style={{color:totalAsig===borrador.length?"#10b981":"#f59e0b",fontSize:"0.82rem",fontWeight:700}}>{totalAsig}/{borrador.length}</span>
           <button onClick={imprimirLote} disabled={totalAsig===0} style={{...S.btn(false),color:totalAsig>0?"#84cc16":"#4b5563",borderColor:totalAsig>0?"#84cc16":"#252d40",opacity:totalAsig>0?1:0.5}}>Imprimir lote</button>
           <button onClick={onCancelar} style={S.btn(false)}>Cancelar</button>
-          <button onClick={confirmar} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)"}}>Confirmar</button>
+          <button onClick={confirmar} disabled={confirmando} style={{...S.btn(true),background:confirmando?"#1e2535":"linear-gradient(135deg,#6366f1,#8b5cf6)",display:"flex",alignItems:"center",gap:"6px"}}>
+            {confirmando&&<span style={{width:"10px",height:"10px",border:"2px solid #a5b4fc",borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin 0.7s linear infinite"}}/>}
+            {confirmando?"Guardando...":"Confirmar"}
+          </button>
         </div>
       </div>
       <div style={{padding:"1rem",maxWidth:"980px",margin:"0 auto"}}>
@@ -5935,6 +5938,10 @@ export default function App(){
     <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif"}}>
       <style>{`*{box-sizing:border-box;}::-webkit-scrollbar{width:6px;height:10px;}::-webkit-scrollbar-track{background:#0f1420;border-radius:4px;}::-webkit-scrollbar-thumb{background:#4b5563;border-radius:4px;border:1px solid #0f1420;}::-webkit-scrollbar-thumb:hover{background:#9ca3af;}::-webkit-scrollbar-corner{background:#0f1420;}html{scrollbar-width:thin;scrollbar-color:#4b5563 #0f1420;}select option{background:#1a1f2e;color:#e5e7eb;}button:hover{opacity:0.85;}`}</style>
       {toast&&<div style={{position:"fixed",top:"16px",right:"16px",zIndex:999,background:"#041f14",border:"1px solid #10b981",borderRadius:"10px",padding:"0.6rem 1.1rem",color:"#34d399",fontWeight:700,fontSize:"0.82rem"}}>{toast}</div>}
+      {pendingSaves>0&&<div style={{position:"fixed",bottom:"20px",left:"50%",transform:"translateX(-50%)",zIndex:9999,background:"#12172a",border:"1px solid #4338ca",borderRadius:"20px",padding:"6px 16px",display:"flex",alignItems:"center",gap:"8px",fontSize:"0.75rem",fontWeight:700,color:"#a5b4fc",pointerEvents:"none"}}>
+        <span style={{width:"11px",height:"11px",border:"2px solid #6366f1",borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin 0.7s linear infinite",flexShrink:0}}/>
+        Guardando...
+      </div>}
       {/* Alertas flotantes TN — abajo a la derecha */}
       {alertas.length>0&&(
         <div style={{position:"fixed",bottom:"20px",right:"16px",zIndex:1000,display:"flex",flexDirection:"column",gap:"8px",maxWidth:"320px"}}>
@@ -5958,10 +5965,7 @@ export default function App(){
         <div style={{width:"26px",height:"26px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:"7px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>🛵</div>
         <div style={{marginRight:"0.2rem"}}>
           <div style={{fontWeight:800,fontSize:"0.92rem"}}>EnviosHub <span style={{color:"#374151",fontSize:"0.6rem",fontWeight:400}}>v{VERSION}</span></div>
-          <div style={{color:"#374151",fontSize:"0.58rem",display:"flex",alignItems:"center",gap:"4px"}}>
-            {pendingSaves>0&&<span style={{display:"inline-block",width:"6px",height:"6px",borderRadius:"50%",background:"#6366f1",animation:"pulse 1s infinite"}}/>}
-            {syncLoading?"Conectando...":pendingSaves>0?"Guardando...":(envios.length>0?envios.length+" envios":"Sin envios")}
-          </div>
+          <div style={{color:"#374151",fontSize:"0.58rem"}}>{syncLoading?"Conectando...":(envios.length>0?envios.length+" envios":"Sin envios")}</div>
         </div>
         <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{TABS.map(t =>{
           const isFlex=t.id==="flex";
