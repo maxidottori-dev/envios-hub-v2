@@ -4074,8 +4074,15 @@ function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc,sesion=null}){
   });
   const grupoKeys=Object.keys(grupos).sort();
   const totalAsig=borrador.filter(e=>getA(e.id).trans).length;
+  const [confirmando,setConfirmando]=useState(false);
   const auditTN=mkAudit(sesion);
-  const confirmar=()=>onConfirmar(borrador.map(e=>({...e,...getA(e.id),estado:getA(e.id).trans?"asignado":"sin_asignar",...(getA(e.id).trans&&auditTN?{asignadoPor:auditTN}:{})})));
+  const confirmar=()=>{if(confirmando)return;setConfirmando(true);onConfirmar(borrador.map(e=>({...e,...getA(e.id),estado:getA(e.id).trans?"asignado":"sin_asignar",...(getA(e.id).trans&&auditTN?{asignadoPor:auditTN}:{})})));};
+  const btnConfirmarTN=(padding="")=>(
+    <button onClick={confirmar} disabled={confirmando} style={{...S.btn(true),background:confirmando?"#0a1520":"#0d1c2e",border:"1px solid #38bdf8",color:confirmando?"#4b5563":"#38bdf8",...(padding?{padding}:{}),display:"flex",alignItems:"center",gap:"6px",opacity:confirmando?0.7:1}}>
+      {confirmando&&<span style={{width:"10px",height:"10px",border:"2px solid #38bdf8",borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin 0.7s linear infinite"}}/>}
+      {confirmando?`Guardando ${borrador.length} envíos...`:`Confirmar (${totalAsig}/${borrador.length})`}
+    </button>
+  );
 
   return(
     <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif"}}>
@@ -4086,7 +4093,7 @@ function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc,sesion=null}){
         <div style={{marginLeft:"auto",display:"flex",gap:"0.5rem",alignItems:"center"}}>
           <span style={{color:totalAsig===borrador.length?"#10b981":"#f59e0b",fontSize:"0.82rem",fontWeight:700}}>{totalAsig}/{borrador.length}</span>
           <button onClick={onCancelar} style={S.btn(false)}>Cancelar</button>
-          <button onClick={confirmar} style={{...S.btn(true),background:"#0d1c2e",border:"1px solid #38bdf8",color:"#38bdf8"}}>Confirmar ({totalAsig}/{borrador.length})</button>
+          {btnConfirmarTN()}
         </div>
       </div>
       <div style={{padding:"1rem",maxWidth:"980px",margin:"0 auto"}}>
@@ -4137,7 +4144,7 @@ function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc,sesion=null}){
         })}
         <div style={{display:"flex",justifyContent:"flex-end",gap:"0.75rem",marginTop:"1rem",paddingBottom:"2rem"}}>
           <button onClick={onCancelar} style={S.btn(false)}>Cancelar</button>
-          <button onClick={confirmar} style={{...S.btn(true),background:"#0d1c2e",border:"1px solid #38bdf8",color:"#38bdf8",padding:"0.55rem 1.4rem"}}>Confirmar ({totalAsig}/{borrador.length})</button>
+          {btnConfirmarTN("0.55rem 1.4rem")}
         </div>
       </div>
     </div>
