@@ -1826,14 +1826,48 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
   const [err,setErr]=useState("");
   const [dupWarn,setDupWarn]=useState("");
   const [sugsVisible,setSugsVisible]=useState(false);
+  const [dirsCliente,setDirsCliente]=useState([]); // direcciones del cliente seleccionado para elegir
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
 
-  // Lista de clientes únicos ya registrados (para autocomplete)
-  const clientesExistentes=useMemo(()=>{
-    const nombres=new Set();
-    (enviosExistentes||[]).forEach(e=>{if(e.clienteNombre?.trim())nombres.add(e.clienteNombre.trim());});
-    return[...nombres].sort((a,b)=>a.localeCompare(b));
+  // Mapa de clientes con teléfono y direcciones únicas de pedidos anteriores
+  const clientesData=useMemo(()=>{
+    const map={};
+    (enviosExistentes||[]).sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||"")).forEach(e=>{
+      const nombre=e.clienteNombre?.trim();
+      if(!nombre)return;
+      if(!map[nombre])map[nombre]={telefono:"",direcciones:[]};
+      if(e.telefono&&!map[nombre].telefono)map[nombre].telefono=e.telefono;
+      if(e.direccion){
+        const normD=e.direccion.toLowerCase().trim();
+        if(!map[nombre].direcciones.find(d=>d.norm===normD)){
+          map[nombre].direcciones.push({direccion:e.direccion,cp:e.cp||"",ciudad:e.ciudad||"",partido:e.partido||"",norm:normD});
+        }
+      }
+    });
+    return map;
   },[enviosExistentes]);
+
+  // Seleccionar cliente: autocompleta todos los campos
+  const seleccionarCliente=(nombre)=>{
+    set("clienteNombre",nombre);
+    setSugsVisible(false);
+    const data=clientesData[nombre];
+    if(!data)return;
+    if(data.telefono)set("telefono",data.telefono);
+    if(data.direcciones.length===1){
+      const d=data.direcciones[0];
+      setF(p=>({...p,clienteNombre:nombre,telefono:data.telefono||p.telefono,
+        direccion:d.direccion,cp:d.cp,ciudad:d.ciudad,partido:d.partido||cpAPartido(d.cp)||""}));
+      setDirsCliente([]);
+    } else if(data.direcciones.length>1){
+      setDirsCliente(data.direcciones);
+    } else {
+      setDirsCliente([]);
+    }
+  };
+
+  // Lista de clientes únicos para el dropdown
+  const clientesExistentes=useMemo(()=>Object.keys(clientesData).sort((a,b)=>a.localeCompare(b)),[clientesData]);
   const sugerencias=sugsVisible&&f.clienteNombre.length>=2
     ?clientesExistentes.filter(n=>norm(n).includes(norm(f.clienteNombre))&&norm(n)!==norm(f.clienteNombre)).slice(0,8)
     :[];
@@ -1859,7 +1893,45 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.7rem",marginBottom:"0.7rem"}}>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. venta / referencia</label><input value={f.id} onChange={e=>set("id",e.target.value)} style={{...S.input,width:"100%"}} placeholder="ej. 2000012345"/></div>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. seguimiento</label><input value={f.nroSeguimiento} onChange={e=>set("nroSeguimiento",e.target.value)} style={{...S.input,width:"100%",borderColor:dupWarn?"#f59e0b":"#252d40"}} placeholder="ej. 46669555629"/></div>
-          <div style={{position:"relative"}}><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nombre cliente</label><input value={f.clienteNombre} onChange={e=>{set("clienteNombre",e.target.value);setSugsVisible(true);}} onFocus={()=>setSugsVisible(true)} onBlur={()=>setTimeout(()=>setSugsVisible(false),150)} style={{...S.input,width:"100%"}} placeholder="Nombre completo o buscar existente"/>{sugerencias.length>0&&(<div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:200,background:"#1a1f2e",border:"1px solid #6366f1",borderRadius:"6px",marginTop:"2px",boxShadow:"0 6px 16px rgba(0,0,0,0.5)",overflow:"hidden"}}>{sugerencias.map(n=>(<div key={n} onMouseDown={()=>{set("clienteNombre",n);setSugsVisible(false);}} style={{padding:"0.5rem 0.75rem",cursor:"pointer",color:"#e5e7eb",fontSize:"0.85rem",borderBottom:"1px solid #252d40",transition:"background 0.1s"}} onMouseEnter={e=>e.currentTarget.style.background="#252d40"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>{n}</div>))}</div>)}</div>
+          <div style={{position:"relative",gridColumn:"1/-1"}}><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nombre cliente</label>
+            <input value={f.clienteNombre} onChange={e=>{set("clienteNombre",e.target.value);setSugsVisible(true);setDirsCliente([]);}} onFocus={()=>setSugsVisible(true)} onBlur={()=>setTimeout(()=>setSugsVisible(false),150)} style={{...S.input,width:"100%"}} placeholder="Nombre completo o buscar existente"/>
+            {sugerencias.length>0&&(
+              <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:200,background:"#1a1f2e",border:"1px solid #6366f1",borderRadius:"6px",marginTop:"2px",boxShadow:"0 6px 16px rgba(0,0,0,0.5)",overflow:"hidden"}}>
+                {sugerencias.map(n=>{
+                  const d=clientesData[n];
+                  return(
+                    <div key={n} onMouseDown={()=>seleccionarCliente(n)} style={{padding:"0.45rem 0.75rem",cursor:"pointer",borderBottom:"1px solid #252d40",transition:"background 0.1s"}} onMouseEnter={e=>e.currentTarget.style.background="#252d40"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                      <div style={{color:"#e5e7eb",fontSize:"0.82rem",fontWeight:600}}>{n}</div>
+                      <div style={{fontSize:"0.68rem",color:"#4b5563",marginTop:"1px",display:"flex",gap:"8px"}}>
+                        {d?.telefono&&<span>📞 {d.telefono}</span>}
+                        {d?.direcciones?.length===1&&<span>📍 {d.direcciones[0].direccion}</span>}
+                        {d?.direcciones?.length>1&&<span>📍 {d.direcciones.length} direcciones</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {/* Picker de direcciones cuando hay más de una */}
+            {dirsCliente.length>1&&(
+              <div style={{marginTop:"6px",background:"#0f1420",border:"1px solid #6366f1",borderRadius:"6px",overflow:"hidden"}}>
+                <div style={{padding:"5px 10px",fontSize:"0.62rem",color:"#6366f1",fontWeight:700,textTransform:"uppercase",borderBottom:"1px solid #252d40"}}>Elegí una dirección</div>
+                {dirsCliente.map((d,i)=>(
+                  <div key={i} onMouseDown={()=>{
+                    setF(p=>({...p,direccion:d.direccion,cp:d.cp,ciudad:d.ciudad,partido:d.partido||cpAPartido(d.cp)||""}));
+                    setDirsCliente([]);
+                  }} style={{padding:"7px 10px",cursor:"pointer",borderBottom:i<dirsCliente.length-1?"1px solid #1a1f2e":"none",transition:"background 0.1s"}} onMouseEnter={e=>e.currentTarget.style.background="#1a1f2e"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <div style={{fontSize:"0.78rem",color:"#e2e8f0",fontWeight:600}}>{d.direccion}</div>
+                    <div style={{fontSize:"0.65rem",color:"#4b5563",marginTop:"1px",display:"flex",gap:"8px"}}>
+                      {d.ciudad&&<span>{d.ciudad}</span>}
+                      {d.partido&&<span>· {d.partido}</span>}
+                      {d.cp&&<span>· CP {d.cp}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Teléfono</label><input value={f.telefono} onChange={e=>set("telefono",e.target.value)} style={{...S.input,width:"100%"}} placeholder="ej. 1165432100"/></div>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Origen</label><div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["ML","Tienda Nube","Particular","Otro"].map(o =><button key={o} onClick={()=>set("origen",o)} style={S.btnSm(f.origen===o,"#6366f1")}>{o}</button>)}</div></div>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Bultos</label><input type="number" min="1" value={f.bultos||""} onChange={ev=>{const v=parseInt(ev.target.value);set("bultos",v>0?v:"");}} placeholder="1" style={{...S.input,width:"120px",padding:"4px 10px"}}/></div>
@@ -1886,7 +1958,7 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
           </div>
         </div>
         <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.9rem",background:f.esCC?"#130d2a":"#0f1420",border:f.esCC?"1px solid #a78bfa":"1px solid #1e2535"}}><div style={{display:"flex",alignItems:"center",gap:"0.75rem"}}><button onClick={()=>set("esCC",!f.esCC)} style={S.btnSm(f.esCC,"#a78bfa")}>Cta. Corriente</button>{f.esCC?<><span style={{color:"#6b7280",fontSize:"0.78rem"}}>Importe:</span><input type="number" placeholder="Monto" value={f.importeCC||""} onChange={e=>set("importeCC",parseFloat(e.target.value)||0)} style={{...S.input,width:"150px",padding:"4px 10px"}}/><span style={{color:"#a78bfa",fontSize:"0.72rem"}}>El cliente te debe este monto</span></>:<span style={{color:"#374151",fontSize:"0.78rem"}}>Marcar como Cuenta Corriente</span>}</div></div>
-        <div style={{display:"flex",justifyContent:"flex-end",gap:"0.5rem"}}><button onClick={()=>{setF(vacio);setErr("");setDupWarn("");}} style={S.btn(false)}>Limpiar</button><button onClick={guardar} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.5rem 1.2rem"}}>Agregar envio</button></div>
+        <div style={{display:"flex",justifyContent:"flex-end",gap:"0.5rem"}}><button onClick={()=>{setF(vacio);setErr("");setDupWarn("");setDirsCliente([]);}} style={S.btn(false)}>Limpiar</button><button onClick={guardar} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.5rem 1.2rem"}}>Agregar envio</button></div>
       </div>
     </div>
   );
