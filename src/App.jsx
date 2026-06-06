@@ -4892,7 +4892,8 @@ function VistaChofer({envios,setEnvios,sesion,lc}){
 
 function TabTablero({envios,lc,zc,pagosCC=[]}){
   const hoy=fechaHoy();
-  const [ccOpen,setCcOpen]=useState(true);
+  const [ccOpen,setCcOpen]=useState(false);
+  const [cobOpen,setCobOpen]=useState(false);
   const tmap=buildTarifaMap(zc);
   const getImp=e=>calcImp(e,tmap,lc,zc);
 
@@ -5122,46 +5123,58 @@ function TabTablero({envios,lc,zc,pagosCC=[]}){
         <div>
           <div style={{color:"#4b5563",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",marginBottom:"8px"}}>Cobranzas logística + CC clientes</div>
           <div style={{...cardSt,padding:0,overflow:"hidden"}}>
-            <div style={{background:"#12172a",padding:"8px 14px",borderBottom:"1px solid #252d40",display:"grid",gridTemplateColumns:"80px 1fr 1fr 1fr",gap:"8px"}}>
-              {["Logística","Deuda anterior","Sale hoy","Total"].map((h,i)=>(
-                <div key={i} style={{color:i===1?"#f87171":i===2?"#f59e0b":"#6b7280",fontSize:"0.58rem",fontWeight:700,textTransform:"uppercase",textAlign:i>0?"right":"left"}}>{h}</div>
-              ))}
+            {/* Header colapsable logística */}
+            <div onClick={()=>setCobOpen(p=>!p)} style={{background:"#12172a",padding:"8px 14px",borderBottom:cobOpen?"1px solid #252d40":"none",display:"flex",alignItems:"center",gap:"10px",cursor:"pointer",userSelect:"none"}}>
+              <span style={{color:"#f87171",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",flex:1}}>
+                {cobPorLog.length} logística{cobPorLog.length!==1?"s":""} · <span style={{color:"#f87171",fontWeight:800}}>{fmt(cobPorLog.reduce((s,x)=>s+x.total,0))}</span>
+                {cobPorLog.some(x=>x.diasDeuda>=2)&&<span style={{marginLeft:"8px",background:"#450a0a",color:"#f87171",border:"1px solid #7f1d1d",padding:"1px 6px",borderRadius:"4px",fontSize:"9px",fontWeight:700}}>⚠ Atrasadas</span>}
+              </span>
+              <span style={{color:"#4b5563",fontSize:"0.7rem"}}>{cobOpen?"▲":"▼"}</span>
             </div>
-            {cobPorLog.length===0&&<div style={{padding:"1rem",color:"#4b5563",fontSize:"0.75rem",textAlign:"center"}}>Sin cobranzas pendientes</div>}
-            {cobPorLog.map(({l,deudaAnterior,saleHoy,total:tot,diasDeuda})=>{
-              const lcD2=lc[l];
-              const atrasado=diasDeuda>=2;
-              const revisar=diasDeuda===1;
-              return(
-                <div key={l} style={{display:"grid",gridTemplateColumns:"80px 1fr 1fr 1fr",gap:"8px",padding:"8px 14px",borderBottom:"1px solid #1a1f2e",alignItems:"center",background:atrasado?"#1c0404":revisar?"#1c1000":"transparent"}}>
-                  <div>
-                    <div style={{color:lcD2.color,fontWeight:700,fontSize:"0.82rem"}}>{l}</div>
-                    {atrasado&&<div style={{background:"#450a0a",color:"#f87171",border:"1px solid #7f1d1d",padding:"1px 6px",borderRadius:"4px",fontSize:"9px",fontWeight:700,marginTop:"2px",display:"inline-block"}}>⚠ Atrasado</div>}
-                    {revisar&&<div style={{background:"#1c1000",color:"#f59e0b",border:"1px solid #78350f",padding:"1px 6px",borderRadius:"4px",fontSize:"9px",fontWeight:700,marginTop:"2px",display:"inline-block"}}>⚠ Revisar</div>}
-                  </div>
-                  <div style={{textAlign:"right"}}>
-                    {deudaAnterior>0?<><div style={{color:"#f87171",fontWeight:700,fontSize:"0.78rem"}}>{fmt(deudaAnterior)}</div><div style={{color:"#6b7280",fontSize:"9px"}}>{diasDeuda} día{diasDeuda>1?"s":""} pend.</div></>:<span style={{color:"#4b5563"}}>—</span>}
-                  </div>
-                  <div style={{textAlign:"right"}}>
-                    {saleHoy>0?<span style={{color:"#f59e0b",fontWeight:700,fontSize:"0.78rem"}}>{fmt(saleHoy)}</span>:<span style={{color:"#4b5563"}}>—</span>}
-                  </div>
-                  <div style={{textAlign:"right"}}>
-                    <span style={{color:atrasado?"#f87171":"#e5e7eb",fontWeight:700,fontSize:"0.82rem"}}>{fmt(tot)}</span>
-                  </div>
+            {cobOpen&&(
+              <>
+                <div style={{background:"#12172a",padding:"5px 14px",borderBottom:"1px solid #1a1f2e",display:"grid",gridTemplateColumns:"80px 1fr 1fr 1fr",gap:"8px"}}>
+                  {["Logística","Deuda anterior","Sale hoy","Total"].map((h,i)=>(
+                    <div key={i} style={{color:i===1?"#f87171":i===2?"#f59e0b":"#6b7280",fontSize:"0.58rem",fontWeight:700,textTransform:"uppercase",textAlign:i>0?"right":"left"}}>{h}</div>
+                  ))}
                 </div>
-              );
-            })}
-            {cobPorLog.length>0&&(()=>{
-              const totDeu=cobPorLog.reduce((s,x)=>s+x.deudaAnterior,0);
-              const totHoy=cobPorLog.reduce((s,x)=>s+x.saleHoy,0);
-              const totTot=cobPorLog.reduce((s,x)=>s+x.total,0);
-              return<div style={{display:"grid",gridTemplateColumns:"80px 1fr 1fr 1fr",gap:"8px",padding:"8px 14px",background:"#12172a",borderTop:"2px solid #252d40"}}>
-                <span style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase"}}>Total</span>
-                <div style={{textAlign:"right",color:"#f87171",fontWeight:800,fontSize:"0.82rem"}}>{totDeu>0?fmt(totDeu):"—"}</div>
-                <div style={{textAlign:"right",color:"#f59e0b",fontWeight:800,fontSize:"0.82rem"}}>{totHoy>0?fmt(totHoy):"—"}</div>
-                <div style={{textAlign:"right",color:"#e5e7eb",fontWeight:800,fontSize:"0.88rem"}}>{fmt(totTot)}</div>
-              </div>;
-            })()}
+                {cobPorLog.length===0&&<div style={{padding:"1rem",color:"#4b5563",fontSize:"0.75rem",textAlign:"center"}}>Sin cobranzas pendientes</div>}
+                {cobPorLog.map(({l,deudaAnterior,saleHoy,total:tot,diasDeuda})=>{
+                  const lcD2=lc[l];
+                  const atrasado=diasDeuda>=2;
+                  const revisar=diasDeuda===1;
+                  return(
+                    <div key={l} style={{display:"grid",gridTemplateColumns:"80px 1fr 1fr 1fr",gap:"8px",padding:"8px 14px",borderBottom:"1px solid #1a1f2e",alignItems:"center",background:atrasado?"#1c0404":revisar?"#1c1000":"transparent"}}>
+                      <div>
+                        <div style={{color:lcD2.color,fontWeight:700,fontSize:"0.82rem"}}>{l}</div>
+                        {atrasado&&<div style={{background:"#450a0a",color:"#f87171",border:"1px solid #7f1d1d",padding:"1px 6px",borderRadius:"4px",fontSize:"9px",fontWeight:700,marginTop:"2px",display:"inline-block"}}>⚠ Atrasado</div>}
+                        {revisar&&<div style={{background:"#1c1000",color:"#f59e0b",border:"1px solid #78350f",padding:"1px 6px",borderRadius:"4px",fontSize:"9px",fontWeight:700,marginTop:"2px",display:"inline-block"}}>⚠ Revisar</div>}
+                      </div>
+                      <div style={{textAlign:"right"}}>
+                        {deudaAnterior>0?<><div style={{color:"#f87171",fontWeight:700,fontSize:"0.78rem"}}>{fmt(deudaAnterior)}</div><div style={{color:"#6b7280",fontSize:"9px"}}>{diasDeuda} día{diasDeuda>1?"s":""} pend.</div></>:<span style={{color:"#4b5563"}}>—</span>}
+                      </div>
+                      <div style={{textAlign:"right"}}>
+                        {saleHoy>0?<span style={{color:"#f59e0b",fontWeight:700,fontSize:"0.78rem"}}>{fmt(saleHoy)}</span>:<span style={{color:"#4b5563"}}>—</span>}
+                      </div>
+                      <div style={{textAlign:"right"}}>
+                        <span style={{color:atrasado?"#f87171":"#e5e7eb",fontWeight:700,fontSize:"0.82rem"}}>{fmt(tot)}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+                {cobPorLog.length>0&&(()=>{
+                  const totDeu=cobPorLog.reduce((s,x)=>s+x.deudaAnterior,0);
+                  const totHoy=cobPorLog.reduce((s,x)=>s+x.saleHoy,0);
+                  const totTot=cobPorLog.reduce((s,x)=>s+x.total,0);
+                  return<div style={{display:"grid",gridTemplateColumns:"80px 1fr 1fr 1fr",gap:"8px",padding:"8px 14px",background:"#12172a",borderTop:"2px solid #252d40"}}>
+                    <span style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase"}}>Total</span>
+                    <div style={{textAlign:"right",color:"#f87171",fontWeight:800,fontSize:"0.82rem"}}>{totDeu>0?fmt(totDeu):"—"}</div>
+                    <div style={{textAlign:"right",color:"#f59e0b",fontWeight:800,fontSize:"0.82rem"}}>{totHoy>0?fmt(totHoy):"—"}</div>
+                    <div style={{textAlign:"right",color:"#e5e7eb",fontWeight:800,fontSize:"0.88rem"}}>{fmt(totTot)}</div>
+                  </div>;
+                })()}
+              </>
+            )}
           </div>
 
           {/* Sección CC clientes */}
