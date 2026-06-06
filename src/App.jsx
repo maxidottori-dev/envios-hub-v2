@@ -4936,7 +4936,7 @@ function TabTablero({envios,lc,zc,pagosCC=[]}){
     return{l,deudaAnterior,saleHoy,total:deudaAnterior+saleHoy,diasDeuda};
   }).filter(x =>x.total>0||x.saleHoy>0);
 
-  // CC pendiente por cliente (deduciendo pagos ya realizados)
+  // CC pendiente por cliente — con matching de pagos por pedido para calcular fechaMin correcta
   const ccPorCliente=(()=>{
     const map={};
     envios.forEach(e=>{
@@ -4944,17 +4944,20 @@ function TabTablero({envios,lc,zc,pagosCC=[]}){
       const esTNCC=e.pagoEstado==="cuenta_corriente"&&e.importeOrden>0;
       const esManualCC=e.esCC&&e.importeCC>0&&e.pagoEstado!=="pagado";
       if(!esTNCC&&!esManualCC)return;
-      const monto=esTNCC?(e.cobranza>0?e.cobranza:e.importeOrden):e.importeCC;
+      const montoOrig=esTNCC?(e.cobranza>0?e.cobranza:e.importeOrden):e.importeCC;
+      // Calcular saldo real de este pedido descontando pagos específicos
+      const pagadoEnvio=pagosCC.filter(p=>p.envioIds?.includes(e.id)).reduce((s,p)=>{
+        if(p.montosPorEnvio)return s+(p.montosPorEnvio[e.id]||0);
+        if((p.envioIds?.length||0)===1)return s+(p.monto||0);
+        return s;
+      },0);
+      const saldoE=Math.max(0,montoOrig-pagadoEnvio);
+      if(saldoE<=0)return; // ya pago, no cuenta para fechaMin
       const nombre=e.clienteNombre||"Sin nombre";
       const fecha=e.fecha||e.fechaVenta||"";
       if(!map[nombre])map[nombre]={nombre,deuda:0,fechaMin:fecha};
-      map[nombre].deuda+=monto;
+      map[nombre].deuda+=saldoE;
       if(fecha&&(!map[nombre].fechaMin||fecha<map[nombre].fechaMin))map[nombre].fechaMin=fecha;
-    });
-    // Descontar pagos CC ya registrados
-    pagosCC.forEach(p=>{
-      const nombre=p.clienteNombre||"";
-      if(map[nombre])map[nombre].deuda=Math.max(0,map[nombre].deuda-(p.monto||0));
     });
     return Object.values(map).filter(c=>c.deuda>0).map(c=>{
       const dias=c.fechaMin?Math.max(0,Math.floor((new Date(hoy)-new Date(c.fechaMin+"T00:00:00"))/86400000)):0;
