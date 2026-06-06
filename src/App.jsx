@@ -4892,6 +4892,7 @@ function VistaChofer({envios,setEnvios,sesion,lc}){
 
 function TabTablero({envios,lc,zc,pagosCC=[]}){
   const hoy=fechaHoy();
+  const [ccOpen,setCcOpen]=useState(true);
   const tmap=buildTarifaMap(zc);
   const getImp=e=>calcImp(e,tmap,lc,zc);
 
@@ -4944,15 +4945,20 @@ function TabTablero({envios,lc,zc,pagosCC=[]}){
       if(!esTNCC&&!esManualCC)return;
       const monto=esTNCC?(e.cobranza>0?e.cobranza:e.importeOrden):e.importeCC;
       const nombre=e.clienteNombre||"Sin nombre";
-      if(!map[nombre])map[nombre]={nombre,deuda:0};
+      const fecha=e.fecha||e.fechaVenta||"";
+      if(!map[nombre])map[nombre]={nombre,deuda:0,fechaMin:fecha};
       map[nombre].deuda+=monto;
+      if(fecha&&(!map[nombre].fechaMin||fecha<map[nombre].fechaMin))map[nombre].fechaMin=fecha;
     });
     // Descontar pagos CC ya registrados
     pagosCC.forEach(p=>{
       const nombre=p.clienteNombre||"";
       if(map[nombre])map[nombre].deuda=Math.max(0,map[nombre].deuda-(p.monto||0));
     });
-    return Object.values(map).filter(c=>c.deuda>0).sort((a,b)=>b.deuda-a.deuda);
+    return Object.values(map).filter(c=>c.deuda>0).map(c=>{
+      const dias=c.fechaMin?Math.max(0,Math.floor((new Date(hoy)-new Date(c.fechaMin+"T00:00:00"))/86400000)):0;
+      return{...c,dias};
+    }).sort((a,b)=>b.dias-a.dias);
   })();
   const totalCC=ccPorCliente.reduce((s,c)=>s+c.deuda,0);
 
@@ -5163,20 +5169,43 @@ function TabTablero({envios,lc,zc,pagosCC=[]}){
             <div style={{marginTop:"1rem"}}>
               <div style={{color:"#4b5563",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",marginBottom:"8px"}}>Cuentas corrientes pendientes (clientes)</div>
               <div style={{...cardSt,padding:0,overflow:"hidden"}}>
-                <div style={{background:"#12172a",padding:"8px 14px",borderBottom:"1px solid #252d40",display:"grid",gridTemplateColumns:"1fr auto",gap:"8px"}}>
-                  <div style={{color:"#a78bfa",fontSize:"0.58rem",fontWeight:700,textTransform:"uppercase"}}>Cliente</div>
-                  <div style={{color:"#a78bfa",fontSize:"0.58rem",fontWeight:700,textTransform:"uppercase",textAlign:"right"}}>Saldo</div>
+                {/* Header colapsable */}
+                <div onClick={()=>setCcOpen(p=>!p)} style={{background:"#12172a",padding:"8px 14px",borderBottom:ccOpen?"1px solid #252d40":"none",display:"flex",alignItems:"center",gap:"10px",cursor:"pointer",userSelect:"none"}}>
+                  <span style={{color:"#a78bfa",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",flex:1}}>
+                    {ccPorCliente.length} cliente{ccPorCliente.length!==1?"s":""} · <span style={{color:"#a78bfa",fontWeight:800}}>{fmt(totalCC)}</span>
+                  </span>
+                  <span style={{color:"#4b5563",fontSize:"0.7rem"}}>{ccOpen?"▲":"▼"}</span>
                 </div>
-                {ccPorCliente.map((c,i)=>(
-                  <div key={i} style={{display:"grid",gridTemplateColumns:"1fr auto",gap:"8px",padding:"7px 14px",borderBottom:"1px solid #1a1f2e",alignItems:"center"}}>
-                    <div style={{color:"#e2e8f0",fontSize:"0.78rem",fontWeight:600}}>{c.nombre}</div>
-                    <div style={{color:"#a78bfa",fontWeight:700,fontSize:"0.78rem",textAlign:"right"}}>{fmt(c.deuda)}</div>
-                  </div>
-                ))}
-                <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:"8px",padding:"8px 14px",background:"#12172a",borderTop:"2px solid #252d40"}}>
-                  <span style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase"}}>Total CC</span>
-                  <div style={{textAlign:"right",color:"#a78bfa",fontWeight:800,fontSize:"0.88rem"}}>{fmt(totalCC)}</div>
-                </div>
+                {ccOpen&&(
+                  <>
+                    <div style={{background:"#12172a",padding:"5px 14px",borderBottom:"1px solid #1a1f2e",display:"grid",gridTemplateColumns:"1fr 60px auto",gap:"8px"}}>
+                      <div style={{color:"#6b7280",fontSize:"0.58rem",fontWeight:700,textTransform:"uppercase"}}>Cliente</div>
+                      <div style={{color:"#6b7280",fontSize:"0.58rem",fontWeight:700,textTransform:"uppercase",textAlign:"center"}}>Días</div>
+                      <div style={{color:"#6b7280",fontSize:"0.58rem",fontWeight:700,textTransform:"uppercase",textAlign:"right"}}>Saldo</div>
+                    </div>
+                    {ccPorCliente.map((c,i)=>{
+                      const vencido=c.dias>=30;
+                      const revisar=c.dias>=15&&c.dias<30;
+                      return(
+                        <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 60px auto",gap:"8px",padding:"7px 14px",borderBottom:"1px solid #1a1f2e",alignItems:"center",background:vencido?"#1c0a1c":revisar?"#130d2a":"transparent"}}>
+                          <div style={{color:"#e2e8f0",fontSize:"0.78rem",fontWeight:600}}>{c.nombre}</div>
+                          <div style={{textAlign:"center"}}>
+                            {c.dias>0
+                              ?<span style={{background:vencido?"#3b0764":revisar?"#1e1b4b":"#1a1f2e",color:vencido?"#e879f9":revisar?"#a78bfa":"#6b7280",border:`1px solid ${vencido?"#7e22ce":revisar?"#4c1d95":"#252d40"}`,padding:"1px 6px",borderRadius:"4px",fontSize:"9px",fontWeight:700}}>{c.dias}d</span>
+                              :<span style={{color:"#374151",fontSize:"9px"}}>—</span>
+                            }
+                          </div>
+                          <div style={{color:vencido?"#e879f9":"#a78bfa",fontWeight:700,fontSize:"0.78rem",textAlign:"right"}}>{fmt(c.deuda)}</div>
+                        </div>
+                      );
+                    })}
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 60px auto",gap:"8px",padding:"8px 14px",background:"#12172a",borderTop:"2px solid #252d40"}}>
+                      <span style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase"}}>Total</span>
+                      <div/>
+                      <div style={{textAlign:"right",color:"#a78bfa",fontWeight:800,fontSize:"0.88rem"}}>{fmt(totalCC)}</div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
