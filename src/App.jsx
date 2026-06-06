@@ -3318,9 +3318,9 @@ const CP_P_INIT = {"1601":"La Plata","1607":"San Isidro","1608":"Tigre","1609":"
 // ════════════════════════════════════════════════════════════════════
 // TAB CUENTAS CORRIENTES
 // ════════════════════════════════════════════════════════════════════
-function TabCtasCtes({envios,lc,sesion=null}){
-  const [pagos,setPagos]=useState([]);
-  const [loadingPagos,setLoadingPagos]=useState(true);
+function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[]}){
+  const [pagos,setPagos]=useState(pagosInicial);
+  const [loadingPagos,setLoadingPagos]=useState(pagosInicial.length===0);
   const [vistaCliente,setVistaCliente]=useState(null);
   const [filtro,setFiltro]=useState("deuda");
   const [busqueda,setBusqueda]=useState("");
@@ -4890,7 +4890,7 @@ function VistaChofer({envios,setEnvios,sesion,lc}){
   );
 }
 
-function TabTablero({envios,lc,zc}){
+function TabTablero({envios,lc,zc,pagosCC=[]}){
   const hoy=fechaHoy();
   const tmap=buildTarifaMap(zc);
   const getImp=e=>calcImp(e,tmap,lc,zc);
@@ -4924,7 +4924,7 @@ function TabTablero({envios,lc,zc}){
 
   // Cobranzas acumuladas
   const cobPorLog=logActivas.map(l =>{
-    const envsLog=envios.filter(e=>e.trans===l&&e.cobranza!==null&&e.cobranza>0);
+    const envsLog=envios.filter(e=>e.trans===l&&e.cobranza!==null&&e.cobranza>0&&getEstado(e)!=="cancelado");
     const deudaAnterior=envsLog.filter(e=>{const f=e.fecha||"";return f<hoy&&!e.cobranzaRecibida;}).reduce((s,e)=>s+(e.cobranza||0),0);
     const diasDeuda=envsLog.filter(e=>{const f=e.fecha||"";return f<hoy&&!e.cobranzaRecibida;}).reduce((max,e)=>{
       const dias=Math.floor((new Date(hoy)-new Date(e.fecha||hoy))/86400000);
@@ -4933,6 +4933,28 @@ function TabTablero({envios,lc,zc}){
     const saleHoy=envsLog.filter(e=>(e.fecha||"")==hoy&&!e.cobranzaRecibida).reduce((s,e)=>s+(e.cobranza||0),0);
     return{l,deudaAnterior,saleHoy,total:deudaAnterior+saleHoy,diasDeuda};
   }).filter(x =>x.total>0||x.saleHoy>0);
+
+  // CC pendiente por cliente (deduciendo pagos ya realizados)
+  const ccPorCliente=(()=>{
+    const map={};
+    envios.forEach(e=>{
+      if(getEstado(e)==="cancelado")return;
+      const esTNCC=e.pagoEstado==="cuenta_corriente"&&e.importeOrden>0;
+      const esManualCC=e.esCC&&e.importeCC>0&&e.pagoEstado!=="pagado";
+      if(!esTNCC&&!esManualCC)return;
+      const monto=esTNCC?(e.cobranza>0?e.cobranza:e.importeOrden):e.importeCC;
+      const nombre=e.clienteNombre||"Sin nombre";
+      if(!map[nombre])map[nombre]={nombre,deuda:0};
+      map[nombre].deuda+=monto;
+    });
+    // Descontar pagos CC ya registrados
+    pagosCC.forEach(p=>{
+      const nombre=p.clienteNombre||"";
+      if(map[nombre])map[nombre].deuda=Math.max(0,map[nombre].deuda-(p.monto||0));
+    });
+    return Object.values(map).filter(c=>c.deuda>0).sort((a,b)=>b.deuda-a.deuda);
+  })();
+  const totalCC=ccPorCliente.reduce((s,c)=>s+c.deuda,0);
 
   const cardSt={background:"#1a1f2e",border:"1px solid #252d40",borderRadius:"12px",padding:"14px 16px"};
   const pillFlex={background:"#0d1c04",color:"#84cc16",border:"1px solid #84cc16",padding:"2px 8px",borderRadius:"5px",fontSize:"10px",fontWeight:700};
@@ -5092,7 +5114,7 @@ function TabTablero({envios,lc,zc}){
         </div>
 
         <div>
-          <div style={{color:"#4b5563",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",marginBottom:"8px"}}>Cobranzas por logística</div>
+          <div style={{color:"#4b5563",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",marginBottom:"8px"}}>Cobranzas logística + CC clientes</div>
           <div style={{...cardSt,padding:0,overflow:"hidden"}}>
             <div style={{background:"#12172a",padding:"8px 14px",borderBottom:"1px solid #252d40",display:"grid",gridTemplateColumns:"80px 1fr 1fr 1fr",gap:"8px"}}>
               {["Logística","Deuda anterior","Sale hoy","Total"].map((h,i)=>(
@@ -5135,6 +5157,29 @@ function TabTablero({envios,lc,zc}){
               </div>;
             })()}
           </div>
+
+          {/* Sección CC clientes */}
+          {ccPorCliente.length>0&&(
+            <div style={{marginTop:"1rem"}}>
+              <div style={{color:"#4b5563",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",marginBottom:"8px"}}>Cuentas corrientes pendientes (clientes)</div>
+              <div style={{...cardSt,padding:0,overflow:"hidden"}}>
+                <div style={{background:"#12172a",padding:"8px 14px",borderBottom:"1px solid #252d40",display:"grid",gridTemplateColumns:"1fr auto",gap:"8px"}}>
+                  <div style={{color:"#a78bfa",fontSize:"0.58rem",fontWeight:700,textTransform:"uppercase"}}>Cliente</div>
+                  <div style={{color:"#a78bfa",fontSize:"0.58rem",fontWeight:700,textTransform:"uppercase",textAlign:"right"}}>Saldo</div>
+                </div>
+                {ccPorCliente.map((c,i)=>(
+                  <div key={i} style={{display:"grid",gridTemplateColumns:"1fr auto",gap:"8px",padding:"7px 14px",borderBottom:"1px solid #1a1f2e",alignItems:"center"}}>
+                    <div style={{color:"#e2e8f0",fontSize:"0.78rem",fontWeight:600}}>{c.nombre}</div>
+                    <div style={{color:"#a78bfa",fontWeight:700,fontSize:"0.78rem",textAlign:"right"}}>{fmt(c.deuda)}</div>
+                  </div>
+                ))}
+                <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:"8px",padding:"8px 14px",background:"#12172a",borderTop:"2px solid #252d40"}}>
+                  <span style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase"}}>Total CC</span>
+                  <div style={{textAlign:"right",color:"#a78bfa",fontWeight:800,fontSize:"0.88rem"}}>{fmt(totalCC)}</div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -5962,6 +6007,8 @@ export default function App(){
   const [syncLoading,setSyncLoading]=useState(true);
   const [fileName,setFileName]=useState("");
   const [fechaImport,setFechaImport]=useState(fechaHoy());
+  const [pagosCC,setPagosCC]=useState([]);
+  useEffect(()=>{const unsub=onSnapshot(collection(db,"pagosCC"),snap=>{setPagosCC(snap.docs.map(d=>({...d.data(),_id:d.id})));});return()=>unsub();},[]);
   const [toast,setToast]=useState("");
   const mostrarToast=msg=>{setToast(msg);setTimeout(()=>setToast(""),2500);};
   const [alertas,setAlertas]=useState([]);
@@ -6248,7 +6295,7 @@ export default function App(){
       <ScrollTop/>
       <div style={{padding:"0.85rem 1rem",maxWidth:"1400px",margin:"0 auto"}}>
         {error&&<div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.8rem",background:"#1c0a0a",border:"1px solid #7f1d1d",color:"#fca5a5",fontSize:"0.8rem"}}>{error}</div>}
-        {tab==="tablero" &&<TabTablero envios={envios} lc={lc} zc={zc}/>}
+        {tab==="tablero" &&<TabTablero envios={envios} lc={lc} zc={zc} pagosCC={pagosCC}/>}
         {tab==="envios"  &&<TabEnvios   envios={envios.filter(e=>e.origen!=="ML")} setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin} sesion={sesion}/>}
         {tab==="flex"    &&<TabEnvios   envios={envios.filter(e=>e.origen==="ML")}  setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin} sesion={sesion} mostrarResumenFlex={true}/>}
         {tab==="imprimir"&&<TabImprimir envios={envios} setEnvios={setEnvios} zc={zc} lc={lc}/>}
@@ -6257,7 +6304,7 @@ export default function App(){
         {tab==="informe"     &&<TabInforme     envios={envios} zc={zc} lc={lc}/>}
         {tab==="liquidacion"    &&<TabLiquidacion    envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>}
         {tab==="liquidacionlog" &&<TabLiquidacionLog envios={envios} setEnvios={setEnvios} zc={zc} lc={lc} esAdmin={esAdmin} sesion={sesion}/>}
-        {tab==="ctasctes"       &&<TabCtasCtes       envios={envios} lc={lc} sesion={sesion}/>}
+        {tab==="ctasctes"       &&<TabCtasCtes       envios={envios} lc={lc} sesion={sesion} pagosInicial={pagosCC}/>}
         {tab==="localidades" &&<TabLocalidades cpExtra={cpExtra} setCpExtra={setCpExtra}/>}
         {tab==="usuarios"   &&<TabUsuarios lc={lc} setLc={setLcPersist}/>}
         {tab==="expedicion" &&<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>}
