@@ -3502,18 +3502,18 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[]}){
                 Limite alerta: <input type="number" min="1" max="90" value={c.limite} onChange={ev=>setLimiteCliente(c.key,ev.target.value)} style={{...S.input,width:"48px",padding:"1px 6px",fontSize:"0.72rem",height:"20px",display:"inline-block"}}/> días
               </div>
             </div>
-            <div style={{display:"flex",gap:"0.5rem",flexWrap:"wrap"}}>
+            <div style={{display:"flex",gap:"0.75rem",flexWrap:"wrap",alignItems:"flex-end"}}>
               <div style={{textAlign:"right"}}>
-                <div style={{fontSize:"0.62rem",color:"#6b7280",textTransform:"uppercase",fontWeight:700}}>Deuda total</div>
-                <div style={{fontSize:"1.1rem",fontWeight:800,color:"#f59e0b"}}>{fmt(c.deudaTotal)}</div>
+                <div style={{fontSize:"0.62rem",color:"#6b7280",textTransform:"uppercase",fontWeight:700}}>Total pedidos</div>
+                <div style={{fontSize:"0.85rem",fontWeight:600,color:"#6b7280"}}>{fmt(c.deudaTotal)}</div>
               </div>
               <div style={{textAlign:"right"}}>
                 <div style={{fontSize:"0.62rem",color:"#6b7280",textTransform:"uppercase",fontWeight:700}}>Cobrado</div>
-                <div style={{fontSize:"1.1rem",fontWeight:800,color:"#10b981"}}>{fmt(c.cobrado)}</div>
+                <div style={{fontSize:"0.85rem",fontWeight:600,color:"#10b981"}}>{fmt(c.cobrado)}</div>
               </div>
               <div style={{textAlign:"right"}}>
-                <div style={{fontSize:"0.62rem",color:"#6b7280",textTransform:"uppercase",fontWeight:700}}>Saldo</div>
-                <div style={{fontSize:"1.1rem",fontWeight:800,color:c.saldo>0?"#ef4444":"#10b981"}}>{fmt(c.saldo)}</div>
+                <div style={{fontSize:"0.62rem",color:"#6b7280",textTransform:"uppercase",fontWeight:700}}>Pendiente</div>
+                <div style={{fontSize:"1.25rem",fontWeight:800,color:c.saldo>0?"#ef4444":"#10b981"}}>{fmt(c.saldo)}</div>
               </div>
             </div>
           </div>
