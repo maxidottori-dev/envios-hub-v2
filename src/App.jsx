@@ -5042,7 +5042,7 @@ function TabClientes({envios,lc,pagosCC=[],facturaClientes={},setFacturaCliente=
           </div>
           {enviosOrdenados.map((e,i)=>{
             const est=getEstado(e);
-            const estC=EST_COLORS[est]||{label:est,bg:"#1a1f2e",t:"#6b7280"};
+            const estC=ESTADO_C[est]||ESTADO_C.sin_asignar;
             return(
               <div key={e.id} style={{padding:"0.6rem 1rem",borderBottom:i<enviosOrdenados.length-1?"1px solid #1a1f2e":"none",display:"flex",gap:"0.75rem",alignItems:"center",flexWrap:"wrap",opacity:est==="cancelado"?0.45:1}}>
                 <div style={{flex:1,minWidth:"200px"}}>
