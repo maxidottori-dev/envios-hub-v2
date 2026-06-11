@@ -3205,15 +3205,17 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
                     {e.trans && <Bdg label={e.trans} bg={lci?.bg || "#1a1f2e"} t={lci?.color || "#6b7280"} />}
                     {e.turno && <Bdg label={e.turno} bg={TURNO_C[e.turno]?.bg || "#130d2a"} t={TURNO_C[e.turno]?.c || "#a78bfa"} />}
                     {e.fechaVenta && <Bdg label={"V:"+fmtCorta(e.fechaVenta)} bg="#0d1a12" t="#4ade80" />}
-                    {e.fecha && <Bdg label={"E:"+fmtCorta(e.fecha)} bg="#12172a" t="#6b7280" />}
+                    {e.fecha && <Bdg label={"E:"+fmtCorta(e.fecha)} bg="#0c1628" t="#93c5fd" />}
                     {recibido && <Bdg label={"Recibido" + (fecha ? " " + fmtCorta(fecha) : "") + (seccion==="cobranzas"&&e.cobranzaRecibidaPor ? " · " + e.cobranzaRecibidaPor.nombre : seccion==="retiros"&&e.retiroRecibidoPor ? " · " + e.retiroRecibidoPor.nombre : "")} bg="#041f14" t="#34d399" />}
                   </div>
                   <div style={{ color: "#e5e7eb", fontSize: "0.82rem", lineHeight: 1.35 }}>{e.direccion}</div>
-                  <div style={{ color: "#374151", fontSize: "0.68rem", marginTop: "2px" }}>
-                    <span style={{ fontFamily: "monospace" }}>...{e.id.slice(-10)}</span>
-                    {e.nroOrdenTN&&<><span style={{margin:"0 4px"}}>·</span><span style={{fontFamily:"monospace"}}>#{e.nroOrdenTN}</span></>}
-                    <span style={{ margin: "0 4px" }}>·</span>
-                    <span>{e.partido}</span>
+                  <div style={{ display:"flex", gap:"6px", alignItems:"center", marginTop:"3px", flexWrap:"wrap" }}>
+                    {e.nroOrdenTN
+                      ? <span style={{fontFamily:"monospace",fontWeight:700,fontSize:"0.75rem",color:"#7dd3fc"}}>#{e.nroOrdenTN}</span>
+                      : <span style={{fontFamily:"monospace",fontSize:"0.7rem",color:"#64748b"}}>{e.id.slice(-10)}</span>
+                    }
+                    {e.nroSeguimiento&&<span style={{fontFamily:"monospace",fontSize:"0.7rem",color:"#94a3b8"}}>{e.nroSeguimiento}</span>}
+                    {e.partido&&<span style={{fontSize:"0.72rem",color:"#9ca3af"}}>· {e.partido}</span>}
                   </div>
                   {seccion === "cobranzas" && e.cambio !== null && (
                     <div style={{ color: "#ec4899", fontSize: "0.72rem", marginTop: "2px" }}>Cambio: {e.cambio}</div>
@@ -3319,8 +3321,8 @@ const CP_P_INIT = {"1601":"La Plata","1607":"San Isidro","1608":"Tigre","1609":"
 // TAB CUENTAS CORRIENTES
 // ════════════════════════════════════════════════════════════════════
 function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[]}){
-  const [pagos,setPagos]=useState(pagosInicial);
-  const [loadingPagos,setLoadingPagos]=useState(pagosInicial.length===0);
+  const pagos=pagosInicial; // real-time desde App(), sin listener duplicado
+  const loadingPagos=false;
   const [vistaCliente,setVistaCliente]=useState(null);
   const [filtro,setFiltro]=useState("deuda");
   const [busqueda,setBusqueda]=useState("");
@@ -3356,14 +3358,6 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[]}){
       setSyncPagos({error:e.message});
     }
   };
-
-  useEffect(()=>{
-    const unsub=onSnapshot(collection(db,"pagosCC"),snap=>{
-      setPagos(snap.docs.map(d=>({...d.data(),_id:d.id})));
-      setLoadingPagos(false);
-    });
-    return()=>unsub();
-  },[]);
 
   useEffect(()=>{
     const unsub=onSnapshot(doc(db,"config","ctasCtes"),snap=>{
