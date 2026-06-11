@@ -1064,7 +1064,7 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
   );
 }
 
-function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null,mostrarResumenFlex=false}){
+function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null,mostrarResumenFlex=false,facturaClientes={}}){
   const hoy=fechaHoy();
   const [modFecha,setModFecha]=useState("hoy");
   const [rangoD,setRangoD]=useState(hoy);
@@ -1405,6 +1405,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                     {e.estadoLiq==="no_abonado"&&<Bdg label="No abonado" bg="#1c1400" t="#f59e0b" style={{border:"1px solid #f59e0b"}}/>}
                     {getPagoEstado(e)==="pendiente"&&<Bdg label="Pago pendiente" bg="#1c0a00" t="#fb923c" style={{border:"1px solid #fb923c"}}/>}
                     {getPagoEstado(e)==="cuenta_corriente"&&<Bdg label="Cta. Corriente" bg="#130d2a" t="#a78bfa"/>}
+                    {facturaClientes[mkClienteKey(e.clienteNombre)]&&e.trans&&!e.nroFactura&&<Bdg label="FC ⚠" bg="#1c0d00" t="#fb923c" style={{border:"1px solid #c2410c",fontWeight:800}}/>}
                   </div>
                   {/* Nro orden + Nombre en la misma linea, luego direccion */}
                   {esTN&&<div style={{display:"flex",gap:"8px",alignItems:"baseline",marginBottom:"1px",overflow:"hidden"}}>
@@ -3324,10 +3325,15 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
 const CP_P_INIT = {"1601":"La Plata","1607":"San Isidro","1608":"Tigre","1609":"San Isidro","1610":"Tigre","1611":"Tigre","1612":"Malvinas Argentinas","1613":"Malvinas Argentinas","1614":"Malvinas Argentinas","1615":"Malvinas Argentinas","1616":"Malvinas Argentinas","1617":"Tigre","1618":"Tigre","1619":"Escobar","1620":"Escobar","1621":"Tigre","1622":"Escobar","1623":"Escobar","1624":"Tigre","1625":"Escobar","1626":"Escobar","1627":"Escobar","1628":"Escobar","1629":"Pilar","1630":"Pilar","1631":"Pilar","1632":"Pilar","1633":"Pilar","1634":"Pilar","1635":"Pilar","1636":"Vicente Lopez","1637":"Vicente Lopez","1638":"Vicente Lopez","1640":"San Isidro","1641":"San Isidro","1642":"San Isidro","1643":"San Isidro","1644":"San Fernando","1645":"San Fernando","1646":"San Fernando","1647":"Zarate","1648":"Tigre","1649":"San Fernando","1650":"San Martin","1651":"San Martin","1653":"San Martin","1655":"San Martin","1657":"San Martin","1659":"San Miguel","1660":"Jose C Paz","1661":"San Miguel","1662":"San Miguel","1663":"San Miguel","1664":"Pilar","1665":"Jose C Paz","1666":"Jose C Paz","1667":"Pilar","1669":"Pilar","1670":"Tigre","1671":"Tigre","1672":"San Martin","1674":"Tres de Febrero","1675":"Tres de Febrero","1676":"Tres de Febrero","1678":"Tres de Febrero","1682":"Tres de Febrero","1683":"Tres de Febrero","1684":"Moron","1685":"Moron","1686":"Hurlingham","1687":"Tres de Febrero","1688":"Hurlingham","1689":"La Matanza Norte","1692":"Tres de Febrero","1702":"Tres de Febrero","1703":"Tres de Febrero","1704":"La Matanza Norte","1706":"Moron","1707":"Moron","1708":"Moron","1712":"Moron","1713":"Ituzaingo","1714":"Ituzaingo","1715":"Ituzaingo","1716":"Merlo","1718":"Merlo","1721":"Merlo","1722":"Merlo","1723":"Merlo","1724":"Merlo","1727":"Marcos Paz","1736":"Moreno","1738":"Moreno","1740":"Moreno","1742":"Moreno","1743":"Moreno","1744":"Moreno","1745":"Moreno","1746":"Moreno","1748":"Gral. Rodriguez","1749":"Gral. Rodriguez","1751":"La Matanza Norte","1752":"La Matanza Norte","1753":"La Matanza Norte","1754":"La Matanza Norte","1755":"La Matanza Norte","1757":"La Matanza Sur","1758":"La Matanza Sur","1759":"La Matanza Sur","1761":"La Matanza Norte","1763":"La Matanza Sur","1764":"La Matanza Sur","1765":"La Matanza Sur","1766":"La Matanza Norte","1768":"La Matanza Norte","1770":"La Matanza Norte","1771":"La Matanza Norte","1772":"La Matanza Norte","1774":"La Matanza Norte","1778":"La Matanza Norte","1785":"La Matanza Norte","1786":"La Matanza Sur","1801":"Ezeiza","1802":"Ezeiza","1803":"Ezeiza","1804":"Ezeiza","1805":"Esteban Echeverria","1806":"Ezeiza","1807":"Ezeiza","1808":"Canuelas","1812":"Canuelas","1813":"Ezeiza","1814":"Canuelas","1815":"Canuelas","1816":"Canuelas","1821":"Lomas de Zamora","1822":"Lanus","1823":"Lanus","1824":"Lanus","1825":"Lanus","1826":"Lanus","1827":"Lomas de Zamora","1828":"Lomas de Zamora","1829":"Lomas de Zamora","1831":"Lomas de Zamora","1832":"Lomas de Zamora","1833":"Lomas de Zamora","1834":"Lomas de Zamora","1835":"Lomas de Zamora","1836":"Lomas de Zamora","1837":"Berazategui","1838":"Esteban Echeverria","1839":"Esteban Echeverria","1840":"Quilmes","1841":"Esteban Echeverria","1842":"Esteban Echeverria","1843":"Almirante Brown","1844":"Almirante Brown","1845":"Almirante Brown","1846":"Almirante Brown","1847":"Almirante Brown","1848":"Almirante Brown","1849":"Almirante Brown","1851":"Almirante Brown","1852":"Almirante Brown","1853":"Florencio Varela","1854":"Almirante Brown","1855":"Almirante Brown","1856":"Almirante Brown","1858":"Presidente Peron","1859":"Florencio Varela","1860":"Berazategui","1861":"Berazategui","1862":"Presidente Peron","1863":"Florencio Varela","1864":"San Vicente","1865":"San Vicente","1867":"Florencio Varela","1868":"Avellaneda","1869":"Avellaneda","1870":"Avellaneda","1871":"Avellaneda","1872":"Avellaneda","1873":"Avellaneda","1874":"Avellaneda","1875":"Avellaneda","1876":"Quilmes","1877":"Quilmes","1878":"Quilmes","1879":"Quilmes","1880":"Berazategui","1881":"Quilmes","1882":"Quilmes","1883":"Quilmes","1884":"Berazategui","1885":"Berazategui","1886":"Berazategui","1887":"Florencio Varela","1888":"Florencio Varela","1889":"Florencio Varela","1890":"Berazategui","1891":"Florencio Varela","1893":"Berazategui","1894":"La Plata","1895":"La Plata","1896":"La Plata","1897":"La Plata","1900":"La Plata","1901":"La Plata","1902":"La Plata","1903":"La Plata","1904":"La Plata","1905":"La Plata","1906":"La Plata","1907":"La Plata","1908":"La Plata","1909":"La Plata","1910":"La Plata","1912":"La Plata","1914":"La Plata","1923":"Berisso","1924":"Berisso","1925":"Ensenada","1926":"Ensenada","1927":"Ensenada","1929":"Berisso","1931":"Ensenada","1984":"San Vicente","2800":"Zarate","2801":"Zarate","2802":"Zarate","2804":"Campana","2805":"Campana","2806":"Zarate","2808":"Zarate","2812":"Campana","2814":"Ex.de la Cruz","2816":"Campana","6700":"Lujan","6701":"Lujan","6702":"Lujan","6703":"Ex.de la Cruz","6706":"Lujan","6708":"Lujan","6712":"Lujan"};
 
 
+// Utilidad compartida: clave normalizada de cliente
+function mkClienteKey(nombre){
+  return (nombre||"").toLowerCase().trim().replace(/\s+/g,"_")||null;
+}
+
 // ════════════════════════════════════════════════════════════════════
 // TAB CUENTAS CORRIENTES
 // ════════════════════════════════════════════════════════════════════
-function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[]}){
+function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},setFacturaCliente=()=>{}}){
   const pagos=pagosInicial; // real-time desde App(), sin listener duplicado
   const loadingPagos=false;
   const [vistaCliente,setVistaCliente]=useState(null);
@@ -3380,11 +3386,8 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[]}){
     setDoc(doc(db,"config","ctasCtes"),{limites:next},{merge:true}).catch(console.error);
   };
 
-  // Derivar clienteKey normalizado
-  const getClienteKey=(e)=>{
-    const nombre=(e.clienteNombre||"").toLowerCase().trim().replace(/\s+/g,"_");
-    return nombre||"sin_nombre_"+e.id;
-  };
+  // Derivar clienteKey normalizado (usa helper de módulo)
+  const getClienteKey=(e)=>mkClienteKey(e.clienteNombre)||"sin_nombre_"+e.id;
   const getClienteNombre=(e)=>e.clienteNombre||"Sin nombre ("+e.id.slice(-6)+")";
 
   // Calcular deuda de cada envio
@@ -3498,9 +3501,12 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[]}){
           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:"0.5rem",marginBottom:"0.75rem"}}>
             <div>
               <div style={{fontWeight:800,fontSize:"1rem",color:"#e5e7eb"}}>{c.nombre}</div>
-              <div style={{fontSize:"0.72rem",color:"#6b7280",marginTop:"2px"}}>
+              <div style={{fontSize:"0.72rem",color:"#6b7280",marginTop:"2px",display:"flex",flexWrap:"wrap",gap:"8px",alignItems:"center"}}>
                 {c.logisticas.length>0&&<span>Logisticas: {c.logisticas.join(", ")} · </span>}
-                Limite alerta: <input type="number" min="1" max="90" value={c.limite} onChange={ev=>setLimiteCliente(c.key,ev.target.value)} style={{...S.input,width:"48px",padding:"1px 6px",fontSize:"0.72rem",height:"20px",display:"inline-block"}}/> días
+                <span>Limite alerta: <input type="number" min="1" max="90" value={c.limite} onChange={ev=>setLimiteCliente(c.key,ev.target.value)} style={{...S.input,width:"48px",padding:"1px 6px",fontSize:"0.72rem",height:"20px",display:"inline-block"}}/> días</span>
+                <button onClick={()=>setFacturaCliente(c.key,!facturaClientes[c.key])} style={{...S.btnSm(!!facturaClientes[c.key],"#f97316"),fontSize:"0.65rem",padding:"1px 8px",border:"1px solid "+(facturaClientes[c.key]?"#f97316":"#374151")}}>
+                  🧾 Factura impresa {facturaClientes[c.key]?"✓":"—"}
+                </button>
               </div>
             </div>
             <div style={{display:"flex",gap:"0.75rem",flexWrap:"wrap",alignItems:"flex-end"}}>
@@ -4901,6 +4907,226 @@ function VistaChofer({envios,setEnvios,sesion,lc}){
   );
 }
 
+// ════════════════════════════════════════════════════════════════════
+// TAB CLIENTES
+// ════════════════════════════════════════════════════════════════════
+function TabClientes({envios,lc,pagosCC=[],facturaClientes={},setFacturaCliente=()=>{},sesion=null}){
+  const fmt=(n)=>"$"+Math.round(n).toLocaleString("es-AR");
+  const [busqueda,setBusqueda]=useState("");
+  const [vistaCliente,setVistaCliente]=useState(null);
+  const [clientesMeta,setClientesMeta]=useState({}); // {key:{telefono,notas}}
+  const [editando,setEditando]=useState({}); // {key:{telefono,notas}}
+  const [guardando,setGuardando]=useState({});
+
+  // Cargar metadata editable de clientes desde Firestore
+  useEffect(()=>{
+    const unsub=onSnapshot(collection(db,"clientes"),snap=>{
+      const m={};
+      snap.docs.forEach(d=>{ m[d.id]={...d.data(),_id:d.id}; });
+      setClientesMeta(m);
+    });
+    return()=>unsub();
+  },[]);
+
+  const guardarMeta=async(key,data)=>{
+    setGuardando(p=>({...p,[key]:true}));
+    try{ await setDoc(doc(db,"clientes",key),data,{merge:true}); }
+    catch(e){ console.error(e); }
+    finally{ setGuardando(p=>({...p,[key]:false})); }
+  };
+
+  // Solo Manual + TN (sin ML)
+  const enviosFiltrados=useMemo(()=>envios.filter(e=>e.origen!=="ML"),[envios]);
+
+  // Agrupar por clienteKey
+  const clientes=useMemo(()=>{
+    const map={};
+    enviosFiltrados.forEach(e=>{
+      const key=mkClienteKey(e.clienteNombre)||"sin_nombre_"+e.id;
+      if(!map[key])map[key]={key,nombre:e.clienteNombre||"Sin nombre",envios:[],origenes:new Set(),fechaUltimo:"",telefono:e.telefono||""};
+      map[key].envios.push(e);
+      if(e.origen)map[key].origenes.add(e.origen);
+      if(e.telefono&&!map[key].telefono)map[key].telefono=e.telefono;
+      const f=e.fechaVenta||e.fecha||"";
+      if(f>map[key].fechaUltimo)map[key].fechaUltimo=f;
+    });
+    return Object.values(map).sort((a,b)=>b.fechaUltimo.localeCompare(a.fechaUltimo));
+  },[enviosFiltrados]);
+
+  // Calcular saldo CC por cliente
+  const saldoCC=useMemo(()=>{
+    const res={};
+    clientes.forEach(c=>{
+      let deuda=0;
+      c.envios.forEach(e=>{
+        if(e.estado==="cancelado")return;
+        if(e.pagoEstado==="cuenta_corriente"&&e.importeOrden>0)deuda+=(e.cobranza>0?e.cobranza:e.importeOrden);
+        else if(e.esCC&&e.importeCC>0&&e.pagoEstado!=="pagado")deuda+=e.importeCC;
+      });
+      if(deuda===0){res[c.key]=0;return;}
+      const cobrado=pagosCC.filter(p=>p.clienteKey===c.key).reduce((s,p)=>s+(p.monto||0),0);
+      res[c.key]=Math.max(0,deuda-cobrado);
+    });
+    return res;
+  },[clientes,pagosCC]);
+
+  const norm=s=>(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+  const clientesFiltrados=useMemo(()=>{
+    if(!busqueda)return clientes;
+    const s=norm(busqueda);
+    return clientes.filter(c=>norm(c.nombre).includes(s)||(c.telefono||"").includes(s));
+  },[clientes,busqueda]);
+
+  // ── Vista detalle de un cliente ──
+  if(vistaCliente){
+    const c=clientes.find(cl=>cl.key===vistaCliente);
+    if(!c)return null;
+    const meta=clientesMeta[c.key]||{};
+    const edit=editando[c.key]||{telefono:meta.telefono||c.telefono||"",notas:meta.notas||""};
+    const setEdit=(k,v)=>setEditando(p=>({...p,[c.key]:{...edit,[k]:v}}));
+    const saveEdit=()=>guardarMeta(c.key,{telefono:edit.telefono,notas:edit.notas});
+    const enviosOrdenados=[...c.envios].sort((a,b)=>(b.fechaVenta||b.fecha||"").localeCompare(a.fechaVenta||a.fecha||""));
+    const saldo=saldoCC[c.key]||0;
+
+    return(
+      <div style={{maxWidth:"820px"}}>
+        <button onClick={()=>setVistaCliente(null)} style={{...S.btn(false),marginBottom:"1rem",fontSize:"0.78rem"}}>← Volver</button>
+
+        {/* Header cliente */}
+        <div style={{...S.card,padding:"1rem 1.25rem",marginBottom:"1rem"}}>
+          <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:"0.75rem",marginBottom:"0.75rem"}}>
+            <div>
+              <div style={{fontWeight:800,fontSize:"1rem",color:"#e5e7eb"}}>{c.nombre}</div>
+              <div style={{display:"flex",gap:"4px",marginTop:"4px",flexWrap:"wrap"}}>
+                {[...c.origenes].map(o=><span key={o} style={{fontSize:"0.65rem",padding:"1px 7px",background:"#12172a",color:"#94a3b8",borderRadius:"4px",border:"1px solid #1e2535"}}>{o}</span>)}
+                {facturaClientes[c.key]&&<span style={{fontSize:"0.65rem",padding:"1px 7px",background:"#1c0d00",color:"#fb923c",borderRadius:"4px",border:"1px solid #c2410c"}}>🧾 Factura impresa</span>}
+              </div>
+            </div>
+            <div style={{display:"flex",gap:"1rem",flexWrap:"wrap",alignItems:"flex-end"}}>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:"0.6rem",color:"#6b7280",textTransform:"uppercase",fontWeight:700}}>Pedidos</div>
+                <div style={{fontSize:"1.1rem",fontWeight:800,color:"#e5e7eb"}}>{c.envios.length}</div>
+              </div>
+              {saldo>0&&<div style={{textAlign:"right"}}>
+                <div style={{fontSize:"0.6rem",color:"#6b7280",textTransform:"uppercase",fontWeight:700}}>Saldo CC</div>
+                <div style={{fontSize:"1.1rem",fontWeight:800,color:"#ef4444"}}>{fmt(saldo)}</div>
+              </div>}
+            </div>
+          </div>
+
+          {/* Edición teléfono + notas */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.6rem",marginBottom:"0.6rem"}}>
+            <div>
+              <div style={{fontSize:"0.62rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Teléfono</div>
+              <input value={edit.telefono} onChange={ev=>setEdit("telefono",ev.target.value)} style={{...S.input,width:"100%",fontSize:"0.82rem"}} placeholder="Ej. 1165432100"/>
+            </div>
+            <div>
+              <div style={{fontSize:"0.62rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Notas</div>
+              <input value={edit.notas} onChange={ev=>setEdit("notas",ev.target.value)} style={{...S.input,width:"100%",fontSize:"0.82rem"}} placeholder="Observaciones del cliente..."/>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:"0.5rem",alignItems:"center"}}>
+            <button onClick={saveEdit} disabled={guardando[c.key]} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.3rem 0.9rem",fontSize:"0.78rem"}}>
+              {guardando[c.key]?"Guardando...":"Guardar"}
+            </button>
+            <button onClick={()=>setFacturaCliente(c.key,!facturaClientes[c.key])} style={{...S.btnSm(!!facturaClientes[c.key],"#f97316"),fontSize:"0.72rem",border:"1px solid "+(facturaClientes[c.key]?"#f97316":"#374151")}}>
+              🧾 Factura impresa {facturaClientes[c.key]?"✓":"—"}
+            </button>
+          </div>
+        </div>
+
+        {/* Historial de pedidos */}
+        <div style={{...S.card,overflow:"hidden"}}>
+          <div style={{padding:"0.6rem 1rem",background:"#12172a",borderBottom:"1px solid #1e2535",fontSize:"0.72rem",fontWeight:700,color:"#6b7280",textTransform:"uppercase"}}>
+            Historial de pedidos ({enviosOrdenados.length})
+          </div>
+          {enviosOrdenados.map((e,i)=>{
+            const est=getEstado(e);
+            const estC=EST_COLORS[est]||{label:est,bg:"#1a1f2e",t:"#6b7280"};
+            return(
+              <div key={e.id} style={{padding:"0.6rem 1rem",borderBottom:i<enviosOrdenados.length-1?"1px solid #1a1f2e":"none",display:"flex",gap:"0.75rem",alignItems:"center",flexWrap:"wrap",opacity:est==="cancelado"?0.45:1}}>
+                <div style={{flex:1,minWidth:"200px"}}>
+                  <div style={{fontSize:"0.82rem",color:"#d1d5db",fontWeight:500,textDecoration:est==="cancelado"?"line-through":"none"}}>{e.direccion?.slice(0,55)}</div>
+                  <div style={{display:"flex",gap:"5px",marginTop:"3px",flexWrap:"wrap",alignItems:"center"}}>
+                    <span style={{fontSize:"0.68rem",padding:"1px 5px",background:estC.bg,color:estC.t,borderRadius:"4px",fontWeight:700}}>{estC.label}</span>
+                    {e.trans&&<span style={{fontSize:"0.65rem",padding:"1px 5px",background:lc[e.trans]?.color+"22",color:lc[e.trans]?.color,borderRadius:"4px",fontWeight:700}}>{e.trans}</span>}
+                    {e.nroOrdenTN&&<span style={{fontFamily:"monospace",fontSize:"0.68rem",color:"#7dd3fc",fontWeight:700}}>#{e.nroOrdenTN}</span>}
+                    {e.nroFactura&&<span style={{fontFamily:"monospace",fontSize:"0.65rem",padding:"1px 6px",background:"#130d2a",color:"#c4b5fd",borderRadius:"4px",border:"1px solid #4c1d95"}}>FC {e.nroFactura}</span>}
+                    {facturaClientes[c.key]&&e.trans&&!e.nroFactura&&est!=="cancelado"&&<span style={{fontSize:"0.65rem",padding:"1px 6px",background:"#1c0d00",color:"#fb923c",borderRadius:"4px",border:"1px solid #c2410c",fontWeight:700}}>FC ⚠</span>}
+                  </div>
+                </div>
+                <div style={{textAlign:"right",flexShrink:0}}>
+                  {e.fechaVenta&&<div style={{fontSize:"0.68rem",color:"#6b7280"}}>Venta {fmtCorta(e.fechaVenta)}</div>}
+                  {e.fecha&&<div style={{fontSize:"0.68rem",color:"#94a3b8"}}>Envío {fmtCorta(e.fecha)}</div>}
+                  {(e.cobranza>0||(e.importeCC>0&&e.esCC)||(e.importeOrden>0&&e.pagoEstado==="cuenta_corriente"))&&
+                    <div style={{fontSize:"0.78rem",fontWeight:700,color:"#f59e0b",marginTop:"2px"}}>{fmt(e.cobranza||e.importeCC||e.importeOrden||0)}</div>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Lista de clientes ──
+  return(
+    <div>
+      <div style={{display:"flex",gap:"0.5rem",alignItems:"center",marginBottom:"1rem",flexWrap:"wrap"}}>
+        <h2 style={{margin:0,fontWeight:800,fontSize:"1rem",color:"#e5e7eb"}}>Clientes</h2>
+        <span style={{fontSize:"0.72rem",color:"#4b5563",background:"#12172a",padding:"2px 8px",borderRadius:"10px"}}>{clientesFiltrados.length} clientes · Manual + TN</span>
+        <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar por nombre o teléfono..." style={{...S.input,width:"260px",marginLeft:"auto",padding:"0.3rem 0.7rem",fontSize:"0.78rem"}}/>
+      </div>
+
+      <div style={{...S.card,overflow:"hidden"}}>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead>
+            <tr style={{background:"#12172a"}}>
+              {["Cliente","Teléfono","Origen","Pedidos","Último pedido","Saldo CC",""].map((h,i)=>(
+                <th key={i} style={{padding:"8px 10px",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",color:"#6b7280",textAlign:i>1?"center":"left",borderBottom:"1px solid #1e2535",whiteSpace:"nowrap"}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {clientesFiltrados.length===0&&(
+              <tr><td colSpan={7} style={{padding:"2rem",textAlign:"center",color:"#4b5563"}}>Sin resultados</td></tr>
+            )}
+            {clientesFiltrados.map((c,i)=>{
+              const meta=clientesMeta[c.key]||{};
+              const tel=meta.telefono||c.telefono||"";
+              const saldo=saldoCC[c.key]||0;
+              const factPendientes=facturaClientes[c.key]?c.envios.filter(e=>e.trans&&!e.nroFactura&&getEstado(e)!=="cancelado").length:0;
+              return(
+                <tr key={c.key} style={{background:i%2===0?"transparent":"#0d1119",borderBottom:"1px solid #1a1f2e",cursor:"pointer"}} onClick={()=>setVistaCliente(c.key)}>
+                  <td style={{padding:"10px 10px"}}>
+                    <div style={{fontWeight:600,fontSize:"0.82rem",color:"#e5e7eb",display:"flex",gap:"6px",alignItems:"center"}}>
+                      {c.nombre}
+                      {factPendientes>0&&<span style={{fontSize:"0.62rem",padding:"1px 6px",background:"#1c0d00",color:"#fb923c",borderRadius:"10px",border:"1px solid #c2410c",fontWeight:800}}>FC ⚠ {factPendientes}</span>}
+                    </div>
+                    {meta.notas&&<div style={{fontSize:"0.65rem",color:"#4b5563",marginTop:"1px"}}>{meta.notas.slice(0,50)}</div>}
+                  </td>
+                  <td style={{padding:"10px 10px",fontSize:"0.78rem",color:"#94a3b8",fontFamily:"monospace"}}>{tel||"—"}</td>
+                  <td style={{padding:"10px 10px",textAlign:"center"}}>
+                    <div style={{display:"flex",gap:"3px",justifyContent:"center",flexWrap:"wrap"}}>
+                      {[...c.origenes].map(o=><span key={o} style={{fontSize:"0.62rem",padding:"1px 5px",background:"#12172a",color:"#6b7280",borderRadius:"4px"}}>{o}</span>)}
+                    </div>
+                  </td>
+                  <td style={{padding:"10px 10px",textAlign:"center",color:"#e5e7eb",fontWeight:600}}>{c.envios.length}</td>
+                  <td style={{padding:"10px 10px",textAlign:"center",color:"#6b7280",fontSize:"0.78rem"}}>{c.fechaUltimo?fmtCorta(c.fechaUltimo):"—"}</td>
+                  <td style={{padding:"10px 10px",textAlign:"center",fontWeight:700,color:saldo>0?"#ef4444":"#4b5563"}}>{saldo>0?fmt(saldo):"—"}</td>
+                  <td style={{padding:"10px 10px"}}>
+                    <button onClick={ev=>{ev.stopPropagation();setVistaCliente(c.key);}} style={{...S.btnSm(false,"#6366f1"),fontSize:"0.68rem"}}>Ver</button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function TabTablero({envios,lc,zc,pagosCC=[]}){
   const hoy=fechaHoy();
   const [ccOpen,setCcOpen]=useState(false);
@@ -6065,6 +6291,21 @@ export default function App(){
   const [fechaImport,setFechaImport]=useState(fechaHoy());
   const [pagosCC,setPagosCC]=useState([]);
   useEffect(()=>{const unsub=onSnapshot(collection(db,"pagosCC"),snap=>{setPagosCC(snap.docs.map(d=>({...d.data(),_id:d.id})));});return()=>unsub();},[]);
+
+  // facturaClientes: {clienteKey: true} — guardado en config/clientesMeta
+  const [facturaClientes,setFacturaClientesLocal]=useState({});
+  useEffect(()=>{
+    const unsub=onSnapshot(doc(db,"config","clientesMeta"),snap=>{
+      if(snap.exists())setFacturaClientesLocal(snap.data().facturaImpresa||{});
+    });
+    return()=>unsub();
+  },[]);
+  const setFacturaCliente=(key,val)=>{
+    const next=val?{...facturaClientes,[key]:true}:{...facturaClientes};
+    if(!val)delete next[key];
+    setFacturaClientesLocal(next);
+    setDoc(doc(db,"config","clientesMeta"),{facturaImpresa:next},{merge:true}).catch(console.error);
+  };
   const [toast,setToast]=useState("");
   const mostrarToast=msg=>{setToast(msg);setTimeout(()=>setToast(""),2500);};
   const [alertas,setAlertas]=useState([]);
@@ -6177,6 +6418,7 @@ export default function App(){
     {id:"liquidacion",l:"Cobranzas Log."},
     {id:"liquidacionlog",l:"Liquidacion Log."},
     {id:"ctasctes",l:"Ctas. Ctes."},
+    {id:"clientes",l:"Clientes"},
     {id:"localidades",l:"Localidades"},
     {id:"expedicion",l:"Expedicion"},
     {id:"usuarios",l:"Usuarios"},
@@ -6352,15 +6594,16 @@ export default function App(){
       <div style={{padding:"0.85rem 1rem",maxWidth:"1400px",margin:"0 auto"}}>
         {error&&<div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.8rem",background:"#1c0a0a",border:"1px solid #7f1d1d",color:"#fca5a5",fontSize:"0.8rem"}}>{error}</div>}
         {tab==="tablero" &&<TabTablero envios={envios} lc={lc} zc={zc} pagosCC={pagosCC}/>}
-        {tab==="envios"  &&<TabEnvios   envios={envios.filter(e=>e.origen!=="ML")} setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin} sesion={sesion}/>}
-        {tab==="flex"    &&<TabEnvios   envios={envios.filter(e=>e.origen==="ML")}  setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin} sesion={sesion} mostrarResumenFlex={true}/>}
+        {tab==="envios"  &&<TabEnvios   envios={envios.filter(e=>e.origen!=="ML")} setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin} sesion={sesion} facturaClientes={facturaClientes}/>}
+        {tab==="flex"    &&<TabEnvios   envios={envios.filter(e=>e.origen==="ML")}  setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin} sesion={sesion} mostrarResumenFlex={true} facturaClientes={facturaClientes}/>}
         {tab==="imprimir"&&<TabImprimir envios={envios} setEnvios={setEnvios} zc={zc} lc={lc}/>}
         {tab==="manual"  &&<TabManual   setEnvios={setEnvios} onSuccess={()=>{mostrarToast("Envio agregado");}} lc={lc} enviosExistentes={envios} sesion={sesion}/>}
         {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZcPersist} lc={lc} setLc={setLcPersist}/>}
         {tab==="informe"     &&<TabInforme     envios={envios} zc={zc} lc={lc}/>}
         {tab==="liquidacion"    &&<TabLiquidacion    envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>}
         {tab==="liquidacionlog" &&<TabLiquidacionLog envios={envios} setEnvios={setEnvios} zc={zc} lc={lc} esAdmin={esAdmin} sesion={sesion}/>}
-        {tab==="ctasctes"       &&<TabCtasCtes       envios={envios} lc={lc} sesion={sesion} pagosInicial={pagosCC}/>}
+        {tab==="ctasctes"       &&<TabCtasCtes       envios={envios} lc={lc} sesion={sesion} pagosInicial={pagosCC} facturaClientes={facturaClientes} setFacturaCliente={setFacturaCliente}/>}
+        {tab==="clientes"       &&<TabClientes       envios={envios} lc={lc} pagosCC={pagosCC} facturaClientes={facturaClientes} setFacturaCliente={setFacturaCliente} sesion={sesion}/>}
         {tab==="localidades" &&<TabLocalidades cpExtra={cpExtra} setCpExtra={setCpExtra}/>}
         {tab==="usuarios"   &&<TabUsuarios lc={lc} setLc={setLcPersist}/>}
         {tab==="expedicion" &&<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>}
