@@ -3501,12 +3501,9 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:"0.5rem",marginBottom:"0.75rem"}}>
             <div>
               <div style={{fontWeight:800,fontSize:"1rem",color:"#e5e7eb"}}>{c.nombre}</div>
-              <div style={{fontSize:"0.72rem",color:"#6b7280",marginTop:"2px",display:"flex",flexWrap:"wrap",gap:"8px",alignItems:"center"}}>
+              <div style={{fontSize:"0.72rem",color:"#6b7280",marginTop:"2px"}}>
                 {c.logisticas.length>0&&<span>Logisticas: {c.logisticas.join(", ")} · </span>}
-                <span>Limite alerta: <input type="number" min="1" max="90" value={c.limite} onChange={ev=>setLimiteCliente(c.key,ev.target.value)} style={{...S.input,width:"48px",padding:"1px 6px",fontSize:"0.72rem",height:"20px",display:"inline-block"}}/> días</span>
-                <button onClick={()=>setFacturaCliente(c.key,!facturaClientes[c.key])} style={{...S.btnSm(!!facturaClientes[c.key],"#f97316"),fontSize:"0.65rem",padding:"1px 8px",border:"1px solid "+(facturaClientes[c.key]?"#f97316":"#374151")}}>
-                  🧾 Factura impresa {facturaClientes[c.key]?"✓":"—"}
-                </button>
+                Limite alerta: <input type="number" min="1" max="90" value={c.limite} onChange={ev=>setLimiteCliente(c.key,ev.target.value)} style={{...S.input,width:"48px",padding:"1px 6px",fontSize:"0.72rem",height:"20px",display:"inline-block"}}/> días
               </div>
             </div>
             <div style={{display:"flex",gap:"0.75rem",flexWrap:"wrap",alignItems:"flex-end"}}>
