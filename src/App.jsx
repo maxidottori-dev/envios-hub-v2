@@ -995,6 +995,12 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
         </div>
       )}
 
+      {/* Nro Factura */}
+      <div style={{marginBottom:"0.5rem"}}>
+        <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Nro. Factura</div>
+        <input value={e.nroFactura||""} onChange={ev=>set("nroFactura",ev.target.value)} placeholder="ej. FA-00001" style={{...S.input,width:"100%",fontSize:"0.8rem"}}/>
+      </div>
+
       {/* Notas de la orden — editable (incluye datepicker) */}
       <div style={{marginBottom:"0.5rem"}}>
         <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>{esTN?"Notas de la orden":"Observaciones"}</div>
@@ -1821,7 +1827,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
 
 function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
   const hoy=fechaHoy();
-  const vacio={id:"",nroSeguimiento:"",linkML:"",direccion:"",ciudad:"",cp:"",origen:"Manual",trans:"",fecha:hoy,turno:"",estado:"sin_asignar",cobranza:null,cambio:null,retiro:null,observaciones:"",bultos:null,partido:"",importe:0,fechaVenta:hoy,clienteNombre:"",telefono:"",esCC:false,importeCC:0};
+  const vacio={id:"",nroSeguimiento:"",linkML:"",direccion:"",ciudad:"",cp:"",origen:"Manual",trans:"",fecha:hoy,turno:"",estado:"sin_asignar",cobranza:null,cambio:null,retiro:null,observaciones:"",bultos:null,partido:"",importe:0,fechaVenta:hoy,clienteNombre:"",telefono:"",esCC:false,importeCC:0,nroFactura:""};
   const [f,setF]=useState(vacio);
   const [err,setErr]=useState("");
   const [dupWarn,setDupWarn]=useState("");
@@ -1893,6 +1899,7 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.7rem",marginBottom:"0.7rem"}}>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. venta / referencia</label><input value={f.id} onChange={e=>set("id",e.target.value)} style={{...S.input,width:"100%"}} placeholder="ej. 2000012345"/></div>
           <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. seguimiento</label><input value={f.nroSeguimiento} onChange={e=>set("nroSeguimiento",e.target.value)} style={{...S.input,width:"100%",borderColor:dupWarn?"#f59e0b":"#252d40"}} placeholder="ej. 46669555629"/></div>
+          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. Factura</label><input value={f.nroFactura||""} onChange={e=>set("nroFactura",e.target.value)} style={{...S.input,width:"100%"}} placeholder="ej. FA-00001"/></div>
           <div style={{position:"relative",gridColumn:"1/-1"}}><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nombre cliente</label>
             <input value={f.clienteNombre} onChange={e=>{set("clienteNombre",e.target.value);setSugsVisible(true);setDirsCliente([]);}} onFocus={()=>setSugsVisible(true)} onBlur={()=>setTimeout(()=>setSugsVisible(false),150)} style={{...S.input,width:"100%"}} placeholder="Nombre completo o buscar existente"/>
             {sugerencias.length>0&&(
@@ -3555,6 +3562,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[]}){
                         <div style={{fontSize:"0.68rem",color:"#4b5563",marginTop:"2px"}}>
                           {e.nroOrdenTN?<span style={{color:"#7dd3fc",fontWeight:700}}>#{e.nroOrdenTN}</span>:<span>ID {e.id.slice(-8)}</span>}{e.fechaVenta?<span> · Venta: {fmtCorta(e.fechaVenta)}</span>:null}{e.fecha?<span> · Envio: {fmtCorta(e.fecha)}</span>:null}
                           {e.trans&&<span style={{marginLeft:"6px",padding:"1px 6px",background:lc[e.trans]?.color+"22",color:lc[e.trans]?.color,borderRadius:"4px",fontSize:"0.65rem",fontWeight:700}}>{e.trans}</span>}
+                          {e.nroFactura&&<span style={{marginLeft:"6px",padding:"1px 7px",background:"#130d2a",color:"#c4b5fd",borderRadius:"4px",fontSize:"0.65rem",fontWeight:600,border:"1px solid #4c1d95",fontFamily:"monospace"}}>FC {e.nroFactura}</span>}
                         </div>
                       </div>
                       <div style={{display:"flex",gap:"0.75rem",alignItems:"center",flexWrap:"wrap"}}>
@@ -3870,6 +3878,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[]}){
               {[
                 {label:"Cliente",col:"nombre",align:"left"},
                 {label:"Logísticas",col:null,align:"left"},
+                {label:"Facturas",col:null,align:"left"},
                 {label:"Cobrado a cta.",col:"cobrado",align:"right"},
                 {label:"Saldo",col:"saldo",align:"right"},
                 {label:"Antigüedad",col:"dias",align:"left"},
@@ -3890,7 +3899,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[]}){
           </thead>
           <tbody>
             {clientesFiltrados.length===0&&(
-              <tr><td colSpan={6} style={{padding:"2rem",textAlign:"center",color:"#4b5563"}}>Sin resultados</td></tr>
+              <tr><td colSpan={7} style={{padding:"2rem",textAlign:"center",color:"#4b5563"}}>Sin resultados</td></tr>
             )}
             {clientesFiltrados.map((c,i)=>{
               const vencido=c.saldo>0&&c.dias>=c.limite;
@@ -3905,6 +3914,14 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[]}){
                     <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
                       {c.logisticas.map(l=><span key={l} style={{fontSize:"0.65rem",padding:"1px 6px",background:lc[l]?.color+"22",color:lc[l]?.color,borderRadius:"4px",fontWeight:700}}>{l}</span>)}
                     </div>
+                  </td>
+                  <td style={{padding:"10px 10px"}}>
+                    {(()=>{
+                      const facts=[...new Set(c.envios.filter(e=>e.nroFactura).map(e=>e.nroFactura))];
+                      return facts.length>0
+                        ?<div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{facts.map(f=><span key={f} style={{fontSize:"0.68rem",padding:"1px 7px",background:"#130d2a",color:"#c4b5fd",borderRadius:"4px",border:"1px solid #4c1d95",fontWeight:600,fontFamily:"monospace"}}>{f}</span>)}</div>
+                        :<span style={{color:"#374151",fontSize:"0.72rem"}}>—</span>;
+                    })()}
                   </td>
                   <td style={{padding:"10px 10px",textAlign:"right",color:c.cobradoConSaldo>0?"#10b981":"#4b5563"}}>{c.cobradoConSaldo>0?fmt(c.cobradoConSaldo):"—"}</td>
                   <td style={{padding:"10px 10px",textAlign:"right",fontWeight:800,color:c.saldo===0?"#10b981":vencido?"#ef4444":"#f59e0b"}}>{fmt(c.saldo)}</td>
