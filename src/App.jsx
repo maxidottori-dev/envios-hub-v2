@@ -5638,9 +5638,18 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
       setResultado({ok:false,msg:"No encontrado: "+srch.slice(0,20)});
       setTimeout(()=>setResultado(null),8000);return;
     }
+    // Un único resultado → siempre directo, sin importar el score
+    if(candidatos.length===1){
+      const found=candidatos[0].e;
+      if(found.preparado&&found.armadorNombre){
+        setResultado({ok:"ya",envio:found,msg:"Ya preparado por "+found.armadorNombre+" · "+(found.bultos||1)+" bulto"+(found.bultos>1?"s":"")});
+        setTimeout(()=>setResultado(null),8000);return;
+      }
+      abrirPanelArmador(found);return;
+    }
+    // Múltiples candidatos: exacto único → directo; resto → panel de selección
     const topScore=candidatos[0].score;
     const topCands=candidatos.filter(x=>x.score===topScore);
-    // Match único y exacto → flujo directo
     if(topCands.length===1&&topScore===3){
       const found=topCands[0].e;
       if(found.preparado&&found.armadorNombre){
@@ -5649,7 +5658,7 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
       }
       abrirPanelArmador(found);return;
     }
-    // Múltiples candidatos → panel de selección
+    // Genuina ambigüedad → panel de selección
     setMatchesPendientes(candidatos.map(x=>({...x.e,_score:x.score})));
     if(timeoutRef.current)clearTimeout(timeoutRef.current);
     timeoutRef.current=setTimeout(()=>{
@@ -6743,30 +6752,31 @@ export default function App(){
     if(!toSave.length&&!toDel.length)return;
     saveQueue.current.clear();
     deleteQueue.current.clear();
-    setPendingSaves(p=>p+1);
     try{
-      // Usar writeBatch para mandar todo junto en una sola llamada de red
       const batch=writeBatch(db);
       toSave.forEach(e=>batch.set(doc(db,"envios",e.id),e));
       toDel.forEach(id=>batch.delete(doc(db,"envios",id)));
       await batch.commit();
     }catch(err){console.error("Error guardando envios:",err);}
-    finally{setPendingSaves(p=>Math.max(0,p-1));}
+    finally{setPendingSaves(p=>Math.max(0,p-1));} // un solo decremento por batch
   },[]);
 
-  // Encola un envío para guardar; el timer se reinicia con cada cambio
+  // Encola un envío; sube el contador solo cuando la cola estaba vacía
   const guardarEnvio=(e)=>{
+    const eraVacia=saveQueue.current.size===0&&deleteQueue.current.size===0;
     saveQueue.current.set(e.id,e);
     if(saveTimerRef.current)clearTimeout(saveTimerRef.current);
     saveTimerRef.current=setTimeout(flushSaves,600);
-    setPendingSaves(p=>Math.max(p,1)); // muestra el indicador de guardado
+    if(eraVacia)setPendingSaves(p=>p+1); // un solo incremento por batch
   };
 
   const eliminarEnvio=(id)=>{
-    saveQueue.current.delete(id); // si estaba pendiente de guardar, cancelar
+    const eraVacia=saveQueue.current.size===0&&deleteQueue.current.size===0;
+    saveQueue.current.delete(id);
     deleteQueue.current.add(id);
     if(saveTimerRef.current)clearTimeout(saveTimerRef.current);
     saveTimerRef.current=setTimeout(flushSaves,600);
+    if(eraVacia)setPendingSaves(p=>p+1);
   };
 
   // Flush inmediato al cerrar la pestaña (no perder cambios)
