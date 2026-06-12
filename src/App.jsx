@@ -6668,8 +6668,51 @@ export default function App(){
   },[]);
 
   const [pendingSaves,setPendingSaves]=useState(0);
-  const guardarEnvio=async(e)=>{setPendingSaves(p=>p+1);try{await setDoc(doc(db,"envios",e.id),e);}catch(err){console.error(err);}finally{setPendingSaves(p=>Math.max(0,p-1));}};
-  const eliminarEnvio=async(id)=>{setPendingSaves(p=>p+1);try{await deleteDoc(doc(db,"envios",id));}catch(err){console.error(err);}finally{setPendingSaves(p=>Math.max(0,p-1));}};
+
+  // Cola de escrituras pendientes: Map<id, envio> — evita duplicados por id
+  const saveQueue=useRef(new Map());
+  const deleteQueue=useRef(new Set());
+  const saveTimerRef=useRef(null);
+
+  // Flushea la cola: escribe todo lo acumulado en un solo ciclo
+  const flushSaves=useCallback(async()=>{
+    const toSave=[...saveQueue.current.values()];
+    const toDel=[...deleteQueue.current];
+    if(!toSave.length&&!toDel.length)return;
+    saveQueue.current.clear();
+    deleteQueue.current.clear();
+    setPendingSaves(p=>p+1);
+    try{
+      // Usar writeBatch para mandar todo junto en una sola llamada de red
+      const batch=writeBatch(db);
+      toSave.forEach(e=>batch.set(doc(db,"envios",e.id),e));
+      toDel.forEach(id=>batch.delete(doc(db,"envios",id)));
+      await batch.commit();
+    }catch(err){console.error("Error guardando envios:",err);}
+    finally{setPendingSaves(p=>Math.max(0,p-1));}
+  },[]);
+
+  // Encola un envío para guardar; el timer se reinicia con cada cambio
+  const guardarEnvio=(e)=>{
+    saveQueue.current.set(e.id,e);
+    if(saveTimerRef.current)clearTimeout(saveTimerRef.current);
+    saveTimerRef.current=setTimeout(flushSaves,600);
+    setPendingSaves(p=>Math.max(p,1)); // muestra el indicador de guardado
+  };
+
+  const eliminarEnvio=(id)=>{
+    saveQueue.current.delete(id); // si estaba pendiente de guardar, cancelar
+    deleteQueue.current.add(id);
+    if(saveTimerRef.current)clearTimeout(saveTimerRef.current);
+    saveTimerRef.current=setTimeout(flushSaves,600);
+  };
+
+  // Flush inmediato al cerrar la pestaña (no perder cambios)
+  useEffect(()=>{
+    const handler=()=>flushSaves();
+    window.addEventListener("beforeunload",handler);
+    return()=>window.removeEventListener("beforeunload",handler);
+  },[flushSaves]);
 
   const setEnvios=useCallback((updater)=>{
     setEnviosLocal(prev=>{

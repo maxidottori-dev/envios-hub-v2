@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDJzxxuv5kPjp3LEpeBcrDdkZDLH-zyooQ",
@@ -11,4 +11,12 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+
+// Caché offline: los datos se guardan en el dispositivo.
+// Al reabrir la app, muestra los datos de disco al instante
+// mientras actualiza en segundo plano desde internet.
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager() // soporta múltiples pestañas
+  })
+});
