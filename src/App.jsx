@@ -5620,27 +5620,27 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
     const envio=scanPendiente;
     const bultos=bultosSel;
     const ts=new Date().toISOString();
+    // Actualizar envio y cerrar panel de inmediato — sin await
     setEnvios(pv=>pv.map(e=>e.id===envio.id?{...e,preparado:true,bultos,armadorId:armador.id,armadorNombre:armador.nombre,armadoTs:ts}:e));
-    try{
-      await addDoc(collection(db,"armados"),{
-        envioId:envio.id,
-        nroSeguimiento:envio.nroSeguimiento||"",
-        nroOrdenTN:envio.nroOrdenTN||"",
-        armadorId:armador.id,
-        armadorNombre:armador.nombre,
-        ts,fecha:envio.fecha||envio.fechaVenta||"",
-        bultos,logistica:envio.trans||"",
-        direccion:envio.direccion||"",
-        partido:envio.partido||"",
-        esFlex:envio.origen==="ML",
-      });
-    }catch(err){console.error("Error guardando armado:",err);}
-    if(bultos>1&&impresionHabilitada&&envio.origen!=="ML")imprimirEtiquetasExtra({...envio,bultos},lc);
-    setResultado({ok:true,envio,bultos,msg:"✓ "+armador.nombre+(bultos>1?" · "+bultos+" bultos":"")});
     setScanPendiente(null);
     setUltimoArmador(armador);
+    setResultado({ok:true,envio,bultos,msg:"✓ "+armador.nombre+(bultos>1?" · "+bultos+" bultos":"")});
     setTimeout(()=>setResultado(null),8000);
     if(inputRef.current)inputRef.current.focus();
+    // Guardar en armados en background (no bloquea UI)
+    addDoc(collection(db,"armados"),{
+      envioId:envio.id,
+      nroSeguimiento:envio.nroSeguimiento||"",
+      nroOrdenTN:String(envio.nroOrdenTN||""),
+      armadorId:armador.id,
+      armadorNombre:armador.nombre,
+      ts,fecha:envio.fecha||envio.fechaVenta||"",
+      bultos,logistica:envio.trans||"",
+      direccion:envio.direccion||"",
+      partido:envio.partido||"",
+      esFlex:envio.origen==="ML",
+    }).catch(err=>console.error("Error guardando armado:",err));
+    if(bultos>1&&impresionHabilitada&&envio.origen!=="ML")imprimirEtiquetasExtra({...envio,bultos},lc);
   },[scanPendiente,bultosSel,setEnvios,lc,impresionHabilitada]);
 
   useEffect(()=>{if(inputRef.current)inputRef.current.focus();},[]);
