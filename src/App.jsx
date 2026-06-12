@@ -5551,6 +5551,8 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
   const [loadingStats,setLoadingStats]=useState(false);
 
   const [camara,setCamara]=useState(false);
+  // BarcodeDetector solo existe en Chrome Android — ocultar botón si no hay soporte
+  const soportaCamera=typeof window!=="undefined"&&"BarcodeDetector" in window&&"mediaDevices" in navigator;
 
   const inputRef=useRef(null);
   const videoRef=useRef(null);
@@ -5978,9 +5980,11 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
                 style={{...S.input,flex:1,fontSize:"0.88rem",padding:"10px 12px"}} autoComplete="off"/>
               <button onClick={()=>{procesarScan(qrInput);setQrInput("");}}
                 style={{...S.btn(true),background:"#12172a",border:"1px solid #6366f1",color:"#a78bfa",padding:"8px 14px",fontWeight:700,fontSize:"0.8rem"}}>OK</button>
-              <button onClick={()=>setCamara(p=>!p)}
-                title="Escanear con cámara"
-                style={{...S.btn(camara),background:camara?"#0d1c04":"#0f1420",border:"1px solid "+(camara?"#84cc16":"#252d40"),color:camara?"#84cc16":"#6b7280",padding:"8px 12px",fontSize:"1.1rem"}}>📷</button>
+              {soportaCamera&&(
+                <button onClick={()=>setCamara(p=>!p)}
+                  title="Escanear con cámara"
+                  style={{...S.btn(camara),background:camara?"#0d1c04":"#0f1420",border:"1px solid "+(camara?"#84cc16":"#252d40"),color:camara?"#84cc16":"#6b7280",padding:"8px 12px",fontSize:"1.1rem"}}>📷</button>
+              )}
             </div>
             {camara&&(
               <div style={{marginBottom:"8px",borderRadius:"10px",overflow:"hidden",background:"#000",position:"relative"}}>
