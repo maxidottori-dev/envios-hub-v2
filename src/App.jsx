@@ -5550,7 +5550,10 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
   const [statsFecha,setStatsFecha]=useState(hoy);
   const [loadingStats,setLoadingStats]=useState(false);
 
+  const [camara,setCamara]=useState(false);
+
   const inputRef=useRef(null);
+  const videoRef=useRef(null);
   const timeoutRef=useRef(null);
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
 
@@ -5688,6 +5691,50 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
   },[scanPendiente,bultosSel,modoEdicion,setEnvios,lc,impresionHabilitada]);
 
   useEffect(()=>{if(inputRef.current)inputRef.current.focus();},[]);
+
+  // Escaneo QR/barcode via cámara — BarcodeDetector API (Chrome Android nativo)
+  useEffect(()=>{
+    if(!camara)return;
+    let stream=null;let rafId=null;let activo=true;
+    const startCam=async()=>{
+      try{
+        stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment",width:{ideal:1280},height:{ideal:720}}});
+        if(!videoRef.current||!activo)return;
+        videoRef.current.srcObject=stream;
+        await videoRef.current.play();
+        if(!("BarcodeDetector" in window)){
+          setResultado({ok:false,msg:"Tu navegador no soporta escaneo. Usá el campo de texto."});
+          setCamara(false);return;
+        }
+        const detector=new window.BarcodeDetector({formats:["qr_code","code_128","code_39","ean_13"]});
+        const scan=async()=>{
+          if(!activo||!videoRef.current||videoRef.current.readyState<2){rafId=requestAnimationFrame(scan);return;}
+          try{
+            const barcodes=await detector.detect(videoRef.current);
+            if(barcodes.length>0){
+              const val=barcodes[0].rawValue;
+              setResultado({ok:"scanning",msg:"Escaneando..."});
+              await new Promise(r=>setTimeout(r,800));
+              if(!activo)return;
+              procesarScan(val);
+              setCamara(false);return;
+            }
+          }catch(e){}
+          if(activo)rafId=requestAnimationFrame(scan);
+        };
+        rafId=requestAnimationFrame(scan);
+      }catch(err){
+        setResultado({ok:false,msg:"No se pudo acceder a la cámara. Verificá los permisos."});
+        setCamara(false);
+      }
+    };
+    startCam();
+    return()=>{
+      activo=false;
+      if(rafId)cancelAnimationFrame(rafId);
+      if(stream)stream.getTracks().forEach(t=>t.stop());
+    };
+  },[camara,procesarScan]);
 
   // Teclado numérico — funciona en modo disambiguation y modo armador
   useEffect(()=>{
@@ -5924,14 +5971,25 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
               Escanear pedido
               {ultimoArmador&&<span style={{color:"#4b5563",fontWeight:400,marginLeft:"8px",textTransform:"none"}}>· último: <span style={{color:ultimoArmador.color||"#a78bfa",fontWeight:600}}>{ultimoArmador.nombre}</span></span>}
             </div>
-            <div style={{display:"flex",gap:"8px",marginBottom:resultado?"8px":"0"}}>
+            <div style={{display:"flex",gap:"8px",marginBottom:(camara||resultado)?"8px":"0"}}>
               <input ref={inputRef} value={qrInput} onChange={e=>setQrInput(e.target.value)}
                 onKeyDown={e=>{if(e.key==="Enter"){procesarScan(qrInput);setQrInput("");}}}
                 placeholder="Escaneá el código de barras o ingresá el nro..."
                 style={{...S.input,flex:1,fontSize:"0.88rem",padding:"10px 12px"}} autoComplete="off"/>
               <button onClick={()=>{procesarScan(qrInput);setQrInput("");}}
                 style={{...S.btn(true),background:"#12172a",border:"1px solid #6366f1",color:"#a78bfa",padding:"8px 14px",fontWeight:700,fontSize:"0.8rem"}}>OK</button>
+              <button onClick={()=>setCamara(p=>!p)}
+                title="Escanear con cámara"
+                style={{...S.btn(camara),background:camara?"#0d1c04":"#0f1420",border:"1px solid "+(camara?"#84cc16":"#252d40"),color:camara?"#84cc16":"#6b7280",padding:"8px 12px",fontSize:"1.1rem"}}>📷</button>
             </div>
+            {camara&&(
+              <div style={{marginBottom:"8px",borderRadius:"10px",overflow:"hidden",background:"#000",position:"relative"}}>
+                <video ref={videoRef} style={{width:"100%",maxHeight:"220px",objectFit:"cover",display:"block"}} playsInline muted/>
+                <div style={{position:"absolute",inset:0,border:"2px solid #84cc16",borderRadius:"10px",pointerEvents:"none"}}/>
+                <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"150px",height:"150px",border:"2px solid #84cc16",borderRadius:"8px",boxShadow:"0 0 0 9999px rgba(0,0,0,0.45)"}}/>
+                <button onClick={()=>setCamara(false)} style={{position:"absolute",top:"8px",right:"8px",background:"rgba(0,0,0,0.75)",border:"1px solid #84cc16",color:"#84cc16",borderRadius:"6px",padding:"4px 10px",fontSize:"0.75rem",cursor:"pointer"}}>Cerrar</button>
+              </div>
+            )}
             {resultado&&(
               <div onClick={()=>resultado.ok!==true&&setResultado(null)} style={{padding:"8px 12px",borderRadius:"8px",cursor:resultado.ok===true?"default":"pointer",
                 background:resultado.ok===true?"#041f14":resultado.ok==="ya"?"#12172a":"#1c0404",
