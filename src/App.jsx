@@ -395,6 +395,7 @@ const LOGISTICAS_INIT = {
 };
 
 const TURNOS=["AM","MD","PM","Turbo"];
+const ARM_COLORS=["#60a5fa","#34d399","#f472b6","#fb923c","#a78bfa","#fbbf24","#38bdf8","#f87171"];
 const TURNO_C={AM:{c:"#60a5fa",bg:"#0c1a2e"},MD:{c:"#a78bfa",bg:"#130d2a"},PM:{c:"#93c5fd",bg:"#0c1a2e"},Turbo:{c:"#f472b6",bg:"#1c0514"}};
 const ESTADO_C={sin_asignar:{t:"#f59e0b",bg:"#1c1400",label:"Sin asignar"},asignado:{t:"#34d399",bg:"#041f14",label:"Asignado"},cancelado:{t:"#f87171",bg:"#1c0a0a",label:"Cancelado"},no_cancelado:{t:"#e5e7eb",bg:"#1a1f2e",label:"Todos (sin cancelados)"}};
 const PAGO_C={pagado:{t:"#34d399",bg:"#041f14",label:"Pagado"},pendiente:{t:"#fb923c",bg:"#1c0a00",label:"Pago pendiente"},cuenta_corriente:{t:"#a78bfa",bg:"#130d2a",label:"Cta. Corriente"}};
@@ -4310,14 +4311,27 @@ function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc,sesion=null}){
 // ════════════════════════════════════════════════════════════════════
 // TAB USUARIOS — solo admin
 // ════════════════════════════════════════════════════════════════════
-function TabUsuarios({lc}){
+function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{}}){
   const [usuarios,setUsuarios]=useState([]);
   const [loading,setLoading]=useState(true);
   const [form,setForm]=useState({usuario:"",password:"",rol:"colaborador",logistica:"",esChofer:false,activo:true});
   const [editId,setEditId]=useState(null);
   const [toast,setToast]=useState("");
-  const [permsOpenId,setPermsOpenId]=useState(null); // qué usuario tiene el panel de permisos abierto
-  const [tooltipKey,setTooltipKey]=useState(null);   // feature key con tooltip visible
+  const [permsOpenId,setPermsOpenId]=useState(null);
+  const [tooltipKey,setTooltipKey]=useState(null);
+  const [nuevoArmador,setNuevoArmador]=useState("");
+  const armadoresConfig=configExpedicion.armadores||[];
+  const impresionHabilitada=configExpedicion.impresionHabilitada||false;
+
+  const agregarArmador=()=>{
+    const nombre=nuevoArmador.trim();
+    if(!nombre)return;
+    if(armadoresConfig.some(a=>a.nombre.toLowerCase()===nombre.toLowerCase())){mostrarToast("Ya existe un armador con ese nombre");return;}
+    const id="arm_"+Date.now();
+    const color=ARM_COLORS[armadoresConfig.length%ARM_COLORS.length];
+    setConfigExpedicion(p=>({...p,armadores:[...(p.armadores||[]),{id,nombre,color}]}));
+    setNuevoArmador("");
+  };
   const logActivas=Object.keys(lc).filter(k=>lc[k].activa);
 
   const mostrarToast=msg=>{setToast(msg);setTimeout(()=>setToast(""),2500);};
@@ -4505,6 +4519,55 @@ function TabUsuarios({lc}){
           );
         })}
       </div>
+
+      {/* ═══ Configuración Expedición ═══ */}
+      <div style={{...S.card,padding:0,overflow:"hidden",marginTop:"1.5rem"}}>
+        <div style={{padding:"0.75rem 1rem",background:"#12172a",borderBottom:"1px solid #252d40",display:"flex",alignItems:"center",gap:"8px"}}>
+          <span style={{fontSize:"0.72rem",fontWeight:700,color:"#f59e0b",textTransform:"uppercase",letterSpacing:"0.06em"}}>⚙ Expedición</span>
+          <span style={{fontSize:"0.65rem",color:"#4b5563"}}>Configuración del tab de armado y expedición</span>
+        </div>
+        <div style={{padding:"1rem"}}>
+          {/* Toggle impresión */}
+          <div style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"1.25rem",padding:"0.85rem 1rem",background:"#12172a",borderRadius:"10px",border:"1px solid #252d40",cursor:"pointer"}}
+            onClick={()=>setConfigExpedicion(p=>({...p,impresionHabilitada:!p.impresionHabilitada}))}>
+            <div style={{width:"42px",height:"24px",borderRadius:"12px",background:impresionHabilitada?"#10b981":"#374151",position:"relative",flexShrink:0,transition:"background 0.2s"}}>
+              <div style={{position:"absolute",top:"3px",left:impresionHabilitada?"21px":"3px",width:"18px",height:"18px",borderRadius:"50%",background:"#fff",transition:"left 0.2s"}}/>
+            </div>
+            <div>
+              <div style={{fontSize:"0.88rem",fontWeight:600,color:"#e5e7eb"}}>Impresión automática de etiquetas</div>
+              <div style={{fontSize:"0.72rem",color:"#6b7280",marginTop:"2px"}}>
+                {impresionHabilitada?"Habilitada — al confirmar un pedido NO FLEX con más de 1 bulto se imprimen las etiquetas de bultos adicionales automáticamente":"Deshabilitada — las etiquetas no se imprimirán automáticamente al escanear"}
+              </div>
+            </div>
+          </div>
+          {/* Lista armadores */}
+          <div style={{fontSize:"0.65rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"8px"}}>Armadores ({armadoresConfig.length})</div>
+          {armadoresConfig.length===0&&<div style={{padding:"0.75rem",background:"#12172a",borderRadius:"8px",color:"#4b5563",fontSize:"0.8rem",marginBottom:"8px"}}>Sin armadores. Agregá los nombres del equipo de preparación.</div>}
+          <div style={{display:"grid",gap:"6px",marginBottom:"0.75rem"}}>
+            {armadoresConfig.map((arm,i)=>(
+              <div key={arm.id} style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 12px",background:"#12172a",borderRadius:"8px",border:"1px solid #252d40"}}>
+                <span style={{fontSize:"0.8rem",fontWeight:800,color:"#374151",minWidth:"18px"}}>{i+1}</span>
+                <span style={{flex:1,fontSize:"0.9rem",fontWeight:600,color:arm.color||"#e5e7eb"}}>{arm.nombre}</span>
+                <div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>
+                  {ARM_COLORS.map(c=>(
+                    <button key={c} onClick={()=>setConfigExpedicion(p=>({...p,armadores:p.armadores.map(a=>a.id===arm.id?{...a,color:c}:a)}))}
+                      style={{width:"16px",height:"16px",borderRadius:"50%",background:c,border:arm.color===c?"2px solid #fff":"2px solid transparent",cursor:"pointer",padding:0,flexShrink:0}}/>
+                  ))}
+                </div>
+                <button onClick={()=>setConfigExpedicion(p=>({...p,armadores:p.armadores.filter(a=>a.id!==arm.id)}))}
+                  style={{background:"none",border:"none",color:"#f87171",cursor:"pointer",fontSize:"1.1rem",padding:"0 4px",lineHeight:1,flexShrink:0}}>✕</button>
+              </div>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:"8px"}}>
+            <input value={nuevoArmador} onChange={e=>setNuevoArmador(e.target.value)}
+              onKeyDown={e=>{if(e.key==="Enter")agregarArmador();}}
+              placeholder="Nombre del armador..." style={{...S.input,flex:1}}/>
+            <button onClick={agregarArmador} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",whiteSpace:"nowrap"}}>+ Agregar</button>
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 }
@@ -5466,43 +5529,37 @@ function TabTablero({envios,lc,zc,pagosCC=[]}){
 }
 
 
-function VistaExpedicion({envios,setEnvios,sesion,lc}){
+function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin=false}){
+  const {impresionHabilitada=false,armadores=[]}=configExpedicion;
   const hoy=fechaHoy();
+  const [subTab,setSubTab]=useState("escaneo");
   const [fecha,setFecha]=useState(hoy);
   const [qrInput,setQrInput]=useState("");
+  const [scanPendiente,setScanPendiente]=useState(null);
+  const [bultosSel,setBultosSel]=useState(1);
   const [resultado,setResultado]=useState(null);
+  const [ultimoArmador,setUltimoArmador]=useState(null);
   const [filLog,setFilLog]=useState("TODOS");
   const [soloPendientes,setSoloPendientes]=useState(false);
-  const [filTipo,setFilTipo]=useState("TODOS"); // TODOS | FLEX | NOFLEX
+  const [filTipo,setFilTipo]=useState("TODOS");
   const [busqueda,setBusqueda]=useState("");
-  const [camara,setCamara]=useState(false);
-  const [bultosEdit,setBultosEdit]=useState({}); // {id: value}
+  // Stats
+  const [statsArmados,setStatsArmados]=useState([]);
+  const [statsFecha,setStatsFecha]=useState(hoy);
+  const [loadingStats,setLoadingStats]=useState(false);
+
   const inputRef=useRef(null);
-  const videoRef=useRef(null);
+  const timeoutRef=useRef(null);
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
 
   const ayer=()=>{const d=new Date(hoy+"T00:00:00");d.setDate(d.getDate()-1);return d.toISOString().split("T")[0];};
   const manana=()=>{const d=new Date(hoy+"T00:00:00");d.setDate(d.getDate()+1);return d.toISOString().split("T")[0];};
 
-  // NO FLEX de la fecha seleccionada
-  const deFecha=envios.filter(e=>{
-    const f=e.fecha||e.fechaVenta||"";
-    if(f!==fecha)return false;
-    if(getEstado(e)!=="asignado")return false;
-    if(e.origen==="ML")return false;
-    return true;
-  });
+  const deFecha=useMemo(()=>envios.filter(e=>{const f=e.fecha||e.fechaVenta||"";return f===fecha&&getEstado(e)==="asignado"&&e.origen!=="ML";}),[envios,fecha]);
+  const flexFecha=useMemo(()=>envios.filter(e=>{const f=e.fecha||e.fechaVenta||"";return e.origen==="ML"&&f===fecha&&getEstado(e)==="asignado";}),[envios,fecha]);
+  const todosLista=useMemo(()=>[...deFecha,...flexFecha],[deFecha,flexFecha]);
 
-  // FLEX de la fecha seleccionada (se muestran en lista + scanner)
-  const flexFecha=envios.filter(e=>{
-    const f=e.fecha||e.fechaVenta||"";
-    return e.origen==="ML"&&f===fecha&&getEstado(e)==="asignado";
-  });
-
-  // Todos juntos para el listado
-  const todosLista=[...deFecha,...flexFecha];
-
-  const filtrados=[...todosLista].filter(e=>{
+  const filtrados=useMemo(()=>todosLista.filter(e=>{
     if(filLog!=="TODOS"&&e.trans!==filLog)return false;
     if(filTipo==="FLEX"&&e.origen!=="ML")return false;
     if(filTipo==="NOFLEX"&&e.origen==="ML")return false;
@@ -5510,11 +5567,10 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
     if(busqueda){const s=norm(busqueda);return norm(e.direccion).includes(s)||(e.nroOrdenTN||"").includes(s)||(e.nroSeguimiento||"").includes(s)||norm(e.partido).includes(s);}
     return true;
   }).sort((a,b)=>{
-    if(a.trans!==b.trans)return (a.trans||"").localeCompare(b.trans||"");
-    if(a.origen!==b.origen)return a.origen==="ML"?1:-1; // NO FLEX primero
-    const ta=TURNOS.indexOf(a.turno),tb=TURNOS.indexOf(b.turno);
-    return ta-tb;
-  });
+    if(a.trans!==b.trans)return(a.trans||"").localeCompare(b.trans||"");
+    if(a.origen!==b.origen)return a.origen==="ML"?1:-1;
+    return TURNOS.indexOf(a.turno)-TURNOS.indexOf(b.turno);
+  }),[todosLista,filLog,filTipo,soloPendientes,busqueda]);
 
   const preparados=todosLista.filter(e=>e.preparado).length;
   const total=todosLista.length;
@@ -5522,102 +5578,165 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
   const prepFlex=flexFecha.filter(e=>e.preparado).length;
   const pct=total>0?Math.round(preparados/total*100):0;
 
-  // procesarScan debe declararse ANTES del useEffect que lo usa como dep
+  // ── Scan handler ─────────────────────────────────────────────────
   const procesarScan=useCallback((nro)=>{
     const srch=nro.trim();if(!srch)return;
-    setResultado(null); // limpiar mensaje anterior inmediatamente
+    setResultado(null);
     const nums=srch.replace(/\D/g,"");
-    // 1. Match exacto por nroSeguimiento o id
     let found=envios.find(e=>e.nroSeguimiento===srch||e.id===srch||e.nroSeguimiento===nums);
-    // 2. El QR tiene datos extra al final: el nro del envio es prefijo del QR escaneado
-    if(!found) found=envios.find(e=>e.nroSeguimiento&&nums.startsWith(e.nroSeguimiento));
-    // 3. El nro del envio tiene datos extra: el QR es prefijo del nro registrado
-    if(!found) found=envios.find(e=>e.nroSeguimiento&&e.nroSeguimiento.startsWith(nums));
-    if(!found){setResultado({ok:false,msg:"No encontrado: "+srch.slice(0,20)});setTimeout(()=>setResultado(null),10000);return;}
-    if(found.preparado){setResultado({ok:"ya",envio:found,msg:"Ya estaba preparado"});setTimeout(()=>setResultado(null),10000);return;}
-    setEnvios(pv=>pv.map(e=>e.id===found.id?{...e,preparado:true}:e));
-    setResultado({ok:true,envio:found,msg:"✓ Preparado"});
+    if(!found)found=envios.find(e=>e.nroSeguimiento&&nums.startsWith(e.nroSeguimiento));
+    if(!found)found=envios.find(e=>e.nroSeguimiento&&e.nroSeguimiento.startsWith(nums));
+    if(!found){setResultado({ok:false,msg:"No encontrado: "+srch.slice(0,20)});setTimeout(()=>setResultado(null),8000);return;}
+    if(found.preparado){setResultado({ok:"ya",envio:found,msg:"Ya estaba preparado"});setTimeout(()=>setResultado(null),8000);return;}
+    setScanPendiente(found);
+    setBultosSel(found.bultos||1);
     beepOK();
-    setTimeout(()=>setResultado(null),10000);
-  },[envios,setEnvios]);
+    if(timeoutRef.current)clearTimeout(timeoutRef.current);
+    timeoutRef.current=setTimeout(()=>{
+      setScanPendiente(null);
+      setResultado({ok:false,msg:"Tiempo agotado. Escaneá de nuevo."});
+      setTimeout(()=>setResultado(null),5000);
+      if(inputRef.current)inputRef.current.focus();
+    },30000);
+  },[envios]);
 
-  const confirmarBultos=useCallback((envio)=>{
-    const bv=parseInt(bultosEdit[envio.id]??envio.bultos);
-    if(!bv||bv<1)return;
-    setEnvios(pv=>pv.map(e=>e.id===envio.id?{...e,bultos:bv,preparado:true}:e));
-    setBultosEdit(pv=>({...pv,[envio.id]:bv}));
-  },[bultosEdit,setEnvios]);
+  // ── Confirmar armado ─────────────────────────────────────────────
+  const confirmarArmado=useCallback(async(armador)=>{
+    if(!scanPendiente)return;
+    if(timeoutRef.current)clearTimeout(timeoutRef.current);
+    const envio=scanPendiente;
+    const bultos=bultosSel;
+    const ts=new Date().toISOString();
+    setEnvios(pv=>pv.map(e=>e.id===envio.id?{...e,preparado:true,bultos,armadorId:armador.id,armadorNombre:armador.nombre,armadoTs:ts}:e));
+    try{
+      await addDoc(collection(db,"armados"),{
+        envioId:envio.id,
+        nroSeguimiento:envio.nroSeguimiento||"",
+        nroOrdenTN:envio.nroOrdenTN||"",
+        armadorId:armador.id,
+        armadorNombre:armador.nombre,
+        ts,fecha:envio.fecha||envio.fechaVenta||"",
+        bultos,logistica:envio.trans||"",
+        direccion:envio.direccion||"",
+        partido:envio.partido||"",
+        esFlex:envio.origen==="ML",
+      });
+    }catch(err){console.error("Error guardando armado:",err);}
+    if(bultos>1&&impresionHabilitada&&envio.origen!=="ML")imprimirEtiquetasExtra({...envio,bultos},lc);
+    setResultado({ok:true,envio,bultos,msg:"✓ "+armador.nombre+(bultos>1?" · "+bultos+" bultos":"")});
+    setScanPendiente(null);
+    setUltimoArmador(armador);
+    setTimeout(()=>setResultado(null),8000);
+    if(inputRef.current)inputRef.current.focus();
+  },[scanPendiente,bultosSel,setEnvios,lc,impresionHabilitada]);
 
-  // Focus en input al montar
   useEffect(()=>{if(inputRef.current)inputRef.current.focus();},[]);
 
-  // Escaneo QR via camara — BarcodeDetector API (Chrome Android nativo)
+  // Teclado numérico para seleccionar armador rápido
   useEffect(()=>{
-    if(!camara)return;
-    let stream=null;
-    let rafId=null;
-    let activo=true;
-    const canvas=document.createElement("canvas");
-    const ctx=canvas.getContext("2d");
-
-    const startCam=async()=>{
-      try{
-        stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment",width:{ideal:1280},height:{ideal:720}}});
-        if(!videoRef.current||!activo)return;
-        videoRef.current.srcObject=stream;
-        await videoRef.current.play();
-
-        // Verificar soporte de BarcodeDetector
-        if(!("BarcodeDetector" in window)){
-          setResultado({ok:false,msg:"Tu navegador no soporta escaneo QR. Usá el campo de texto."});
-          setCamara(false);
-          return;
-        }
-        const detector=new window.BarcodeDetector({formats:["qr_code","code_128","code_39","ean_13"]});
-
-        const scan=async()=>{
-          if(!activo||!videoRef.current||videoRef.current.readyState<2){rafId=requestAnimationFrame(scan);return;}
-          try{
-            const barcodes=await detector.detect(videoRef.current);
-            if(barcodes.length>0){
-              const val=barcodes[0].rawValue;
-              // Delay de 1 seg para feedback visual antes de procesar
-              setResultado({ok:"scanning",msg:"Escaneando..."});
-              await new Promise(r=>setTimeout(r,1000));
-              if(!activo)return;
-              procesarScan(val);
-              setCamara(false);
-              return;
-            }
-          }catch(e){}
-          if(activo)rafId=requestAnimationFrame(scan);
-        };
-        rafId=requestAnimationFrame(scan);
-      }catch(err){
-        console.error("Camara error:",err);
-        setResultado({ok:false,msg:"No se pudo acceder a la cámara. Verificá los permisos."});
-        setCamara(false);
-      }
+    if(!scanPendiente||armadores.length===0)return;
+    const h=e=>{
+      const n=parseInt(e.key);
+      if(!isNaN(n)&&n>=1&&n<=armadores.length){confirmarArmado(armadores[n-1]);}
+      if(e.key==="Escape"){if(timeoutRef.current)clearTimeout(timeoutRef.current);setScanPendiente(null);if(inputRef.current)inputRef.current.focus();}
     };
-    startCam();
-    return()=>{
-      activo=false;
-      if(rafId)cancelAnimationFrame(rafId);
-      if(stream)stream.getTracks().forEach(t =>t.stop());
-    };
-  },[camara,procesarScan]);
+    window.addEventListener("keydown",h);
+    return()=>window.removeEventListener("keydown",h);
+  },[scanPendiente,armadores,confirmarArmado]);
 
-  // Agrupar por logistica
+  // Cargar stats al cambiar sub-tab o fecha
+  useEffect(()=>{
+    if(subTab!=="stats")return;
+    setLoadingStats(true);
+    getDocs(query(collection(db,"armados"),where("fecha","==",statsFecha)))
+      .then(snap=>{setStatsArmados(snap.docs.map(d=>({id:d.id,...d.data()})));setLoadingStats(false);})
+      .catch(()=>setLoadingStats(false));
+  },[subTab,statsFecha]);
+
+  // Estadísticas por armador
+  const statsPerArmador=useMemo(()=>{
+    if(!statsArmados.length)return[];
+    const map={};
+    statsArmados.forEach(a=>{
+      const k=a.armadorId||a.armadorNombre||"?";
+      if(!map[k])map[k]={id:a.armadorId,nombre:a.armadorNombre,count:0,bultos:0,times:[]};
+      map[k].count++;map[k].bultos+=(a.bultos||1);
+      if(a.ts)map[k].times.push(new Date(a.ts).getTime());
+    });
+    return Object.values(map).map(arm=>{
+      arm.times.sort((a,b)=>a-b);
+      if(arm.times.length>1){
+        const diffs=[];for(let i=1;i<arm.times.length;i++)diffs.push((arm.times[i]-arm.times[i-1])/60000);
+        arm.avgMin=Math.round(diffs.reduce((s,d)=>s+d,0)/diffs.length*10)/10;
+      }else arm.avgMin=null;
+      return arm;
+    }).sort((a,b)=>b.count-a.count);
+  },[statsArmados]);
+
+  const actPorHora=useMemo(()=>{
+    const hrs=Array.from({length:24},(_,i)=>({h:i,count:0}));
+    statsArmados.forEach(a=>{if(a.ts)hrs[new Date(a.ts).getHours()].count++;});
+    return hrs.filter(h=>h.count>0);
+  },[statsArmados]);
+
+  // Grupos para el listado
   const grupos={};
-  filtrados.forEach(e=>{
-    const k=e.trans||"Sin asignar";
-    if(!grupos[k])grupos[k]=[];
-    grupos[k].push(e);
-  });
+  filtrados.forEach(e=>{const k=e.trans||"Sin asignar";if(!grupos[k])grupos[k]=[];grupos[k].push(e);});
 
   return(
     <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif"}}>
-      <style>{`*{box-sizing:border-box;}input[type=number]::-webkit-inner-spin-button{opacity:1;}`}</style>
+      <style>{`*{box-sizing:border-box;}`}</style>
+
+      {/* ── Panel flotante post-scan ────────────────────────────── */}
+      {scanPendiente&&(
+        <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,0.8)",display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+          <div style={{background:"#0f1420",border:"1px solid #252d40",borderRadius:"16px 16px 0 0",width:"100%",maxWidth:"560px",padding:"1.25rem 1.25rem 2.5rem"}}>
+            {/* Info del pedido escaneado */}
+            <div style={{marginBottom:"1rem",padding:"0.75rem 1rem",background:"#12172a",borderRadius:"10px",border:"1px solid #1a1f2e"}}>
+              <div style={{fontSize:"0.6rem",color:"#4b5563",textTransform:"uppercase",fontWeight:700,marginBottom:"3px"}}>Pedido escaneado</div>
+              <div style={{fontWeight:700,fontSize:"0.95rem",color:"#e5e7eb",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{scanPendiente.direccion}</div>
+              <div style={{fontSize:"0.75rem",color:"#6b7280",marginTop:"3px",display:"flex",gap:"8px",flexWrap:"wrap"}}>
+                {scanPendiente.nroOrdenTN&&<span style={{color:"#7dd3fc",fontWeight:700}}>#{scanPendiente.nroOrdenTN}</span>}
+                {scanPendiente.trans&&<span style={{color:lc[scanPendiente.trans]?.color||"#9ca3af",fontWeight:700}}>{scanPendiente.trans}</span>}
+                {scanPendiente.partido&&<span>{scanPendiente.partido}</span>}
+                {scanPendiente.cobranza&&<span style={{color:"#fbbf24",fontWeight:700}}>${Number(scanPendiente.cobranza).toLocaleString("es-AR")}</span>}
+              </div>
+            </div>
+            {/* Selector de bultos */}
+            <div style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"1.1rem"}}>
+              <span style={{fontSize:"0.7rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",minWidth:"50px"}}>Bultos</span>
+              <button onClick={()=>setBultosSel(b=>Math.max(1,b-1))} style={{width:"38px",height:"38px",borderRadius:"8px",background:"#1a1f2e",border:"1px solid #374151",color:"#e5e7eb",fontSize:"1.3rem",cursor:"pointer"}}>−</button>
+              <span style={{fontSize:"1.8rem",fontWeight:900,color:"#e5e7eb",minWidth:"32px",textAlign:"center"}}>{bultosSel}</span>
+              <button onClick={()=>setBultosSel(b=>b+1)} style={{width:"38px",height:"38px",borderRadius:"8px",background:"#1a1f2e",border:"1px solid #374151",color:"#e5e7eb",fontSize:"1.3rem",cursor:"pointer"}}>+</button>
+              {bultosSel>1&&<span style={{fontSize:"0.68rem",color:impresionHabilitada?"#f59e0b":"#374151",marginLeft:"4px"}}>{impresionHabilitada?"🖨 "+( bultosSel-1)+" etiqueta"+(bultosSel>2?"s":"")+" a imprimir":"impresión deshabilitada"}</span>}
+            </div>
+            {/* Botonera armadores */}
+            <div style={{marginBottom:"0.85rem"}}>
+              <div style={{fontSize:"0.62rem",color:"#6b7280",textTransform:"uppercase",fontWeight:700,marginBottom:"8px"}}>¿Quién armó este pedido? <span style={{color:"#374151",fontWeight:400,textTransform:"none"}}>— o presioná el número</span></div>
+              {armadores.length===0
+                ?<div style={{padding:"1rem",background:"#12172a",borderRadius:"8px",color:"#4b5563",fontSize:"0.8rem",textAlign:"center"}}>Sin armadores configurados. Configurá en Usuarios (admin).</div>
+                :<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(120px,1fr))",gap:"8px"}}>
+                  {armadores.map((arm,i)=>{
+                    const esUlt=ultimoArmador?.id===arm.id;
+                    return(
+                      <button key={arm.id} onClick={()=>confirmarArmado(arm)}
+                        style={{padding:"12px 8px",borderRadius:"10px",border:"2px solid "+(esUlt?"#6366f1":"#252d40"),background:esUlt?"#13102a":"#12172a",cursor:"pointer",textAlign:"left",position:"relative"}}>
+                        <div style={{fontSize:"1rem",fontWeight:900,color:"#374151",lineHeight:1,marginBottom:"4px"}}>{i+1}</div>
+                        <div style={{fontSize:"0.92rem",fontWeight:700,color:arm.color||"#e5e7eb"}}>{arm.nombre}</div>
+                        {esUlt&&<div style={{position:"absolute",top:"5px",right:"7px",fontSize:"0.55rem",color:"#6366f1",fontWeight:700}}>último</div>}
+                      </button>
+                    );
+                  })}
+                </div>
+              }
+            </div>
+            <button onClick={()=>{if(timeoutRef.current)clearTimeout(timeoutRef.current);setScanPendiente(null);if(inputRef.current)inputRef.current.focus();}}
+              style={{width:"100%",padding:"10px",background:"transparent",border:"1px solid #252d40",borderRadius:"8px",color:"#4b5563",cursor:"pointer",fontSize:"0.8rem"}}>
+              Cancelar (Esc)
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div style={{position:"sticky",top:0,zIndex:100,background:"#0f1420",borderBottom:"1px solid #1a1f2e",padding:"0.7rem 1rem",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
@@ -5626,44 +5745,11 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
           <div style={{fontWeight:800,fontSize:"0.92rem"}}>EnviosHub <span style={{color:"#374151",fontSize:"0.6rem",fontWeight:400}}>v{VERSION}</span></div>
           <div style={{color:"#f59e0b",fontSize:"0.65rem",fontWeight:700}}>Expedición</div>
         </div>
-        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:"0.5rem",flexWrap:"wrap"}}>
-          <button onClick={()=>{
-            const filas=filtrados.sort((a,b)=>(a.loteImportacion||"9").localeCompare(b.loteImportacion||"9")).map((e,i)=>{
-              const esFlex=e.origen==="ML";
-              const lote=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"";
-              const nroRef=esFlex?(e.nroSeguimiento||""):("#"+(e.nroOrdenTN||""));
-              const zona=getZonaML(e.partido)||"";
-              return{"#":i+1,
-                Lote:lote,
-                Tipo:e.tipoEntrega==="COMERCIAL"?"COM":e.tipoEntrega==="RESIDENCIAL"?"RES":"",
-                Direccion:[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · "),
-                Referencia:(e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20)))?e.referencia:"",
-                NroEnvio:esFlex?nroRef:"",
-                NroOrden:esFlex?"":nroRef,
-                Zona:zona,
-                Turno:e.turno||"",
-                Fecha:e.fecha||"",
-                Bultos:e.bultos||1,
-                Cobrar:e.cobranza||""};
-            });
-            exportarXLSX(filas,"envios_"+logNombre+"_"+fechaHoy());
-          }} style={{...S.btnSm(false),border:"1px solid #10b981",color:"#10b981",padding:"4px 10px",fontSize:"0.72rem"}}>⬇ Excel</button>
-          <button onClick={()=>{
-            const ahora=new Date();
-            const ts=ahora.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+" "+ahora.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false});
-            const hayCobro=filtrados.some(e=>e.cobranza!==null&&e.cobranza>0);
-            const rows=filtrados.map((e,i)=>{
-              const esFlex=e.origen==="ML";
-              const dir=[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · ");
-              const nroRef=esFlex?(e.nroSeguimiento||e.id.slice(-10)):("#"+(e.nroOrdenTN||e.id.slice(-8)));
-              const lote=esFlex&&e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"—";
-              const tipo=e.tipoEntrega==="COMERCIAL"?"COM":e.tipoEntrega==="RESIDENCIAL"?"RES":"—";
-              const cobrar=e.cobranza?"$"+Number(e.cobranza).toLocaleString("es-AR"):"—";
-              return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"}"><td style="text-align:center;padding:3px 4px;color:#888;border-bottom:0.5px solid #ddd;">${i+1}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;color:#16a34a;font-size:9px;font-weight:700;">${lote}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;font-size:9px;font-weight:700;background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":e.tipoEntrega?"#dcfce7":"transparent"};color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":e.tipoEntrega?"#15803d":"#aaa"};">${tipo}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;font-weight:500;">${dir}${(e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20)))?" — "+e.referencia:""}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;font-family:monospace;font-size:9px;color:#444;">${nroRef}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;">${e.turno||"—"}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;">${e.fecha?fmtCorta(e.fecha):"—"}</td><td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;font-weight:${(e.bultos||1)>1?700:400};">${e.bultos||1}</td>${hayCobro?`<td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:right;font-weight:${e.cobranza?"600":"400"};color:${e.cobranza?"#b45309":"#aaa"};">${cobrar}</td>`:""}<td style="padding:3px 4px;border-bottom:0.5px solid #ddd;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td></tr>`;
-            }).join("");
-            const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Envios ${logNombre}</title><style>@page{size:A4 landscape;margin:8mm 10mm;}body{font-family:Arial,sans-serif;font-size:11px;margin:0;color:#111;}table{width:100%;border-collapse:collapse;}th{background:#e8e8e8;padding:3px 4px;text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;color:#555;border-bottom:1.5px solid #333;}@media print{button{display:none!important;}}</style></head><body><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;"><span style="font-weight:700;font-size:13px;">Envios — ${logNombre} · ${ts}</span><span style="font-size:10px;color:#888;">${filtrados.length} envios</span></div><table><thead><tr><th style="width:20px;">#</th><th style="width:55px;">Lote</th><th style="width:38px;text-align:center;">Tipo</th><th>Direccion · Localidad · Partido · CP · Referencia</th><th style="width:100px;">Nro envio</th><th style="width:32px;text-align:center;">Turno</th><th style="width:42px;text-align:center;">Fecha</th><th style="width:28px;text-align:center;">Blts</th>${hayCobro?"<th style='width:72px;text-align:right;'>Cobrar</th>":""}<th style="width:18px;text-align:center;">Chk</th></tr></thead><tbody>${rows}</tbody></table><div style="border-top:1.5px solid #333;margin-top:4px;padding-top:3px;font-size:9px;color:#555;">${filtrados.length} envios</div><script>window.onload=function(){window.print();}<\/script></body></html>`;
-            const w=window.open("","_blank");if(!w){alert("Permite ventanas emergentes.");return;}w.document.write(html);w.document.close();
-          }} style={{...S.btnSm(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"4px 10px",fontSize:"0.72rem",border:"none"}}>Imprimir</button>
+        <div style={{display:"flex",gap:"4px",marginLeft:"0.75rem"}}>
+          <button onClick={()=>setSubTab("escaneo")} style={{...S.btnSm(subTab==="escaneo"),padding:"4px 12px",fontSize:"0.73rem"}}>📦 Escaneo</button>
+          <button onClick={()=>setSubTab("stats")} style={{...S.btnSm(subTab==="stats","#f59e0b"),padding:"4px 12px",fontSize:"0.73rem"}}>📊 Stats</button>
+        </div>
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:"0.5rem"}}>
           <span style={{color:"#4b5563",fontSize:"0.72rem"}}>{sesion.usuario}</span>
           <button onClick={()=>{clearSession();window.location.reload();}} style={{...S.btnSm(false),color:"#f87171"}}>Salir</button>
         </div>
@@ -5671,157 +5757,212 @@ function VistaExpedicion({envios,setEnvios,sesion,lc}){
 
       <div style={{padding:"0.85rem 1rem",maxWidth:"700px",margin:"0 auto"}}>
 
-        {/* Selector de fecha */}
-        <div style={{...S.card,padding:"0.6rem 1rem",marginBottom:"0.75rem",display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}}>
-          <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Fecha</span>
-          {[{l:"Ayer",v:ayer()},{l:"Hoy",v:hoy},{l:"Mañana",v:manana()}].map(x =>(
-            <button key={x.v} onClick={()=>setFecha(x.v)} style={S.btnSm(fecha===x.v)}>{x.l}</button>
-          ))}
-          <input type="date" value={fecha} onChange={e=>setFecha(e.target.value)} style={{...S.input,padding:"3px 8px",width:"138px",fontSize:"0.78rem"}}/>
-          <span style={{color:"#4b5563",fontSize:"0.72rem",marginLeft:"4px"}}>{total} pedidos · {preparados} prep.</span>
-        </div>
+        {/* ═══════════════ SUB-TAB ESCANEO ═══════════════ */}
+        {subTab==="escaneo"&&(<>
+          {/* Selector de fecha */}
+          <div style={{...S.card,padding:"0.6rem 1rem",marginBottom:"0.75rem",display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}}>
+            <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Fecha</span>
+            {[{l:"Ayer",v:ayer()},{l:"Hoy",v:hoy},{l:"Mañana",v:manana()}].map(x=>(
+              <button key={x.v} onClick={()=>setFecha(x.v)} style={S.btnSm(fecha===x.v)}>{x.l}</button>
+            ))}
+            <input type="date" value={fecha} onChange={e=>setFecha(e.target.value)} style={{...S.input,padding:"3px 8px",width:"138px",fontSize:"0.78rem"}}/>
+            <span style={{color:"#4b5563",fontSize:"0.72rem",marginLeft:"4px"}}>{total} · {preparados} prep.</span>
+          </div>
 
-        {/* Resumen */}
-        <div style={{display:"flex",gap:"8px",marginBottom:"0.75rem"}}>
-          <div style={{...S.card,padding:"0.7rem 1rem",flex:1,borderLeft:"3px solid #6366f1"}}>
-            <div style={{color:"#6366f1",fontWeight:800,fontSize:"1.5rem",lineHeight:1}}>{total}</div>
-            <div style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase",marginTop:"2px"}}>Total</div>
-            <div style={{display:"flex",gap:"4px",marginTop:"4px"}}>
-              <span style={{background:"#0d1c04",color:"#84cc16",border:"1px solid #84cc16",padding:"1px 6px",borderRadius:"4px",fontSize:"9px",fontWeight:700}}>FLEX {flexFecha.length}</span>
-              <span style={{background:"#12172a",color:"#6366f1",border:"1px solid #6366f1",padding:"1px 6px",borderRadius:"4px",fontSize:"9px",fontWeight:700}}>NOFLEX {deFecha.length}</span>
+          {/* Resumen */}
+          <div style={{display:"flex",gap:"8px",marginBottom:"0.75rem"}}>
+            <div style={{...S.card,padding:"0.7rem 1rem",flex:1,borderLeft:"3px solid #6366f1"}}>
+              <div style={{color:"#6366f1",fontWeight:800,fontSize:"1.5rem",lineHeight:1}}>{total}</div>
+              <div style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase",marginTop:"2px"}}>Total</div>
+              <div style={{display:"flex",gap:"4px",marginTop:"4px",flexWrap:"wrap"}}>
+                <span style={{background:"#0d1c04",color:"#84cc16",border:"1px solid #84cc16",padding:"1px 6px",borderRadius:"4px",fontSize:"9px",fontWeight:700}}>F {flexFecha.length}</span>
+                <span style={{background:"#12172a",color:"#6366f1",border:"1px solid #6366f1",padding:"1px 6px",borderRadius:"4px",fontSize:"9px",fontWeight:700}}>NF {deFecha.length}</span>
+              </div>
+            </div>
+            <div style={{...S.card,padding:"0.7rem 1rem",flex:1,borderLeft:"3px solid #10b981"}}>
+              <div style={{color:"#10b981",fontWeight:800,fontSize:"1.5rem",lineHeight:1}}>{preparados}</div>
+              <div style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase",marginTop:"2px"}}>Preparados</div>
+              <div style={{display:"flex",gap:"4px",marginTop:"4px"}}>
+                <span style={{color:"#84cc16",fontSize:"9px",fontWeight:700}}>F:{prepFlex}</span>
+                <span style={{color:"#6366f1",fontSize:"9px",fontWeight:700}}>NF:{prepNoflex}</span>
+              </div>
+            </div>
+            <div style={{...S.card,padding:"0.7rem 1rem",flex:1,borderLeft:"3px solid #f59e0b"}}>
+              <div style={{color:"#f59e0b",fontWeight:800,fontSize:"1.5rem",lineHeight:1}}>{total-preparados}</div>
+              <div style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase",marginTop:"2px"}}>Pendientes</div>
+            </div>
+            <div style={{...S.card,padding:"0.7rem 1rem",flex:2}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:"5px"}}>
+                <span style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase"}}>Progreso</span>
+                <span style={{color:pct>=80?"#10b981":pct>=50?"#f59e0b":"#f87171",fontWeight:700,fontSize:"0.8rem"}}>{pct}%</span>
+              </div>
+              <div style={{height:"10px",background:"#0f1420",borderRadius:"5px",overflow:"hidden"}}>
+                <div style={{width:pct+"%",height:"100%",background:pct>=80?"#10b981":pct>=50?"#f59e0b":"#f87171",borderRadius:"5px",transition:"width 0.3s"}}/>
+              </div>
             </div>
           </div>
-          <div style={{...S.card,padding:"0.7rem 1rem",flex:1,borderLeft:"3px solid #10b981"}}>
-            <div style={{color:"#10b981",fontWeight:800,fontSize:"1.5rem",lineHeight:1}}>{preparados}</div>
-            <div style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase",marginTop:"2px"}}>Preparados</div>
-            <div style={{display:"flex",gap:"4px",marginTop:"4px"}}>
-              <span style={{color:"#84cc16",fontSize:"9px",fontWeight:700}}>F:{prepFlex}/{flexFecha.length}</span>
-              <span style={{color:"#6366f1",fontSize:"9px",fontWeight:700}}>NF:{prepNoflex}/{deFecha.length}</span>
+
+          {/* Input escaneo */}
+          <div style={{...S.card,padding:"0.85rem 1rem",marginBottom:"0.75rem",border:"1px solid #6366f133"}}>
+            <div style={{color:"#a78bfa",fontWeight:700,fontSize:"0.7rem",textTransform:"uppercase",letterSpacing:".06em",marginBottom:"8px"}}>
+              Escanear pedido
+              {ultimoArmador&&<span style={{color:"#4b5563",fontWeight:400,marginLeft:"8px",textTransform:"none"}}>· último: <span style={{color:ultimoArmador.color||"#a78bfa",fontWeight:600}}>{ultimoArmador.nombre}</span></span>}
             </div>
-          </div>
-          <div style={{...S.card,padding:"0.7rem 1rem",flex:1,borderLeft:"3px solid #f59e0b"}}>
-            <div style={{color:"#f59e0b",fontWeight:800,fontSize:"1.5rem",lineHeight:1}}>{total-preparados}</div>
-            <div style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase",marginTop:"2px"}}>Pendientes</div>
-          </div>
-          <div style={{...S.card,padding:"0.7rem 1rem",flex:2}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:"5px"}}>
-              <span style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase"}}>Progreso</span>
-              <span style={{color:pct>=80?"#10b981":pct>=50?"#f59e0b":"#f87171",fontWeight:700,fontSize:"0.8rem"}}>{pct}%</span>
+            <div style={{display:"flex",gap:"8px",marginBottom:resultado?"8px":"0"}}>
+              <input ref={inputRef} value={qrInput} onChange={e=>setQrInput(e.target.value)}
+                onKeyDown={e=>{if(e.key==="Enter"){procesarScan(qrInput);setQrInput("");}}}
+                placeholder="Escaneá el código de barras o ingresá el nro..."
+                style={{...S.input,flex:1,fontSize:"0.88rem",padding:"10px 12px"}} autoComplete="off"/>
+              <button onClick={()=>{procesarScan(qrInput);setQrInput("");}}
+                style={{...S.btn(true),background:"#12172a",border:"1px solid #6366f1",color:"#a78bfa",padding:"8px 14px",fontWeight:700,fontSize:"0.8rem"}}>OK</button>
             </div>
-            <div style={{height:"10px",background:"#0f1420",borderRadius:"5px",overflow:"hidden"}}>
-              <div style={{width:pct+"%",height:"100%",background:pct>=80?"#10b981":pct>=50?"#f59e0b":"#f87171",borderRadius:"5px",transition:"width 0.3s"}}/>
-            </div>
+            {resultado&&(
+              <div onClick={()=>resultado.ok!==true&&setResultado(null)} style={{padding:"8px 12px",borderRadius:"8px",cursor:resultado.ok===true?"default":"pointer",
+                background:resultado.ok===true?"#041f14":resultado.ok==="ya"?"#12172a":"#1c0404",
+                border:"1px solid "+(resultado.ok===true?"#065f46":resultado.ok==="ya"?"#252d40":"#7f1d1d"),
+                color:resultado.ok===true?"#34d399":resultado.ok==="ya"?"#6b7280":"#f87171",
+                fontSize:"0.82rem",fontWeight:700,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"8px"}}>
+                <div>{resultado.msg}{resultado.envio&&<div style={{fontWeight:400,color:"#9ca3af",marginTop:"2px",fontSize:"0.75rem"}}>{resultado.envio.direccion}{resultado.envio.trans&&<span style={{color:lc[resultado.envio.trans]?.color||"#6b7280",fontWeight:700}}> · {resultado.envio.trans}</span>}{resultado.bultos>1&&<span style={{color:"#f59e0b",fontWeight:700}}> · {resultado.bultos} bultos</span>}</div>}</div>
+                {resultado.ok!==true&&<span style={{opacity:0.5,fontSize:"0.75rem",flexShrink:0}}>✕</span>}
+              </div>
+            )}
           </div>
-        </div>
 
-        {/* Scanner FLEX */}
-        <div style={{...S.card,padding:"0.85rem 1rem",marginBottom:"0.75rem",border:"1px solid #84cc1633"}}>
-          <div style={{color:"#84cc16",fontWeight:700,fontSize:"0.7rem",textTransform:"uppercase",letterSpacing:".06em",marginBottom:"8px"}}>
-            Escaner FLEX {flexFecha.length>0?`· ${prepFlex}/${flexFecha.length} preparados`:"· sin FLEX esta fecha"}
+          {/* Filtros */}
+          <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"0.5rem",alignItems:"center"}}>
+            <button onClick={()=>setFilLog("TODOS")} style={S.btnSm(filLog==="TODOS")}>Todos</button>
+            {logActivas.map(l=><button key={l} onClick={()=>setFilLog(l)} style={S.btnSm(filLog===l,lc[l]?.color)}>{l}</button>)}
+            <button onClick={()=>setSoloPendientes(!soloPendientes)} style={{...S.btnSm(soloPendientes,"#f59e0b"),marginLeft:"auto"}}>Solo pendientes</button>
           </div>
-          <div style={{display:"flex",gap:"8px",marginBottom:resultado?"8px":"0"}}>
-            <input ref={inputRef} value={qrInput} onChange={e=>setQrInput(e.target.value)}
-              onKeyDown={e=>{if(e.key==="Enter"){procesarScan(qrInput);setQrInput("");}}}
-              placeholder="Ingresá o escaneá el nro de seguimiento..."
-              style={{...S.input,flex:1,fontSize:"0.88rem",padding:"8px 12px"}} autoComplete="off"/>
-            <button onClick={()=>{procesarScan(qrInput);setQrInput("");}} style={{...S.btn(true),background:"#0d1c04",border:"1px solid #84cc16",color:"#84cc16",padding:"8px 14px",fontWeight:700,fontSize:"0.8rem"}}>OK</button>
-            <button onClick={()=>setCamara(!camara)} style={{...S.btn(camara),background:camara?"#0d1c04":"#0f1420",border:"1px solid "+(camara?"#84cc16":"#252d40"),color:camara?"#84cc16":"#6b7280",padding:"8px 12px",fontSize:"1rem"}} title="Abrir cámara">📷</button>
+          <div style={{display:"flex",gap:"6px",marginBottom:"0.6rem",alignItems:"center"}}>
+            <button onClick={()=>setFilTipo("TODOS")} style={S.btnSm(filTipo==="TODOS")}>Todos</button>
+            <button onClick={()=>setFilTipo("FLEX")} style={{...S.btnSm(filTipo==="FLEX"),background:filTipo==="FLEX"?"#0d1c04":"#0f1420",color:filTipo==="FLEX"?"#84cc16":"#4b7a10",border:"1px solid "+(filTipo==="FLEX"?"#84cc16":"#1a3008")}}>FLEX</button>
+            <button onClick={()=>setFilTipo("NOFLEX")} style={S.btnSm(filTipo==="NOFLEX","#6366f1")}>NO FLEX</button>
+            <span style={{color:"#4b5563",fontSize:"0.68rem",marginLeft:"4px"}}>{filtrados.length} pedidos</span>
           </div>
-          {camara&&<div style={{marginTop:"8px",borderRadius:"8px",overflow:"hidden",background:"#000",position:"relative"}}>
-            <video ref={videoRef} style={{width:"100%",maxHeight:"220px",objectFit:"cover",display:"block"}} playsInline muted/>
-            <div style={{position:"absolute",inset:0,border:"2px solid #84cc16",borderRadius:"8px",pointerEvents:"none"}}/>
-            <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"140px",height:"140px",border:"2px solid #84cc16",borderRadius:"8px",boxShadow:"0 0 0 9999px rgba(0,0,0,0.4)"}}/>
-            <button onClick={()=>setCamara(false)} style={{position:"absolute",top:"8px",right:"8px",background:"rgba(0,0,0,0.7)",border:"1px solid #84cc16",color:"#84cc16",borderRadius:"6px",padding:"4px 10px",fontSize:"12px",cursor:"pointer"}}>Cerrar</button>
-          </div>}
-          {resultado&&<div onClick={()=>resultado.ok!=="scanning"&&setResultado(null)} style={{padding:"8px 12px",borderRadius:"8px",cursor:resultado.ok==="scanning"?"default":"pointer",
-            background:resultado.ok===true?"#041f14":resultado.ok==="ya"?"#12172a":resultado.ok==="scanning"?"#0d1c2e":"#1c0404",
-            border:"1px solid "+(resultado.ok===true?"#065f46":resultado.ok==="ya"?"#252d40":resultado.ok==="scanning"?"#38bdf8":"#7f1d1d"),color:resultado.ok===true?"#34d399":resultado.ok==="ya"?"#6b7280":resultado.ok==="scanning"?"#38bdf8":"#f87171",fontSize:"0.82rem",fontWeight:700,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"8px"}}>
-            <div>{resultado.ok==="scanning"?"⏳ "+resultado.msg:resultado.msg}{resultado.envio&&<div style={{fontWeight:400,color:"#9ca3af",marginTop:"2px",fontSize:"0.75rem"}}>{resultado.envio.direccion} {resultado.envio.trans?<span style={{color:resultado.envio.trans&&lc[resultado.envio.trans]?.color||"#6b7280",fontWeight:700}}>· {resultado.envio.trans}</span>:""}</div>}</div>
-            {resultado.ok!=="scanning"&&<span style={{opacity:0.5,fontSize:"0.75rem",flexShrink:0}}>✕ cerrar</span>}
-          </div>}
-        </div>
+          <div style={{marginBottom:"0.6rem"}}>
+            <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="🔍 Buscar..." style={{...S.input,width:"100%"}}/>
+          </div>
 
-        {/* Filtros por logistica */}
-        <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"0.5rem",alignItems:"center"}}>
-          <button onClick={()=>setFilLog("TODOS")} style={S.btnSm(filLog==="TODOS")}>Todos</button>
-          {logActivas.map(l =><button key={l} onClick={()=>setFilLog(l)} style={S.btnSm(filLog===l,lc[l]?.color)}>{l}</button>)}
-          <button onClick={()=>setSoloPendientes(!soloPendientes)} style={{...S.btnSm(soloPendientes,"#f59e0b"),marginLeft:"auto"}}>Solo pendientes</button>
-        </div>
-        {/* Filtro FLEX / NO FLEX */}
-        <div style={{display:"flex",gap:"6px",marginBottom:"0.6rem",alignItems:"center"}}>
-          <button onClick={()=>setFilTipo("TODOS")} style={S.btnSm(filTipo==="TODOS")}>Todos</button>
-          <button onClick={()=>setFilTipo("FLEX")} style={{...S.btnSm(filTipo==="FLEX"),background:filTipo==="FLEX"?"#0d1c04":"#0f1420",color:filTipo==="FLEX"?"#84cc16":"#4b7a10",border:"1px solid "+(filTipo==="FLEX"?"#84cc16":"#1a3008")}}>FLEX</button>
-          <button onClick={()=>setFilTipo("NOFLEX")} style={S.btnSm(filTipo==="NOFLEX","#6366f1")}>NO FLEX</button>
-          <span style={{color:"#4b5563",fontSize:"0.68rem",marginLeft:"4px"}}>{filtrados.length} pedidos</span>
-        </div>
-
-        {/* Buscar */}
-        <div style={{marginBottom:"0.6rem"}}>
-          <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="🔍 Buscar por nro de orden o dirección..." style={{...S.input,width:"100%"}}/>
-        </div>
-
-        {/* Lista agrupada por logistica */}
-        {filtrados.length===0&&<div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📦</div><p style={{marginTop:"8px"}}>Sin pedidos NO FLEX para esta fecha</p></div>}
-        {Object.entries(grupos).map(([log,items])=>{
-          const lcD=lc[log]||{color:"#6b7280",bg:"#1a1f2e"};
-          const prepG=items.filter(e=>e.preparado).length;
-          return(
-            <div key={log} style={{marginBottom:"16px"}}>
-              {/* Separador logistica */}
-              <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}>
-                <div style={{flex:1,height:"1px",background:"#1a1f2e"}}/>
-                <div style={{background:lcD.bg||"#12172a",color:lcD.color,padding:"2px 12px",borderRadius:"10px",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>
-                  {log} · {prepG}/{items.length} preparados
+          {/* Lista */}
+          {filtrados.length===0&&<div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📦</div><p style={{marginTop:"8px"}}>Sin pedidos para esta fecha</p></div>}
+          {Object.entries(grupos).map(([log,items])=>{
+            const lcD=lc[log]||{color:"#6b7280",bg:"#1a1f2e"};
+            const prepG=items.filter(e=>e.preparado).length;
+            return(
+              <div key={log} style={{marginBottom:"16px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}>
+                  <div style={{flex:1,height:"1px",background:"#1a1f2e"}}/>
+                  <div style={{background:lcD.bg||"#12172a",color:lcD.color,padding:"2px 12px",borderRadius:"10px",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>{log} · {prepG}/{items.length}</div>
+                  <div style={{flex:1,height:"1px",background:"#1a1f2e"}}/>
                 </div>
-                <div style={{flex:1,height:"1px",background:"#1a1f2e"}}/>
-              </div>
-              {/* Pedidos */}
-              <div style={{display:"grid",gap:"6px"}}>
-                {items.map(e=>{
-                  const bVal=bultosEdit[e.id]??e.bultos??"";
-                  const esTN=e.origen==="Tienda Nube";
-                  return(
-                    <div key={e.id} style={{...S.card,overflow:"hidden",opacity:e.preparado?0.6:1,borderColor:e.preparado?"#065f46":"#252d40"}}>
-                      {/* Info del pedido */}
-                      <div style={{padding:"10px 14px",display:"flex",alignItems:"flex-start",gap:"10px"}}>
-                        <div style={{width:"26px",height:"26px",borderRadius:"7px",background:e.preparado?"#041f14":"#0f1420",border:"2px solid "+(e.preparado?"#10b981":"#374151"),display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:"2px"}}>
-                          {e.preparado&&<span style={{color:"#10b981",fontSize:"15px",lineHeight:1}}>✓</span>}
-                        </div>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{display:"flex",gap:"4px",flexWrap:"wrap",marginBottom:"3px"}}>
-                            {esTN&&<span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.8rem"}}>#{e.nroOrdenTN}</span>}
-                            {e.turno&&<Bdg label={e.turno} bg={TURNO_C[e.turno]?.bg||"#130d2a"} t={TURNO_C[e.turno]?.c||"#a78bfa"}/>}
-                            {e.preparado&&<Bdg label={`Preparado · ${e.bultos} bulto${e.bultos>1?"s":""}`} bg="#041f14" t="#10b981"/>}
-                            {e.cobranza&&<Bdg label={"$"+Number(e.cobranza).toLocaleString("es-AR")} bg="#1c1500" t="#fbbf24"/>}
+                <div style={{display:"grid",gap:"6px"}}>
+                  {items.map(e=>{
+                    const esTN=e.origen==="Tienda Nube";
+                    return(
+                      <div key={e.id} style={{...S.card,overflow:"hidden",opacity:e.preparado?0.55:1,borderColor:e.preparado?"#065f46":"#252d40"}}>
+                        <div style={{padding:"10px 14px",display:"flex",alignItems:"flex-start",gap:"10px"}}>
+                          <div style={{width:"26px",height:"26px",borderRadius:"7px",background:e.preparado?"#041f14":"#0f1420",border:"2px solid "+(e.preparado?"#10b981":"#374151"),display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:"2px"}}>
+                            {e.preparado&&<span style={{color:"#10b981",fontSize:"15px",lineHeight:1}}>✓</span>}
                           </div>
-                          <div style={{color:"#e5e7eb",fontSize:"0.85rem",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}</div>
-                          <div style={{color:"#6b7280",fontSize:"0.72rem",marginTop:"1px"}}>{e.localidad?e.localidad+" · ":""}{e.partido}{e.cp?" · CP "+e.cp:""}</div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{display:"flex",gap:"4px",flexWrap:"wrap",marginBottom:"3px"}}>
+                              {esTN&&<span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.8rem"}}>#{e.nroOrdenTN}</span>}
+                              {e.turno&&<Bdg label={e.turno} bg={TURNO_C[e.turno]?.bg||"#130d2a"} t={TURNO_C[e.turno]?.c||"#a78bfa"}/>}
+                              {e.preparado&&<Bdg label={"✓ "+(e.bultos||1)+"b"+(e.armadorNombre?" · "+e.armadorNombre:"")} bg="#041f14" t="#10b981"/>}
+                              {e.cobranza&&<Bdg label={"$"+Number(e.cobranza).toLocaleString("es-AR")} bg="#1c1500" t="#fbbf24"/>}
+                            </div>
+                            <div style={{color:"#e5e7eb",fontSize:"0.85rem",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}</div>
+                            <div style={{color:"#6b7280",fontSize:"0.72rem",marginTop:"1px"}}>{e.localidad?e.localidad+" · ":""}{e.partido}{e.cp?" · CP "+e.cp:""}</div>
+                          </div>
                         </div>
                       </div>
-                      {/* Zona bultos */}
-                      <div style={{borderTop:"1px solid #1a1f2e",padding:"10px 14px",display:"flex",alignItems:"center",gap:"10px",background:"#12172a"}}>
-                        <span style={{color:"#6b7280",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"50px"}}>Bultos</span>
-                        <input
-                          type="number" min="1"
-                          value={bVal}
-                          onChange={ev=>setBultosEdit(p=>({...p,[e.id]:ev.target.value}))}
-                          onKeyDown={ev=>{if(ev.key==="Enter")confirmarBultos(e);}}
-                          placeholder="—"
-                          style={{width:"80px",background:"#0f1420",border:"2px solid "+(bVal?"#6366f1":"#252d40"),borderRadius:"8px",padding:"7px 10px",color:"#e5e7eb",fontSize:"1.2rem",fontWeight:700,textAlign:"center"}}
-                        />
-                        {!e.preparado
-                          ?<button onClick={()=>confirmarBultos(e)} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"7px 18px",fontSize:"0.82rem",fontWeight:700}}>Confirmar</button>
-                          :<button onClick={()=>confirmarBultos(e)} style={{...S.btn(false),background:"#041f14",border:"1px solid #10b981",color:"#10b981",padding:"7px 18px",fontSize:"0.82rem",fontWeight:700}}>✓ Preparado</button>
-                        }
-                        {e.preparado&&!e.bultos&&null}
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </>)}
+
+        {/* ═══════════════ SUB-TAB ESTADÍSTICAS ═══════════════ */}
+        {subTab==="stats"&&(<>
+          <div style={{...S.card,padding:"0.6rem 1rem",marginBottom:"0.75rem",display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}}>
+            <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Fecha</span>
+            {[{l:"Ayer",v:ayer()},{l:"Hoy",v:hoy}].map(x=>(
+              <button key={x.v} onClick={()=>setStatsFecha(x.v)} style={S.btnSm(statsFecha===x.v)}>{x.l}</button>
+            ))}
+            <input type="date" value={statsFecha} onChange={e=>setStatsFecha(e.target.value)} style={{...S.input,padding:"3px 8px",width:"138px",fontSize:"0.78rem"}}/>
+            <span style={{color:"#4b5563",fontSize:"0.72rem",marginLeft:"4px"}}>{statsArmados.length} armados</span>
+          </div>
+
+          {loadingStats&&<div style={{textAlign:"center",padding:"2rem",color:"#4b5563",fontSize:"0.82rem"}}>Cargando...</div>}
+
+          {!loadingStats&&statsArmados.length===0&&(
+            <div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📊</div><p style={{marginTop:"8px"}}>Sin registros para esta fecha</p></div>
+          )}
+
+          {!loadingStats&&statsArmados.length>0&&(<>
+            {/* Totales */}
+            <div style={{display:"flex",gap:"8px",marginBottom:"0.75rem"}}>
+              <div style={{...S.card,padding:"0.8rem",flex:1,textAlign:"center"}}>
+                <div style={{fontSize:"1.8rem",fontWeight:800,color:"#6366f1"}}>{statsArmados.length}</div>
+                <div style={{fontSize:"0.6rem",color:"#6b7280",textTransform:"uppercase",marginTop:"2px"}}>Pedidos</div>
+              </div>
+              <div style={{...S.card,padding:"0.8rem",flex:1,textAlign:"center"}}>
+                <div style={{fontSize:"1.8rem",fontWeight:800,color:"#10b981"}}>{statsArmados.reduce((s,a)=>s+(a.bultos||1),0)}</div>
+                <div style={{fontSize:"0.6rem",color:"#6b7280",textTransform:"uppercase",marginTop:"2px"}}>Bultos</div>
+              </div>
+              <div style={{...S.card,padding:"0.8rem",flex:1,textAlign:"center"}}>
+                <div style={{fontSize:"1.8rem",fontWeight:800,color:"#f59e0b"}}>{statsPerArmador.length}</div>
+                <div style={{fontSize:"0.6rem",color:"#6b7280",textTransform:"uppercase",marginTop:"2px"}}>Armadores</div>
               </div>
             </div>
-          );
-        })}
+
+            {/* Ranking */}
+            <div style={{...S.card,padding:"1rem",marginBottom:"0.75rem"}}>
+              <div style={{color:"#f59e0b",fontSize:"0.7rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:"12px"}}>🏆 Ranking del día</div>
+              {statsPerArmador.map((arm,i)=>{
+                const pctBar=statsPerArmador[0].count>0?Math.round(arm.count/statsPerArmador[0].count*100):0;
+                const barColor=i===0?"#f59e0b":i===1?"#9ca3af":i===2?"#b45309":"#374151";
+                return(
+                  <div key={arm.id||arm.nombre} style={{marginBottom:"12px"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"4px"}}>
+                      <span style={{fontSize:"0.9rem",fontWeight:800,color:barColor,minWidth:"20px"}}>{i+1}</span>
+                      <span style={{fontWeight:700,fontSize:"0.9rem",color:"#e5e7eb",flex:1}}>{arm.nombre}</span>
+                      <span style={{fontWeight:800,fontSize:"1.05rem",color:"#6366f1"}}>{arm.count}</span>
+                      <span style={{fontSize:"0.7rem",color:"#4b5563"}}>{arm.bultos}b</span>
+                      {arm.avgMin!==null&&<span style={{fontSize:"0.68rem",color:"#4b5563",minWidth:"56px",textAlign:"right"}}>⌀ {arm.avgMin}m</span>}
+                    </div>
+                    <div style={{height:"6px",background:"#1a1f2e",borderRadius:"3px",overflow:"hidden"}}>
+                      <div style={{width:pctBar+"%",height:"100%",background:barColor,borderRadius:"3px",transition:"width 0.4s"}}/>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Actividad por hora */}
+            {actPorHora.length>0&&(
+              <div style={{...S.card,padding:"1rem",marginBottom:"0.75rem"}}>
+                <div style={{color:"#38bdf8",fontSize:"0.7rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:"10px"}}>⏱ Actividad por hora</div>
+                <div style={{display:"flex",alignItems:"flex-end",gap:"3px",height:"64px"}}>
+                  {actPorHora.map(h=>{
+                    const maxH=Math.max(...actPorHora.map(x=>x.count));
+                    const pctH=maxH>0?Math.round(h.count/maxH*100):0;
+                    return(
+                      <div key={h.h} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"2px"}}>
+                        <div style={{width:"100%",height:Math.max(3,pctH*0.58)+"px",background:"#38bdf8",borderRadius:"2px 2px 0 0"}}/>
+                        <div style={{fontSize:"8px",color:"#4b5563"}}>{h.h}h</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </>)}
+        </>)}
+
       </div>
     </div>
   );
@@ -5870,6 +6011,45 @@ function imprimirEtiquetas(envio,lc){
   </body></html>`;
   const w=window.open("","_blank");
   if(!w){alert("Permite ventanas emergentes.");return;}
+  w.document.write(html);w.document.close();
+}
+
+// Imprime sólo las etiquetas de los bultos adicionales (2..N) — se llama automáticamente en expedición
+function imprimirEtiquetasExtra(envio,lc){
+  const bultos=envio.bultos||1;
+  if(bultos<=1)return;
+  const etqs=Array.from({length:bultos-1},(_,i)=>{
+    const nb=i+2;
+    return`<div style="width:9cm;min-height:6cm;border:2px solid #333;border-radius:8px;padding:14px;margin:0 auto 16px;font-family:Arial,sans-serif;page-break-inside:avoid;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+        <div>
+          <div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.04em;">EnviosHub · UMP Papel Distribuidora</div>
+          <div style="font-size:13px;font-weight:700;color:#333;margin-top:2px;">${envio.trans||"Sin asignar"}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:28px;font-weight:900;color:#333;line-height:1;">${nb}/${bultos}</div>
+          <div style="font-size:10px;color:#666;">bulto${bultos>1?"s":""}</div>
+        </div>
+      </div>
+      <div style="border-top:1px solid #ddd;padding-top:10px;margin-bottom:8px;">
+        <div style="font-size:15px;font-weight:700;color:#111;margin-bottom:4px;">${envio.direccion}</div>
+        <div style="font-size:12px;color:#444;">${[envio.localidad,envio.partido].filter(Boolean).join(" · ")}${envio.cp?" · CP "+envio.cp:""}</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:8px;">
+        <div>
+          ${envio.turno?'<div style="display:inline-block;background:#f0f0f0;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;color:#333;">'+envio.turno+'</div>':""}
+          ${envio.fecha?'<div style="font-size:10px;color:#666;margin-top:3px;">'+envio.fecha+'</div>':""}
+        </div>
+        <div style="text-align:right;">
+          ${envio.nroOrdenTN?'<div style="font-size:11px;font-weight:700;color:#333;">#'+envio.nroOrdenTN+'</div>':""}
+          ${envio.cobranza?'<div style="font-size:13px;font-weight:700;color:#b45309;">Cobrar $'+Number(envio.cobranza).toLocaleString("es-AR")+'</div>':""}
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Etiquetas adicionales</title><style>@page{size:A4;margin:10mm;}body{margin:0;padding:8px;}@media print{button{display:none!important;}}</style></head><body><div style="text-align:center;margin-bottom:12px;font-family:Arial;font-size:11px;color:#888;">${envio.direccion} · bultos adicionales (${nb} de ${bultos})</div>${etqs}<script>window.onload=function(){window.print();};<\/script></body></html>`;
+  const w=window.open("","_blank");
+  if(!w){alert("Permití ventanas emergentes para imprimir.");return;}
   w.document.write(html);w.document.close();
 }
 
@@ -6303,6 +6483,23 @@ export default function App(){
     setFacturaClientesLocal(next);
     setDoc(doc(db,"config","clientesMeta"),{facturaImpresa:next},{merge:true}).catch(console.error);
   };
+
+  // configExpedicion: {impresionHabilitada: bool, armadores: [{id,nombre,color}]}
+  const [configExpedicion,setConfigExpedicionLocal]=useState({impresionHabilitada:false,armadores:[]});
+  useEffect(()=>{
+    const unsub=onSnapshot(doc(db,"config","expedicion"),snap=>{
+      if(snap.exists())setConfigExpedicionLocal(snap.data());
+    });
+    return()=>unsub();
+  },[]);
+  const setConfigExpedicion=useCallback((updater)=>{
+    setConfigExpedicionLocal(prev=>{
+      const next=typeof updater==="function"?updater(prev):updater;
+      setDoc(doc(db,"config","expedicion"),next).catch(console.error);
+      return next;
+    });
+  },[]);
+
   const [toast,setToast]=useState("");
   const mostrarToast=msg=>{setToast(msg);setTimeout(()=>setToast(""),2500);};
   const [alertas,setAlertas]=useState([]);
@@ -6389,7 +6586,7 @@ export default function App(){
     if(esChofer)return<VistaChofer envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>;
     return<VistaLogistica envios={envios} sesion={sesion} lc={lc}/>;
   }
-  if(sesion.rol==="expedicion")return<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>;
+  if(sesion.rol==="expedicion")return<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc} configExpedicion={configExpedicion}/>;
 
   if(pantalla==="asignacion"){return<PantallaAsignacion borrador={borrador} fileName={fileName} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc} envios={envios} sesion={sesion}/>;}
   if(pantalla==="asignacion-tn"){return<PantallaAsignacionTN borrador={borrador} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc} sesion={sesion}/>;}
@@ -6602,8 +6799,8 @@ export default function App(){
         {tab==="ctasctes"       &&<TabCtasCtes       envios={envios} lc={lc} sesion={sesion} pagosInicial={pagosCC} facturaClientes={facturaClientes} setFacturaCliente={setFacturaCliente}/>}
         {tab==="clientes"       &&<TabClientes       envios={envios} lc={lc} pagosCC={pagosCC} facturaClientes={facturaClientes} setFacturaCliente={setFacturaCliente} sesion={sesion}/>}
         {tab==="localidades" &&<TabLocalidades cpExtra={cpExtra} setCpExtra={setCpExtra}/>}
-        {tab==="usuarios"   &&<TabUsuarios lc={lc} setLc={setLcPersist}/>}
-        {tab==="expedicion" &&<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>}
+        {tab==="usuarios"   &&<TabUsuarios lc={lc} setLc={setLcPersist} configExpedicion={configExpedicion} setConfigExpedicion={setConfigExpedicion}/>}
+        {tab==="expedicion" &&<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc} configExpedicion={configExpedicion} esAdmin={esAdmin}/>}
       </div>
     </div>
   );
