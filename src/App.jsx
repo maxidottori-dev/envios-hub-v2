@@ -5580,14 +5580,25 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
 
   // ── Scan handler ─────────────────────────────────────────────────
   const procesarScan=useCallback((nro)=>{
-    const srch=nro.trim();if(!srch)return;
+    const srch=nro.trim().replace(/^#/,"");if(!srch)return; // strip # prefix
     setResultado(null);
     const nums=srch.replace(/\D/g,"");
-    let found=envios.find(e=>e.nroSeguimiento===srch||e.id===srch||e.nroSeguimiento===nums);
-    if(!found)found=envios.find(e=>e.nroSeguimiento&&nums.startsWith(e.nroSeguimiento));
-    if(!found)found=envios.find(e=>e.nroSeguimiento&&e.nroSeguimiento.startsWith(nums));
+    // Busca por nroSeguimiento, nroOrdenTN, id (exacto y numérico)
+    let found=envios.find(e=>
+      e.nroSeguimiento===srch||e.nroSeguimiento===nums||
+      e.nroOrdenTN===srch||e.nroOrdenTN===nums||
+      e.id===srch
+    );
+    // Fallback: prefijo del código de barras
+    if(!found&&nums)found=envios.find(e=>e.nroSeguimiento&&nums.startsWith(e.nroSeguimiento));
+    if(!found&&nums)found=envios.find(e=>e.nroSeguimiento&&e.nroSeguimiento.startsWith(nums));
+    if(!found&&nums)found=envios.find(e=>e.nroOrdenTN&&nums.startsWith(e.nroOrdenTN));
     if(!found){setResultado({ok:false,msg:"No encontrado: "+srch.slice(0,20)});setTimeout(()=>setResultado(null),8000);return;}
-    if(found.preparado){setResultado({ok:"ya",envio:found,msg:"Ya estaba preparado"});setTimeout(()=>setResultado(null),8000);return;}
+    if(found.preparado&&found.armadorNombre){
+      // Ya fue armado en el nuevo flujo → mostrar quién lo armó
+      setResultado({ok:"ya",envio:found,msg:"Ya preparado por "+found.armadorNombre+" · "+(found.bultos||1)+" bulto"+(found.bultos>1?"s":"")});
+      setTimeout(()=>setResultado(null),8000);return;
+    }
     setScanPendiente(found);
     setBultosSel(found.bultos||1);
     beepOK();
