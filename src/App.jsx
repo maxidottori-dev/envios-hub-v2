@@ -5541,6 +5541,8 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
   const [ultimoArmador,setUltimoArmador]=useState(null);
   const [matchesPendientes,setMatchesPendientes]=useState([]); // candidatos para disambiguation
   const [modoEdicion,setModoEdicion]=useState(false);          // true cuando se edita un pedido ya preparado
+  const [armadorActivo,setArmadorActivo]=useState(null);       // armador "bloqueado" para escaneo rápido
+  const [sesionContador,setSesionContador]=useState(0);        // pedidos confirmados en la sesión activa
   const [filLog,setFilLog]=useState("TODOS");
   const [soloPendientes,setSoloPendientes]=useState(false);
   const [filTipo,setFilTipo]=useState("TODOS");
@@ -5629,6 +5631,26 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
     const srch=nro.trim().replace(/^#/,"");if(!srch)return;
     setResultado(null);
     const nums=srch.replace(/\D/g,"");
+    // Modo armador activo: buscar y confirmar automáticamente sin panel
+    if(armadorActivo){
+      const candidatos=envios
+        .map(e=>({e,score:scoreBusqueda(e,srch,nums)}))
+        .filter(x=>x.score>0)
+        .sort((a,b)=>b.score-a.score);
+      if(candidatos.length===0){
+        setResultado({ok:false,msg:"No encontrado: "+srch.slice(0,20)});
+        setTimeout(()=>setResultado(null),5000);return;
+      }
+      const found=candidatos[0].e;
+      if(found.preparado&&found.armadorNombre){
+        setResultado({ok:"ya",envio:found,msg:"Ya preparado por "+found.armadorNombre});
+        setTimeout(()=>setResultado(null),4000);return;
+      }
+      ejecutarArmado(found,armadorActivo,found.bultos||1);
+      setSesionContador(p=>p+1);
+      beepOK();
+      return;
+    }
     // Puntuar todos los envíos y ordenar por relevancia
     const candidatos=envios
       .map(e=>({e,score:scoreBusqueda(e,srch,nums)}))
@@ -5667,30 +5689,21 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
       setTimeout(()=>setResultado(null),5000);
       if(inputRef.current)inputRef.current.focus();
     },30000);
-  },[envios,abrirPanelArmador]);
+  },[envios,armadorActivo,ejecutarArmado,abrirPanelArmador]);
 
-  // ── Confirmar armado ─────────────────────────────────────────────
-  const confirmarArmado=useCallback(async(armador)=>{
-    if(!scanPendiente)return;
-    if(timeoutRef.current)clearTimeout(timeoutRef.current);
-    const envio=scanPendiente;
-    const bultos=bultosSel;
-    const esEdit=modoEdicion;
+  // ── Lógica base de confirmación (usada por panel y por modo automático) ──
+  const ejecutarArmado=useCallback((envio,armador,bultos,esEdit=false)=>{
     const ts=new Date().toISOString();
-    // Actualizar envio y cerrar panel de inmediato — sin await
     setEnvios(pv=>pv.map(e=>e.id===envio.id?{...e,preparado:true,bultos,armadorId:armador.id,armadorNombre:armador.nombre,armadoTs:ts}:e));
-    setScanPendiente(null);setModoEdicion(false);
     setUltimoArmador(armador);
     setResultado({ok:true,envio,bultos,msg:(esEdit?"✏️ Editado: ":"✓ ")+armador.nombre+(bultos>1?" · "+bultos+" bultos":"")});
-    setTimeout(()=>setResultado(null),8000);
+    setTimeout(()=>setResultado(null),5000);
     if(inputRef.current)inputRef.current.focus();
-    // Guardar en armados en background (no bloquea UI)
     addDoc(collection(db,"armados"),{
       envioId:envio.id,
       nroSeguimiento:envio.nroSeguimiento||"",
       nroOrdenTN:String(envio.nroOrdenTN||""),
-      armadorId:armador.id,
-      armadorNombre:armador.nombre,
+      armadorId:armador.id,armadorNombre:armador.nombre,
       ts,fecha:envio.fecha||envio.fechaVenta||"",
       bultos,logistica:envio.trans||"",
       direccion:envio.direccion||"",
@@ -5699,7 +5712,18 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
       esEdicion:esEdit,
     }).catch(err=>console.error("Error guardando armado:",err));
     if(bultos>1&&impresionHabilitada&&envio.origen!=="ML")imprimirEtiquetasExtra({...envio,bultos},lc);
-  },[scanPendiente,bultosSel,modoEdicion,setEnvios,lc,impresionHabilitada]);
+  },[setEnvios,lc,impresionHabilitada]);
+
+  // ── Confirmar armado desde el panel flotante ──────────────────────
+  const confirmarArmado=useCallback((armador)=>{
+    if(!scanPendiente)return;
+    if(timeoutRef.current)clearTimeout(timeoutRef.current);
+    const envio=scanPendiente;
+    const bultos=bultosSel;
+    const esEdit=modoEdicion;
+    setScanPendiente(null);setModoEdicion(false);
+    ejecutarArmado(envio,armador,bultos,esEdit);
+  },[scanPendiente,bultosSel,modoEdicion,ejecutarArmado]);
 
   useEffect(()=>{if(inputRef.current)inputRef.current.focus();},[]);
 
@@ -5980,7 +6004,10 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
           <div style={{...S.card,padding:"0.85rem 1rem",marginBottom:"0.75rem",border:"1px solid #6366f133"}}>
             <div style={{color:"#a78bfa",fontWeight:700,fontSize:"0.7rem",textTransform:"uppercase",letterSpacing:".06em",marginBottom:"8px"}}>
               Escanear pedido
-              {ultimoArmador&&<span style={{color:"#4b5563",fontWeight:400,marginLeft:"8px",textTransform:"none"}}>· último: <span style={{color:ultimoArmador.color||"#a78bfa",fontWeight:600}}>{ultimoArmador.nombre}</span></span>}
+              {armadorActivo
+                ?<span style={{color:armadorActivo.color||"#10b981",fontWeight:700,marginLeft:"8px",textTransform:"none"}}>· modo automático: {armadorActivo.nombre}</span>
+                :ultimoArmador&&<span style={{color:"#4b5563",fontWeight:400,marginLeft:"8px",textTransform:"none"}}>· último: <span style={{color:ultimoArmador.color||"#a78bfa",fontWeight:600}}>{ultimoArmador.nombre}</span></span>
+              }
             </div>
             <div style={{display:"flex",gap:"8px",marginBottom:(camara||resultado)?"8px":"0"}}>
               <input ref={inputRef} value={qrInput} onChange={e=>setQrInput(e.target.value)}
@@ -6014,6 +6041,56 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
               </div>
             )}
           </div>
+
+          {/* ── Botonera de armadores siempre visible ── */}
+          {armadores.length>0&&(
+            <div style={{...S.card,padding:"0.75rem 1rem",marginBottom:"0.75rem",border:"1px solid "+(armadorActivo?"#065f46":"#1a1f2e")}}>
+              {armadorActivo?(
+                /* Banner armador activo */
+                <div style={{display:"flex",alignItems:"center",gap:"10px",flexWrap:"wrap"}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:"0.6rem",color:"#10b981",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:"2px"}}>🔒 Armador activo</div>
+                    <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
+                      <span style={{fontWeight:900,fontSize:"1.1rem",color:armadorActivo.color||"#e5e7eb"}}>{armadorActivo.nombre}</span>
+                      {sesionContador>0&&<span style={{background:"#041f14",color:"#10b981",border:"1px solid #065f46",padding:"2px 10px",borderRadius:"20px",fontSize:"0.75rem",fontWeight:700}}>{sesionContador} pedido{sesionContador!==1?"s":""}</span>}
+                    </div>
+                  </div>
+                  <button onClick={()=>{setArmadorActivo(null);setSesionContador(0);if(inputRef.current)inputRef.current.focus();}}
+                    style={{padding:"8px 16px",borderRadius:"8px",background:"#1c0404",border:"1px solid #7f1d1d",color:"#f87171",cursor:"pointer",fontWeight:700,fontSize:"0.8rem",flexShrink:0}}>
+                    Liberar
+                  </button>
+                  {/* Cambiar a otro armador rápido */}
+                  <div style={{width:"100%",display:"flex",gap:"6px",flexWrap:"wrap",marginTop:"6px"}}>
+                    {armadores.filter(a=>a.id!==armadorActivo.id).map(arm=>(
+                      <button key={arm.id} onClick={()=>{setArmadorActivo(arm);setSesionContador(0);if(inputRef.current)inputRef.current.focus();}}
+                        style={{padding:"5px 12px",borderRadius:"8px",background:"#12172a",border:"1px solid #252d40",color:arm.color||"#9ca3af",cursor:"pointer",fontSize:"0.78rem",fontWeight:600}}>
+                        {arm.nombre}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ):(
+                /* Selector inicial */
+                <>
+                  <div style={{fontSize:"0.6rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:"8px"}}>
+                    ¿Quién va a escanear? — tocá tu nombre para activarte
+                  </div>
+                  <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
+                    {armadores.map((arm,i)=>(
+                      <button key={arm.id}
+                        onClick={()=>{setArmadorActivo(arm);setSesionContador(0);if(inputRef.current)inputRef.current.focus();}}
+                        style={{padding:"8px 14px",borderRadius:"8px",background:"#12172a",border:"2px solid "+(ultimoArmador?.id===arm.id?"#6366f1":"#252d40"),
+                          color:arm.color||"#e5e7eb",cursor:"pointer",fontWeight:700,fontSize:"0.85rem",position:"relative"}}>
+                        <span style={{fontSize:"0.6rem",color:"#374151",marginRight:"5px"}}>{i+1}</span>
+                        {arm.nombre}
+                        {ultimoArmador?.id===arm.id&&<span style={{position:"absolute",top:"-6px",right:"6px",fontSize:"0.5rem",color:"#6366f1",fontWeight:700,background:"#0f1420",padding:"0 3px"}}>último</span>}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Filtros */}
           <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"0.5rem",alignItems:"center"}}>
