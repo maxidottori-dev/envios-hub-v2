@@ -5626,6 +5626,29 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
     if(inputRef.current)inputRef.current.focus();
   },[]);
 
+  // ── Lógica base de confirmación (debe ir ANTES de procesarScan) ───
+  const ejecutarArmado=useCallback((envio,armador,bultos,esEdit=false)=>{
+    const ts=new Date().toISOString();
+    setEnvios(pv=>pv.map(e=>e.id===envio.id?{...e,preparado:true,bultos,armadorId:armador.id,armadorNombre:armador.nombre,armadoTs:ts}:e));
+    setUltimoArmador(armador);
+    setResultado({ok:true,envio,bultos,msg:(esEdit?"✏️ Editado: ":"✓ ")+armador.nombre+(bultos>1?" · "+bultos+" bultos":"")});
+    setTimeout(()=>setResultado(null),5000);
+    if(inputRef.current)inputRef.current.focus();
+    addDoc(collection(db,"armados"),{
+      envioId:envio.id,
+      nroSeguimiento:envio.nroSeguimiento||"",
+      nroOrdenTN:String(envio.nroOrdenTN||""),
+      armadorId:armador.id,armadorNombre:armador.nombre,
+      ts,fecha:envio.fecha||envio.fechaVenta||"",
+      bultos,logistica:envio.trans||"",
+      direccion:envio.direccion||"",
+      partido:envio.partido||"",
+      esFlex:envio.origen==="ML",
+      esEdicion:esEdit,
+    }).catch(err=>console.error("Error guardando armado:",err));
+    if(bultos>1&&impresionHabilitada&&envio.origen!=="ML")imprimirEtiquetasExtra({...envio,bultos},lc);
+  },[setEnvios,lc,impresionHabilitada]);
+
   // ── Scan handler con scoring ──────────────────────────────────────
   const procesarScan=useCallback((nro)=>{
     const srch=nro.trim().replace(/^#/,"");if(!srch)return;
@@ -5690,29 +5713,6 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
       if(inputRef.current)inputRef.current.focus();
     },30000);
   },[envios,armadorActivo,ejecutarArmado,abrirPanelArmador]);
-
-  // ── Lógica base de confirmación (usada por panel y por modo automático) ──
-  const ejecutarArmado=useCallback((envio,armador,bultos,esEdit=false)=>{
-    const ts=new Date().toISOString();
-    setEnvios(pv=>pv.map(e=>e.id===envio.id?{...e,preparado:true,bultos,armadorId:armador.id,armadorNombre:armador.nombre,armadoTs:ts}:e));
-    setUltimoArmador(armador);
-    setResultado({ok:true,envio,bultos,msg:(esEdit?"✏️ Editado: ":"✓ ")+armador.nombre+(bultos>1?" · "+bultos+" bultos":"")});
-    setTimeout(()=>setResultado(null),5000);
-    if(inputRef.current)inputRef.current.focus();
-    addDoc(collection(db,"armados"),{
-      envioId:envio.id,
-      nroSeguimiento:envio.nroSeguimiento||"",
-      nroOrdenTN:String(envio.nroOrdenTN||""),
-      armadorId:armador.id,armadorNombre:armador.nombre,
-      ts,fecha:envio.fecha||envio.fechaVenta||"",
-      bultos,logistica:envio.trans||"",
-      direccion:envio.direccion||"",
-      partido:envio.partido||"",
-      esFlex:envio.origen==="ML",
-      esEdicion:esEdit,
-    }).catch(err=>console.error("Error guardando armado:",err));
-    if(bultos>1&&impresionHabilitada&&envio.origen!=="ML")imprimirEtiquetasExtra({...envio,bultos},lc);
-  },[setEnvios,lc,impresionHabilitada]);
 
   // ── Confirmar armado desde el panel flotante ──────────────────────
   const confirmarArmado=useCallback((armador)=>{
