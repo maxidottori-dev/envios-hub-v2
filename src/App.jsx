@@ -3347,6 +3347,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
   const [syncPagos,setSyncPagos]=useState(null); // null | "confirm" | "cargando" | {actualizados, pendientes, errores, detalle}
   const [syncDetalleOpen,setSyncDetalleOpen]=useState(false);
   const [borrandoPago,setBorrandoPago]=useState(null);
+  const [pagoExpandido,setPagoExpandido]=useState(null); // id del pago con detalle visible
   const [mostrarTodosEnvios,setMostrarTodosEnvios]=useState(false);
 
   useEffect(()=>{setMostrarTodosEnvios(false);},[vistaCliente]);
@@ -3428,21 +3429,24 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
     return Math.max(0,Math.round((hoy-f)/(1000*60*60*24)));
   };
 
+  // Helper: calcular pago atribuido a un envío específico
+  const calcPagEnvio=(envioId)=>pagos.filter(p=>p.envioIds?.includes(envioId)).reduce((s,p)=>{
+    if(p.montosPorEnvio)return s+(p.montosPorEnvio[envioId]||0);
+    if((p.envioIds?.length||0)===1)return s+(p.monto||0);
+    return s;
+  },0);
+
   // Lista de clientes con saldo
   const clientes=Object.values(clientesMap).map(c=>{
-    const cobrado=pagosPorCliente[c.key]||0;
-    const saldo=Math.max(0,c.deudaTotal-cobrado);
+    const cobradoTotal=pagosPorCliente[c.key]||0; // total histórico de pagos del cliente
     const dias=diasDeuda(c.fechaMin);
     const limite=limites[c.key]||15;
-    // Cobrado y count solo de ordenes con saldo pendiente
-    let cobradoConSaldo=0,pendienteCount=0,fechaMinPendiente="";
+    // Saldo real = suma de saldos individuales por pedido (no deudaTotal - pagos totales)
+    let saldo=0,cobradoConSaldo=0,pendienteCount=0,fechaMinPendiente="";
     c.envios.forEach(e=>{
-      const pagEnvio=pagos.filter(p=>p.envioIds?.includes(e.id)).reduce((s,p)=>{
-        if(p.montosPorEnvio)return s+(p.montosPorEnvio[e.id]||0);
-        if((p.envioIds?.length||0)===1)return s+(p.monto||0);
-        return s;
-      },0);
+      const pagEnvio=calcPagEnvio(e.id);
       const saldoE=Math.max(0,(e._deuda?.monto||0)-pagEnvio);
+      saldo+=saldoE;
       if(saldoE>0){
         pendienteCount++;
         cobradoConSaldo+=((e._deuda?.monto||0)-saldoE);
@@ -3450,8 +3454,10 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
         if(fe&&(!fechaMinPendiente||fe<fechaMinPendiente))fechaMinPendiente=fe;
       }
     });
+    // COBRADO que se muestra = lo que efectivamente redujo deuda en pedidos activos
+    const cobrado=c.deudaTotal-saldo;
     const diasReal=diasDeuda(fechaMinPendiente||c.fechaMin);
-    return{...c,cobrado,cobradoConSaldo,pendienteCount,saldo,dias:diasReal,limite,logisticas:[...c.logisticas]};
+    return{...c,cobrado,cobradoConSaldo,cobradoTotal,pendienteCount,saldo,dias:diasReal,limite,logisticas:[...c.logisticas]};
   });
 
   const fmt=(n)=>"$"+Math.round(n).toLocaleString("es-AR");
@@ -3529,11 +3535,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
         {(()=>{
           // Calcular saldo por envio para filtrar
           const enviosConSaldo=c.envios.map(e=>{
-            const pagEnvio=pagos.filter(p=>p.envioIds?.includes(e.id)).reduce((s,p)=>{
-              if(p.montosPorEnvio)return s+(p.montosPorEnvio[e.id]||0);
-              if((p.envioIds?.length||0)===1)return s+(p.monto||0);
-              return s;
-            },0);
+            const pagEnvio=calcPagEnvio(e.id);
             return{...e,_saldoEnvio:Math.max(0,(e._deuda?.monto||0)-pagEnvio)};
           }).filter(e=>e._saldoEnvio>0);
 
@@ -3589,11 +3591,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
                   ?<div style={{padding:"1rem",textAlign:"center",color:"#6b7280",fontSize:"0.8rem"}}>Sin pedidos registrados</div>
                   :todosEnviosCliente.map((e,i)=>{
                     const deuda=getDeudaEnvio(e);
-                    const pagEnvio=deuda?pagos.filter(p=>p.envioIds?.includes(e.id)).reduce((s,p)=>{
-                      if(p.montosPorEnvio)return s+(p.montosPorEnvio[e.id]||0);
-                      if((p.envioIds?.length||0)===1)return s+(p.monto||0);
-                      return s;
-                    },0):0;
+                    const pagEnvio=deuda?calcPagEnvio(e.id):0;
                     const saldoE=deuda?Math.max(0,(deuda.monto||0)-pagEnvio):0;
                     const esCancelado=e.estado==="cancelado";
                     return(
@@ -3635,20 +3633,58 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
         {pagosCli.length>0&&(
           <div style={{...S.card,overflow:"hidden"}}>
             <div style={{padding:"0.6rem 1rem",background:"#12172a",borderBottom:"1px solid #1e2535",fontSize:"0.72rem",fontWeight:700,color:"#6b7280",textTransform:"uppercase"}}>Historial de pagos</div>
-            {pagosCli.map((p,i)=>(
-              <div key={p._id} style={{padding:"0.55rem 1rem",borderBottom:i<pagosCli.length-1?"1px solid #1a1f2e":"none",display:"flex",justifyContent:"space-between",alignItems:"center",gap:"0.5rem",flexWrap:"wrap"}}>
-                <div>
-                  <div style={{fontSize:"0.82rem",color:"#10b981",fontWeight:700}}>{fmt(p.monto)}</div>
-                  {p.nota&&<div style={{fontSize:"0.7rem",color:"#6b7280",marginTop:"1px"}}>{p.nota}</div>}
-                  {p.envioIds?.length>0&&<div style={{fontSize:"0.65rem",color:"#4b5563",marginTop:"1px"}}>{p.envioIds.length} pedido{p.envioIds.length!==1?"s":""}</div>}
-                  {p.registradoPor&&<div style={{fontSize:"0.62rem",color:"#374151",marginTop:"1px"}}>por {p.registradoPor.nombre}</div>}
+            {pagosCli.map((p,i)=>{
+              const expandido=pagoExpandido===p._id;
+              const enviosDePago=(p.envioIds||[]).map(eid=>{
+                const env=envios.find(e=>e.id===eid);
+                const monto=p.montosPorEnvio?p.montosPorEnvio[eid]||(p.envioIds.length===1?p.monto:null):(p.envioIds.length===1?p.monto:null);
+                return{id:eid,env,monto};
+              });
+              return(
+                <div key={p._id} style={{borderBottom:i<pagosCli.length-1?"1px solid #1a1f2e":"none"}}>
+                  {/* Fila principal del pago */}
+                  <div style={{padding:"0.55rem 1rem",display:"flex",justifyContent:"space-between",alignItems:"center",gap:"0.5rem",flexWrap:"wrap"}}>
+                    <div style={{flex:1}}>
+                      <div style={{display:"flex",alignItems:"center",gap:"0.5rem",flexWrap:"wrap"}}>
+                        <div style={{fontSize:"0.82rem",color:"#10b981",fontWeight:700}}>{fmt(p.monto)}</div>
+                        {p.nota&&<div style={{fontSize:"0.7rem",color:"#6b7280"}}>{p.nota}</div>}
+                      </div>
+                      <div style={{display:"flex",gap:"0.75rem",alignItems:"center",flexWrap:"wrap",marginTop:"2px"}}>
+                        {p.registradoPor&&<div style={{fontSize:"0.62rem",color:"#374151"}}>por {p.registradoPor.nombre}</div>}
+                        {enviosDePago.length>0&&(
+                          <button onClick={()=>setPagoExpandido(expandido?null:p._id)}
+                            style={{background:"none",border:"none",color:"#6366f1",fontSize:"0.65rem",cursor:"pointer",padding:0,fontWeight:600,textDecoration:"underline"}}>
+                            {expandido?"▲ Ocultar":"▼ Ver"} {enviosDePago.length} pedido{enviosDePago.length!==1?"s":""}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:"0.5rem",alignItems:"center"}}>
+                      <div style={{fontSize:"0.72rem",color:"#4b5563"}}>{p.fechaCobro||p.creadoEn?.toDate?.()?.toLocaleDateString("es-AR")||"—"}</div>
+                      <button onClick={()=>eliminarPago(p._id)} disabled={borrandoPago===p._id} style={{background:"transparent",border:"1px solid #7f1d1d",borderRadius:"5px",color:"#ef4444",fontSize:"0.7rem",padding:"2px 7px",cursor:"pointer",opacity:borrandoPago===p._id?0.5:1}}>{borrandoPago===p._id?"...":"✕"}</button>
+                    </div>
+                  </div>
+                  {/* Detalle expandido: pedidos cubiertos por este pago */}
+                  {expandido&&enviosDePago.length>0&&(
+                    <div style={{background:"#0a0e1a",borderTop:"1px solid #1e2535",padding:"0.5rem 1rem 0.6rem"}}>
+                      {enviosDePago.map(({id,env,monto})=>(
+                        <div key={id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:"1px solid #12172a",gap:"0.5rem",flexWrap:"wrap"}}>
+                          <div style={{flex:1,minWidth:"160px"}}>
+                            <div style={{fontSize:"0.75rem",color:"#d1d5db",fontWeight:500}}>{env?.direccion?.slice(0,55)||<span style={{color:"#4b5563",fontStyle:"italic"}}>ID {id.slice(-8)}</span>}</div>
+                            <div style={{fontSize:"0.65rem",color:"#4b5563",marginTop:"1px"}}>
+                              {env?.nroOrdenTN?<span style={{color:"#7dd3fc"}}>#{env.nroOrdenTN}</span>:<span>{id.slice(-8)}</span>}
+                              {env?.fecha?<span> · {fmtCorta(env.fecha)}</span>:null}
+                              {env?.trans?<span style={{marginLeft:"5px",color:lc[env.trans]?.color||"#9ca3af",fontWeight:700}}>{env.trans}</span>:null}
+                            </div>
+                          </div>
+                          {monto!=null&&<div style={{fontSize:"0.78rem",color:"#10b981",fontWeight:700,flexShrink:0}}>{fmt(monto)}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div style={{display:"flex",gap:"0.5rem",alignItems:"center"}}>
-                  <div style={{fontSize:"0.72rem",color:"#4b5563"}}>{p.fechaCobro||p.creadoEn?.toDate?.()?.toLocaleDateString("es-AR")||"—"}</div>
-                  <button onClick={()=>eliminarPago(p._id)} disabled={borrandoPago===p._id} style={{background:"transparent",border:"1px solid #7f1d1d",borderRadius:"5px",color:"#ef4444",fontSize:"0.7rem",padding:"2px 7px",cursor:"pointer",opacity:borrandoPago===p._id?0.5:1}}>{borrandoPago===p._id?"...":"✕"}</button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       {modalPago&&<ModalRegistrarPago {...modalPago} onClose={()=>setModalPago(null)} envios={envios.filter(e=>{const deuda=getDeudaEnvio(e);return deuda&&getClienteKey(e)===modalPago.clienteKey;})} pagos={pagos.filter(p=>p.clienteKey===modalPago.clienteKey)} getDeudaEnvio={getDeudaEnvio} sesion={sesion}/>}
