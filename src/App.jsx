@@ -6723,25 +6723,14 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   const [overlayError,setOverlayError]=useState(null); // {msg} → overlay rojo de pantalla completa
   const [sesionIds,setSesionIds]=useState([]);       // IDs despachados en esta sesión (en orden)
   const inputRef=useRef(null);
-  const logTimerRef=useRef(null); // 10s inactividad → desactiva logística
 
   // Enfocar input cuando hay logística seleccionada
   useEffect(()=>{
     if(logSel&&inputRef.current)inputRef.current.focus();
   },[logSel]);
 
-  // ── Timer de inactividad (10s) ────────────────────────────────────
-  const resetLogTimer=useCallback(()=>{
-    if(logTimerRef.current)clearTimeout(logTimerRef.current);
-    logTimerRef.current=setTimeout(()=>{
-      setLogSel(null);setSesionIds([]);
-      setResultado({ok:false,msg:"Sesión cerrada por inactividad."});
-      setTimeout(()=>setResultado(null),4000);
-    },10000);
-  },[]);
-
+  // La sesión solo se cierra manualmente con "Liberar" (sin timer de inactividad)
   const liberarLogistica=useCallback(()=>{
-    if(logTimerRef.current)clearTimeout(logTimerRef.current);
     setLogSel(null);setSesionIds([]);setResultado(null);setQrInput("");
   },[]);
 
@@ -6827,9 +6816,8 @@ function TabSalida({envios,setEnvios,lc,sesion}){
     beepOK();
     setResultado({ok:true,envio:best,msg:"✓ Despachado: "+(best.nroOrdenTN?"#"+best.nroOrdenTN+" — ":"")+best.direccion});
     setTimeout(()=>setResultado(null),5000);
-    resetLogTimer();
     if(inputRef.current)inputRef.current.focus();
-  },[envios,logSel,fecha,sesionIds,sesion,lc,setEnvios,resetLogTimer]);
+  },[envios,logSel,fecha,sesionIds,sesion,lc,setEnvios]);
 
   const handleKey=e=>{if(e.key==="Enter"){procesarScan(qrInput);}};
 
