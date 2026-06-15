@@ -5559,7 +5559,19 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
   const inputRef=useRef(null);
   const videoRef=useRef(null);
   const timeoutRef=useRef(null);
+  const armadorTimerRef=useRef(null); // timer de inactividad del armador activo
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
+
+  // Reinicia el timer de inactividad del armador (10s sin escanear → desactiva)
+  const resetArmadorTimer=useCallback(()=>{
+    if(armadorTimerRef.current)clearTimeout(armadorTimerRef.current);
+    armadorTimerRef.current=setTimeout(()=>{
+      setArmadorActivo(null);setSesionContador(0);
+      setResultado({ok:false,msg:"Armador desactivado por inactividad."});
+      setTimeout(()=>setResultado(null),4000);
+      if(inputRef.current)inputRef.current.focus();
+    },10000);
+  },[]);
 
   const ayer=()=>{const d=new Date(hoy+"T00:00:00");d.setDate(d.getDate()-1);return d.toISOString().split("T")[0];};
   const manana=()=>{const d=new Date(hoy+"T00:00:00");d.setDate(d.getDate()+1);return d.toISOString().split("T")[0];};
@@ -5671,6 +5683,7 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
       }
       ejecutarArmado(found,armadorActivo,found.bultos||1);
       setSesionContador(p=>p+1);
+      resetArmadorTimer(); // reinicia el contador de inactividad
       beepOK();
       return;
     }
@@ -5712,7 +5725,7 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
       setTimeout(()=>setResultado(null),5000);
       if(inputRef.current)inputRef.current.focus();
     },30000);
-  },[envios,armadorActivo,ejecutarArmado,abrirPanelArmador]);
+  },[envios,armadorActivo,ejecutarArmado,abrirPanelArmador,resetArmadorTimer]);
 
   // ── Confirmar armado desde el panel flotante ──────────────────────
   const confirmarArmado=useCallback((armador)=>{
@@ -6055,14 +6068,14 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
                       {sesionContador>0&&<span style={{background:"#041f14",color:"#10b981",border:"1px solid #065f46",padding:"2px 10px",borderRadius:"20px",fontSize:"0.75rem",fontWeight:700}}>{sesionContador} pedido{sesionContador!==1?"s":""}</span>}
                     </div>
                   </div>
-                  <button onClick={()=>{setArmadorActivo(null);setSesionContador(0);if(inputRef.current)inputRef.current.focus();}}
+                  <button onClick={()=>{if(armadorTimerRef.current)clearTimeout(armadorTimerRef.current);setArmadorActivo(null);setSesionContador(0);if(inputRef.current)inputRef.current.focus();}}
                     style={{padding:"8px 16px",borderRadius:"8px",background:"#1c0404",border:"1px solid #7f1d1d",color:"#f87171",cursor:"pointer",fontWeight:700,fontSize:"0.8rem",flexShrink:0}}>
                     Liberar
                   </button>
                   {/* Cambiar a otro armador rápido */}
                   <div style={{width:"100%",display:"flex",gap:"6px",flexWrap:"wrap",marginTop:"6px"}}>
                     {armadores.filter(a=>a.id!==armadorActivo.id).map(arm=>(
-                      <button key={arm.id} onClick={()=>{setArmadorActivo(arm);setSesionContador(0);if(inputRef.current)inputRef.current.focus();}}
+                      <button key={arm.id} onClick={()=>{setArmadorActivo(arm);setSesionContador(0);resetArmadorTimer();if(inputRef.current)inputRef.current.focus();}}
                         style={{padding:"5px 12px",borderRadius:"8px",background:"#12172a",border:"1px solid #252d40",color:arm.color||"#9ca3af",cursor:"pointer",fontSize:"0.78rem",fontWeight:600}}>
                         {arm.nombre}
                       </button>
@@ -6078,7 +6091,7 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
                   <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
                     {armadores.map((arm,i)=>(
                       <button key={arm.id}
-                        onClick={()=>{setArmadorActivo(arm);setSesionContador(0);if(inputRef.current)inputRef.current.focus();}}
+                        onClick={()=>{setArmadorActivo(arm);setSesionContador(0);resetArmadorTimer();if(inputRef.current)inputRef.current.focus();}}
                         style={{padding:"8px 14px",borderRadius:"8px",background:"#12172a",border:"2px solid "+(ultimoArmador?.id===arm.id?"#6366f1":"#252d40"),
                           color:arm.color||"#e5e7eb",cursor:"pointer",fontWeight:700,fontSize:"0.85rem",position:"relative"}}>
                         <span style={{fontSize:"0.6rem",color:"#374151",marginRight:"5px"}}>{i+1}</span>
@@ -6793,8 +6806,9 @@ export default function App(){
       // Detectar cambios relevantes (saltar carga inicial)
       if(prevEnviosRef.current!==null){
         const prev=prevEnviosRef.current;
+        const prevMap=new Map(prev.map(e=>[e.id,e]));
         docs.forEach(nuevo=>{
-          const viejo=prev.find(e=>e.id===nuevo.id);
+          const viejo=prevMap.get(nuevo.id);
           // Orden cancelada que tenia logistica asignada → alerta roja persistente
           if(viejo&&viejo.estado!=="cancelado"&&nuevo.estado==="cancelado"&&viejo.trans){
             agregarAlerta("error",`❌ Orden TN #${nuevo.nroOrdenTN||nuevo.id} cancelada — estaba asignada a ${viejo.trans}`,true);
@@ -6866,8 +6880,11 @@ export default function App(){
   const setEnvios=useCallback((updater)=>{
     setEnviosLocal(prev=>{
       const next=typeof updater==="function"?updater(prev):updater;
-      next.forEach(e=>{const old=prev.find(p=>p.id===e.id);if(!old||JSON.stringify(old)!==JSON.stringify(e))guardarEnvio(e);});
-      prev.forEach(e=>{if(!next.find(n=>n.id===e.id))eliminarEnvio(e.id);});
+      // O(n) con Map en lugar de O(n²) con find+JSON.stringify
+      const prevMap=new Map(prev.map(e=>[e.id,e]));
+      const nextSet=new Set(next.map(e=>e.id));
+      next.forEach(e=>{const old=prevMap.get(e.id);if(!old||old!==e)guardarEnvio(e);});
+      prev.forEach(e=>{if(!nextSet.has(e.id))eliminarEnvio(e.id);});
       return next;
     });
   },[]);
