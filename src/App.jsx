@@ -54,6 +54,7 @@ const FEATURES=[
   {key:"tab_ctasctes",    grupo:"tabs",    label:"Ctas. Ctes.",       desc:"Estado de cuenta corriente por cliente: saldo pendiente, deuda y pagos"},
   {key:"tab_localidades", grupo:"tabs",    label:"Localidades",       desc:"Administrar localidades y partidos: agregar CPs y reglas de mapeo"},
   {key:"tab_expedicion",  grupo:"tabs",    label:"Expedición",        desc:"Vista de expedición para preparar bultos y controlar salidas"},
+  {key:"tab_salida",      grupo:"tabs",    label:"Salida",            desc:"Escanear pedidos al entregarlos a la logística: despacho controlado por logística"},
   {key:"tab_usuarios",    grupo:"tabs",    label:"Usuarios",          desc:"Administrar usuarios del sistema, sus roles, contraseñas y permisos"},
   // ── Acciones ─────────────────────────────────────────────────────
   {key:"accion_cargaexcel",   grupo:"acciones", label:"Cargar Excel",       desc:"Importar envíos desde un archivo Excel con fecha de entrega seleccionable"},
@@ -473,6 +474,20 @@ function weekLabel(ds){const d=new Date(ds+"T00:00:00"),day=d.getDay()||7;const 
 
 const fmt=n=>n?"$"+Number(n).toLocaleString("es-AR"):"-";
 function beepOK(){try{const ctx=new(window.AudioContext||window.webkitAudioContext)();const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.frequency.setValueAtTime(880,ctx.currentTime);o.frequency.setValueAtTime(1100,ctx.currentTime+0.1);g.gain.setValueAtTime(0.3,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.3);o.start(ctx.currentTime);o.stop(ctx.currentTime+0.3);}catch(e){}}
+function beepError(){try{const ctx=new(window.AudioContext||window.webkitAudioContext)();const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type="sawtooth";o.frequency.setValueAtTime(280,ctx.currentTime);o.frequency.setValueAtTime(180,ctx.currentTime+0.15);g.gain.setValueAtTime(0.35,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.45);o.start(ctx.currentTime);o.stop(ctx.currentTime+0.45);}catch(e){}}
+
+// Scoring de búsqueda — compartido entre VistaExpedicion y TabSalida
+function scoreBusqueda(e,srch,nums){
+  const sTN=String(e.nroOrdenTN||"");
+  const sSeg=String(e.nroSeguimiento||"");
+  if(sSeg===srch||sTN===srch||e.id===srch)return 3;
+  if(nums&&(sSeg===nums||sTN===nums))return 3;
+  if(nums&&sSeg&&(nums.startsWith(sSeg)||sSeg.startsWith(nums)))return 2;
+  if(nums&&sTN&&(nums.startsWith(sTN)||sTN.startsWith(nums)))return 2;
+  const s=norm(srch);
+  if(s.length>=4&&(norm(e.direccion).includes(s)||norm(e.partido||"").includes(s)))return 1;
+  return 0;
+}
 const fmtN=n=>Number(n).toLocaleString("es-AR");
 
 function exportarXLSX(filas,nombreArchivo){
@@ -5635,22 +5650,6 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
   const prepFlex=flexFecha.filter(e=>e.preparado).length;
   const pct=total>0?Math.round(preparados/total*100):0;
 
-  // ── Score helper (puro, fuera de useCallback para reuso) ─────────
-  const scoreBusqueda=(e,srch,nums)=>{
-    const sTN=String(e.nroOrdenTN||"");
-    const sSeg=String(e.nroSeguimiento||"");
-    // Score 3 — match exacto
-    if(sSeg===srch||sTN===srch||e.id===srch)return 3;
-    if(nums&&(sSeg===nums||sTN===nums))return 3;
-    // Score 2 — prefijo (útil con scanner que agrega dígitos extra)
-    if(nums&&sSeg&&(nums.startsWith(sSeg)||sSeg.startsWith(nums)))return 2;
-    if(nums&&sTN&&(nums.startsWith(sTN)||sTN.startsWith(nums)))return 2;
-    // Score 1 — match parcial en dirección o partido (operador recuerda la calle)
-    const s=norm(srch);
-    if(s.length>=4&&(norm(e.direccion).includes(s)||norm(e.partido||"").includes(s)))return 1;
-    return 0;
-  };
-
   // ── Abre el panel de armadores para un envío específico ───────────
   const abrirPanelArmador=useCallback((found,edicion=false)=>{
     setMatchesPendientes([]);
@@ -6709,6 +6708,343 @@ function ConfirmPage({token}){
   );
 }
 
+// ════════════════════════════════════════════════════════════════════
+// TAB SALIDA — Despacho con escaneo por logística
+// ════════════════════════════════════════════════════════════════════
+function TabSalida({envios,setEnvios,lc,sesion}){
+  const hoy=fechaHoy();
+  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
+
+  // ── Estado ────────────────────────────────────────────────────────
+  const [fecha,setFecha]=useState(hoy);
+  const [logSel,setLogSel]=useState(null);          // logística "bloqueada" para la sesión
+  const [qrInput,setQrInput]=useState("");
+  const [resultado,setResultado]=useState(null);    // {ok,msg,envio}
+  const [overlayError,setOverlayError]=useState(null); // {msg} → overlay rojo de pantalla completa
+  const [sesionIds,setSesionIds]=useState([]);       // IDs despachados en esta sesión (en orden)
+  const inputRef=useRef(null);
+  const logTimerRef=useRef(null); // 10s inactividad → desactiva logística
+
+  // Enfocar input cuando hay logística seleccionada
+  useEffect(()=>{
+    if(logSel&&inputRef.current)inputRef.current.focus();
+  },[logSel]);
+
+  // ── Timer de inactividad (10s) ────────────────────────────────────
+  const resetLogTimer=useCallback(()=>{
+    if(logTimerRef.current)clearTimeout(logTimerRef.current);
+    logTimerRef.current=setTimeout(()=>{
+      setLogSel(null);setSesionIds([]);
+      setResultado({ok:false,msg:"Sesión cerrada por inactividad."});
+      setTimeout(()=>setResultado(null),4000);
+    },10000);
+  },[]);
+
+  const liberarLogistica=useCallback(()=>{
+    if(logTimerRef.current)clearTimeout(logTimerRef.current);
+    setLogSel(null);setSesionIds([]);setResultado(null);setQrInput("");
+  },[]);
+
+  // ── Pedidos del día para la logística seleccionada ────────────────
+  const pedidosLog=useMemo(()=>{
+    if(!logSel)return[];
+    return envios.filter(e=>{
+      const f=e.fecha||e.fechaVenta||"";
+      return f===fecha&&e.trans===logSel&&getEstado(e)==="asignado"&&e.estado!=="cancelado";
+    });
+  },[envios,logSel,fecha]);
+
+  const totalLog=pedidosLog.length;
+  const despachados=pedidosLog.filter(e=>e.despachado);
+  const pct=totalLog>0?Math.round(despachados.length/totalLog*100):0;
+
+  // ── Procesar scan ─────────────────────────────────────────────────
+  const procesarScan=useCallback((raw)=>{
+    const srch=raw.trim();
+    if(!srch)return;
+    setQrInput("");
+    if(!logSel){beepError();return;}
+
+    const nums=srch.replace(/\D/g,"");
+    // Buscar en TODOS los envíos del día (sin filtro por logística) para detectar logística errónea
+    const candidatos=envios.filter(e=>{
+      const f=e.fecha||e.fechaVenta||"";
+      return f===fecha&&getEstado(e)==="asignado"&&e.estado!=="cancelado";
+    });
+
+    let best=null,bestScore=0;
+    candidatos.forEach(e=>{
+      const sc=scoreBusqueda(e,srch,nums);
+      if(sc>bestScore){bestScore=sc;best=e;}
+    });
+
+    if(!best||bestScore===0){
+      beepError();
+      setResultado({ok:false,msg:"Pedido no encontrado: "+srch});
+      setTimeout(()=>setResultado(null),4000);
+      if(inputRef.current)inputRef.current.focus();
+      return;
+    }
+
+    // Logística incorrecta → overlay rojo bloqueante
+    if(best.trans!==logSel){
+      beepError();
+      const lcData=lc[best.trans]||{};
+      setOverlayError({
+        msg:`⛔ LOGÍSTICA INCORRECTA`,
+        detalle:`Este pedido pertenece a ${best.trans||"otra logística"}, no a ${logSel}.`,
+        envio:best,
+        trans:best.trans,
+        color:lcData.color||"#ef4444",
+      });
+      if(inputRef.current)inputRef.current.focus();
+      return;
+    }
+
+    // Pedido no preparado → bloqueo
+    if(!best.preparado){
+      beepError();
+      setResultado({ok:false,msg:"⚠ Sin preparar: "+( best.nroOrdenTN?"#"+best.nroOrdenTN:best.direccion)});
+      setTimeout(()=>setResultado(null),5000);
+      if(inputRef.current)inputRef.current.focus();
+      return;
+    }
+
+    // Ya despachado en esta sesión
+    if(sesionIds.includes(best.id)){
+      beepError();
+      setResultado({ok:false,msg:"Ya despachado en esta sesión: "+(best.nroOrdenTN?"#"+best.nroOrdenTN:best.direccion)});
+      setTimeout(()=>setResultado(null),4000);
+      if(inputRef.current)inputRef.current.focus();
+      return;
+    }
+
+    // ✅ Despachar
+    const ts=new Date().toISOString();
+    const despachoPor=sesion?.nombre||sesion?.email||"";
+    setEnvios(pv=>pv.map(e=>e.id===best.id?{...e,despachado:true,despachoTs:ts,despachoLogistica:logSel,despachoPor}:e));
+    setSesionIds(prev=>[best.id,...prev]);
+    beepOK();
+    setResultado({ok:true,envio:best,msg:"✓ Despachado: "+(best.nroOrdenTN?"#"+best.nroOrdenTN+" — ":"")+best.direccion});
+    setTimeout(()=>setResultado(null),5000);
+    resetLogTimer();
+    if(inputRef.current)inputRef.current.focus();
+  },[envios,logSel,fecha,sesionIds,sesion,lc,setEnvios,resetLogTimer]);
+
+  const handleKey=e=>{if(e.key==="Enter"){procesarScan(qrInput);}};
+
+  // ── Des-despachar (undo) ──────────────────────────────────────────
+  const desDespachar=useCallback((envioId)=>{
+    setEnvios(pv=>pv.map(e=>e.id===envioId?{...e,despachado:false,despachoTs:null,despachoLogistica:null,despachoPor:null}:e));
+    setSesionIds(prev=>prev.filter(id=>id!==envioId));
+  },[setEnvios]);
+
+  // ── Colores UI ────────────────────────────────────────────────────
+  const bg="#0a0e1a",card="#0f1420",brd="#1a1f2e",muted="#6b7280",ok="#10b981",err="#ef4444";
+
+  // ── Overlay de error logística ────────────────────────────────────
+  if(overlayError){
+    const lci=lc[overlayError.trans]||{};
+    return(
+      <div onClick={()=>{setOverlayError(null);if(inputRef.current)inputRef.current.focus();}}
+        style={{position:"fixed",inset:0,zIndex:9999,background:"#200000",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",padding:"2rem"}}>
+        <div style={{fontSize:"5rem",marginBottom:"1rem"}}>⛔</div>
+        <div style={{fontSize:"2rem",fontWeight:900,color:"#ff4444",textAlign:"center",marginBottom:"0.5rem",letterSpacing:"0.05em"}}>LOGÍSTICA INCORRECTA</div>
+        <div style={{fontSize:"1.1rem",color:"#fca5a5",textAlign:"center",marginBottom:"2rem",maxWidth:"500px"}}>{overlayError.detalle}</div>
+        <div style={{background:"#1c0000",border:"2px solid #7f1d1d",borderRadius:"14px",padding:"1.2rem 2rem",textAlign:"center",marginBottom:"2rem",minWidth:"300px"}}>
+          <div style={{color:"#9ca3af",fontSize:"0.75rem",marginBottom:"0.3rem"}}>Pedido escaneado</div>
+          <div style={{fontWeight:800,fontSize:"1.1rem",color:"#fff",marginBottom:"0.3rem"}}>{overlayError.envio?.nroOrdenTN?"#"+overlayError.envio.nroOrdenTN:overlayError.envio?.direccion}</div>
+          {overlayError.envio?.direccion&&overlayError.envio?.nroOrdenTN&&<div style={{color:"#9ca3af",fontSize:"0.8rem"}}>{overlayError.envio.direccion}</div>}
+          <div style={{marginTop:"0.6rem",display:"flex",gap:"8px",justifyContent:"center",alignItems:"center"}}>
+            <span style={{background:lci.bg||"#1a1f2e",color:lci.color||"#9ca3af",padding:"4px 12px",borderRadius:"6px",fontWeight:700,fontSize:"0.85rem"}}>{overlayError.trans||"Desconocida"}</span>
+          </div>
+        </div>
+        <div style={{color:"#9ca3af",fontSize:"0.85rem"}}>Tocá en cualquier lugar para cerrar</div>
+        {/* Input oculto para seguir escaneando */}
+        <input ref={inputRef} value={qrInput} onChange={e=>setQrInput(e.target.value)} onKeyDown={handleKey}
+          style={{position:"absolute",opacity:0,pointerEvents:"none",width:1,height:1}}/>
+      </div>
+    );
+  }
+
+  // ── Vista selector de logística ───────────────────────────────────
+  if(!logSel){
+    return(
+      <div style={{maxWidth:"600px",margin:"0 auto",padding:"1rem 0"}}>
+        <div style={{background:card,border:`1px solid ${brd}`,borderRadius:"14px",padding:"1.5rem"}}>
+          <div style={{fontWeight:800,fontSize:"1.1rem",marginBottom:"0.3rem"}}>🚚 Salida</div>
+          <div style={{color:muted,fontSize:"0.8rem",marginBottom:"1.5rem"}}>Seleccioná la logística para iniciar la sesión de despacho</div>
+          {/* Selector de fecha */}
+          <div style={{marginBottom:"1.2rem"}}>
+            <label style={{display:"block",color:muted,fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Fecha</label>
+            <input type="date" value={fecha} onChange={e=>setFecha(e.target.value)}
+              style={{background:"#12172a",border:`1px solid ${brd}`,borderRadius:"8px",color:"#fff",padding:"0.45rem 0.7rem",fontSize:"0.85rem",width:"auto"}}/>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
+            {logActivas.map(l=>{
+              const lci=lc[l]||{};
+              const pedL=envios.filter(e=>{const f=e.fecha||e.fechaVenta||"";return f===fecha&&e.trans===l&&getEstado(e)==="asignado"&&e.estado!=="cancelado";});
+              const prepL=pedL.filter(e=>e.preparado).length;
+              const despL=pedL.filter(e=>e.despachado).length;
+              return(
+                <button key={l} onClick={()=>{setLogSel(l);setSesionIds([]);setResultado(null);}}
+                  style={{display:"flex",alignItems:"center",gap:"14px",padding:"1rem 1.2rem",borderRadius:"12px",
+                    background:"#12172a",border:`2px solid ${lci.color||brd}22`,cursor:"pointer",textAlign:"left",
+                    transition:"border-color 0.15s"}}>
+                  <div style={{width:"12px",height:"12px",borderRadius:"50%",background:lci.color||"#6b7280",flexShrink:0}}/>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:800,fontSize:"1rem",color:lci.color||"#fff"}}>{l}</div>
+                    {lci.nombreFormal&&<div style={{color:muted,fontSize:"0.72rem"}}>{lci.nombreFormal}</div>}
+                  </div>
+                  <div style={{textAlign:"right",fontSize:"0.72rem",color:muted}}>
+                    <div style={{fontWeight:700,color:"#fff",fontSize:"0.85rem"}}>{pedL.length} pedidos</div>
+                    <div>{prepL} prep · {despL} desp</div>
+                  </div>
+                  <div style={{color:muted,fontSize:"1rem"}}>›</div>
+                </button>
+              );
+            })}
+          </div>
+          {resultado&&(
+            <div style={{marginTop:"1rem",padding:"0.65rem 0.9rem",borderRadius:"8px",fontWeight:600,fontSize:"0.85rem",
+              background:resultado.ok?"#041f14":"#1c0505",border:`1px solid ${resultado.ok?ok:err}`,color:resultado.ok?"#34d399":"#fca5a5"}}>
+              {resultado.msg}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Vista de sesión activa ────────────────────────────────────────
+  const lci=lc[logSel]||{};
+  const logColor=lci.color||"#6366f1";
+  const logBg=lci.bg||"#12172a";
+
+  // Pedidos de esta sesión que ya fueron despachados
+  const enviosMap=new Map(envios.map(e=>[e.id,e]));
+  const despSesion=sesionIds.map(id=>enviosMap.get(id)).filter(Boolean);
+
+  return(
+    <div style={{maxWidth:"700px",margin:"0 auto",padding:"1rem 0"}}>
+      {/* Header logística */}
+      <div style={{background:logBg,border:`2px solid ${logColor}`,borderRadius:"14px",padding:"1rem 1.2rem",marginBottom:"1rem",display:"flex",alignItems:"center",gap:"12px"}}>
+        <div style={{width:"14px",height:"14px",borderRadius:"50%",background:logColor,flexShrink:0}}/>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:900,fontSize:"1.05rem",color:logColor}}>{logSel}</div>
+          {lci.nombreFormal&&<div style={{color:muted,fontSize:"0.72rem"}}>{lci.nombreFormal}</div>}
+        </div>
+        <div style={{textAlign:"right",marginRight:"0.5rem"}}>
+          <div style={{fontWeight:800,fontSize:"1.2rem",color:logColor}}>{despachados.length}<span style={{color:muted,fontWeight:400,fontSize:"0.8rem"}}> / {totalLog}</span></div>
+          <div style={{color:muted,fontSize:"0.68rem"}}>despachados · {pct}%</div>
+        </div>
+        <button onClick={liberarLogistica}
+          style={{padding:"0.4rem 0.8rem",borderRadius:"8px",background:"transparent",border:`1px solid ${muted}`,color:muted,cursor:"pointer",fontSize:"0.72rem",fontWeight:600,flexShrink:0}}>
+          Liberar
+        </button>
+      </div>
+
+      {/* Barra de progreso */}
+      {totalLog>0&&(
+        <div style={{background:"#12172a",borderRadius:"6px",height:"6px",marginBottom:"1rem",overflow:"hidden"}}>
+          <div style={{width:pct+"%",height:"100%",background:logColor,borderRadius:"6px",transition:"width 0.3s"}}/>
+        </div>
+      )}
+
+      {/* Input de escaneo */}
+      <div style={{background:card,border:`1px solid ${brd}`,borderRadius:"14px",padding:"1.2rem",marginBottom:"1rem"}}>
+        <label style={{display:"block",color:muted,fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",marginBottom:"6px"}}>Escanear / ingresar código</label>
+        <div style={{display:"flex",gap:"8px"}}>
+          <input ref={inputRef} value={qrInput} onChange={e=>setQrInput(e.target.value)} onKeyDown={handleKey}
+            placeholder="Código de barras, nro de orden TN o seguimiento…"
+            style={{flex:1,background:"#12172a",border:`1px solid ${logColor}66`,borderRadius:"10px",color:"#fff",padding:"0.7rem 0.9rem",fontSize:"0.9rem",outline:"none"}}
+            autoFocus/>
+          <button onClick={()=>procesarScan(qrInput)}
+            style={{padding:"0.7rem 1.2rem",borderRadius:"10px",background:`linear-gradient(135deg,${logColor},${logColor}cc)`,border:"none",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:"0.85rem",flexShrink:0}}>
+            OK
+          </button>
+        </div>
+        {/* Resultado del último scan */}
+        {resultado&&(
+          <div style={{marginTop:"0.75rem",padding:"0.65rem 0.9rem",borderRadius:"8px",fontWeight:600,fontSize:"0.85rem",
+            background:resultado.ok?"#041f14":"#1c0505",border:`1px solid ${resultado.ok?ok:err}`,color:resultado.ok?"#34d399":"#fca5a5"}}>
+            {resultado.msg}
+          </div>
+        )}
+      </div>
+
+      {/* Lista de la sesión */}
+      {despSesion.length>0&&(
+        <div style={{background:card,border:`1px solid ${brd}`,borderRadius:"14px",padding:"1.2rem",marginBottom:"1rem"}}>
+          <div style={{fontWeight:700,fontSize:"0.82rem",color:muted,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"0.8rem"}}>
+            Esta sesión · {despSesion.length} despachado{despSesion.length!==1?"s":""}
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
+            {despSesion.map((e,i)=>(
+              <div key={e.id} style={{display:"flex",alignItems:"center",gap:"10px",padding:"0.55rem 0.7rem",borderRadius:"8px",background:"#041f14",border:"1px solid #065f46"}}>
+                <div style={{width:"20px",height:"20px",borderRadius:"50%",background:ok,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.7rem",fontWeight:900,color:"#fff",flexShrink:0}}>
+                  {despSesion.length-i}
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:700,fontSize:"0.82rem",color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}</div>
+                  <div style={{color:muted,fontSize:"0.7rem"}}>
+                    {e.nroOrdenTN&&<span style={{marginRight:"6px"}}>#{e.nroOrdenTN}</span>}
+                    {e.nroSeguimiento&&<span style={{marginRight:"6px",fontFamily:"monospace"}}>{e.nroSeguimiento.slice(-8)}</span>}
+                    {e.bultos>1&&<span>{e.bultos} bultos</span>}
+                  </div>
+                </div>
+                <button onClick={()=>desDespachar(e.id)}
+                  style={{padding:"0.25rem 0.55rem",borderRadius:"6px",background:"transparent",border:"1px solid #374151",color:muted,cursor:"pointer",fontSize:"0.68rem",fontWeight:600,flexShrink:0}}>
+                  Deshacer
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Resumen pedidos del día para esta logística */}
+      {pedidosLog.length>0&&(
+        <div style={{background:card,border:`1px solid ${brd}`,borderRadius:"14px",padding:"1.2rem"}}>
+          <div style={{fontWeight:700,fontSize:"0.82rem",color:muted,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"0.8rem"}}>
+            Pedidos del día — {logSel} · {fecha}
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:"5px"}}>
+            {pedidosLog.map(e=>{
+              const enSesion=sesionIds.includes(e.id);
+              const desp=e.despachado;
+              const prep=e.preparado;
+              let estadoColor=muted,estadoLabel="Sin preparar";
+              if(desp){estadoColor=ok;estadoLabel="Despachado";}
+              else if(prep){estadoColor="#f59e0b";estadoLabel="Preparado";}
+              return(
+                <div key={e.id} style={{display:"flex",alignItems:"center",gap:"8px",padding:"0.45rem 0.6rem",borderRadius:"7px",
+                  background:desp?"#041f14":prep?"#0d0f1a":"transparent",
+                  border:`1px solid ${desp?"#065f46":prep?"#1e293b":"transparent"}`,
+                  opacity:desp?1:prep?1:0.5}}>
+                  <div style={{width:"8px",height:"8px",borderRadius:"50%",background:estadoColor,flexShrink:0}}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:600,fontSize:"0.78rem",color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}</div>
+                    {e.nroOrdenTN&&<div style={{color:muted,fontSize:"0.67rem"}}>#{e.nroOrdenTN}</div>}
+                  </div>
+                  <div style={{fontSize:"0.68rem",fontWeight:700,color:estadoColor,flexShrink:0}}>{estadoLabel}</div>
+                  {desp&&enSesion&&<button onClick={()=>desDespachar(e.id)}
+                    style={{padding:"0.2rem 0.45rem",borderRadius:"5px",background:"transparent",border:"1px solid #374151",color:muted,cursor:"pointer",fontSize:"0.63rem",flexShrink:0}}>
+                    ↩
+                  </button>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {pedidosLog.length===0&&(
+        <div style={{textAlign:"center",color:muted,fontSize:"0.82rem",padding:"2rem"}}>No hay pedidos asignados a {logSel} para {fecha}</div>
+      )}
+    </div>
+  );
+}
+
 export default function App(){
   const [confirmToken]=useState(()=>new URLSearchParams(window.location.search).get('t'));
   const [despachoToken]=useState(()=>new URLSearchParams(window.location.search).get('d'));
@@ -6971,7 +7307,7 @@ export default function App(){
     imprimir:"tab_despacho",manual:"tab_manual",tarifas:"tab_tarifas",
     informe:"tab_informe",liquidacion:"tab_cobranzaslog",
     liquidacionlog:"tab_liquidacionlog",ctasctes:"tab_ctasctes",
-    localidades:"tab_localidades",expedicion:"tab_expedicion",usuarios:"tab_usuarios",
+    localidades:"tab_localidades",expedicion:"tab_expedicion",salida:"tab_salida",usuarios:"tab_usuarios",
   };
   const TABS=[
     {id:"tablero",l:"📊 Tablero"},
@@ -6987,6 +7323,7 @@ export default function App(){
     {id:"clientes",l:"Clientes"},
     {id:"localidades",l:"Localidades"},
     {id:"expedicion",l:"Expedicion"},
+    {id:"salida",l:"🚚 Salida"},
     {id:"usuarios",l:"Usuarios"},
   ].filter(t=>{
     const fk=TAB_FEATURE_MAP[t.id];
@@ -7173,6 +7510,7 @@ export default function App(){
         {tab==="localidades" &&<TabLocalidades cpExtra={cpExtra} setCpExtra={setCpExtra}/>}
         {tab==="usuarios"   &&<TabUsuarios lc={lc} setLc={setLcPersist} configExpedicion={configExpedicion} setConfigExpedicion={setConfigExpedicion}/>}
         {tab==="expedicion" &&<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc} configExpedicion={configExpedicion} esAdmin={esAdmin}/>}
+        {tab==="salida"     &&<TabSalida envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>}
       </div>
     </div>
   );
