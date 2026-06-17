@@ -1093,6 +1093,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
   const [filZona,setFilZona]=useState("TODAS");
   const [filTurno,setFilTurno]=useState("TODOS");
   const [filOrigen,setFilOrigen]=useState("TODOS");
+  const [filTipoEntrega,setFilTipoEntrega]=useState("TODOS");
   const [busqueda,setBusqueda]=useState("");
   const [editId,setEditId]=useState(null);
   const [seleccionados,setSeleccionados]=useState(new Set());
@@ -1123,6 +1124,10 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
     if(filOrigen!=="TODOS"){
       const origenVal=e.origen==="Tienda Nube"?"TN":e.origen==="ML"?"FLEX":"Manual";
       if(origenVal!==filOrigen)return false;
+    }
+    if(mostrarResumenFlex&&filTipoEntrega!=="TODOS"){
+      if(filTipoEntrega==="SIN_TIPO"){if(e.tipoEntrega)return false;}
+      else if(e.tipoEntrega!==filTipoEntrega)return false;
     }
     if(busqueda){const srch=norm(busqueda);return norm(e.direccion).includes(srch)||e.id.includes(srch)||norm(e.partido).includes(srch)||(e.nroSeguimiento||"").includes(srch)||norm(e.clienteNombre).includes(srch)||(e.nroOrdenTN||"").includes(srch);}
     return true;
@@ -1234,6 +1239,13 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
           <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
             {["TODOS",...TURNOS].map(t =><button key={t} onClick={()=>setFilTurno(t)} style={S.btnSm(filTurno===t,"#8b5cf6")}>{t}</button>)}<button onClick={()=>setFilTurno("SIN_TURNO")} style={S.btnSm(filTurno==="SIN_TURNO","#6b7280")}>Sin turno</button>
           </div>
+          {mostrarResumenFlex&&<>
+            <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
+            <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"38px"}}>Tipo</span>
+            <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
+              {[{k:"TODOS",l:"Todos",c:"#6366f1"},{k:"COMERCIAL",l:"COM",c:"#38bdf8"},{k:"RESIDENCIAL",l:"RES",c:"#86efac"},{k:"SIN_TIPO",l:"Sin tipo",c:"#6b7280"}].map(x =><button key={x.k} onClick={()=>setFilTipoEntrega(x.k)} style={S.btnSm(filTipoEntrega===x.k,x.c)}>{x.l}</button>)}
+            </div>
+          </>}
           <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="🔍 Buscar..." style={{...S.input,width:"190px",marginLeft:"auto"}}/>
           <button onClick={()=>{
             const tmap2=buildTarifaMap(zc);
@@ -3415,7 +3427,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
     if(e.estado==="cancelado")return null;
     if(e.pagoEstado==="cuenta_corriente"&&e.importeOrden>0&&!e.cobranzaRecibida){const monto=e.cobranza>0?e.cobranza:e.importeOrden;return{monto,tipo:"TN CC",logistica:e.trans||""};}
     if(e.cobranza>0&&e.pagoEstado!=="pagado"&&!e.cobranzaRecibida)return{monto:e.cobranza,tipo:"Efectivo",logistica:e.trans||""};
-    if(e.esCC&&e.importeCC>0&&e.pagoEstado!=="pagado")return{monto:e.importeCC,tipo:"Manual CC",logistica:e.trans||""};
+    if(e.esCC&&e.importeCC>0&&!(e.pagoEstado==="pagado"&&e.importeCC===e.importeOrden))return{monto:e.importeCC,tipo:"Manual CC",logistica:e.trans||""};
     return null;
   };
 
@@ -5075,7 +5087,7 @@ function TabClientes({envios,lc,pagosCC=[],facturaClientes={},setFacturaCliente=
       c.envios.forEach(e=>{
         if(e.estado==="cancelado")return;
         if(e.pagoEstado==="cuenta_corriente"&&e.importeOrden>0)deuda+=(e.cobranza>0?e.cobranza:e.importeOrden);
-        else if(e.esCC&&e.importeCC>0&&e.pagoEstado!=="pagado")deuda+=e.importeCC;
+        else if(e.esCC&&e.importeCC>0&&!(e.pagoEstado==="pagado"&&e.importeCC===e.importeOrden))deuda+=e.importeCC;
       });
       if(deuda===0){res[c.key]=0;return;}
       const cobrado=pagosCC.filter(p=>p.clienteKey===c.key).reduce((s,p)=>s+(p.monto||0),0);
@@ -5293,7 +5305,7 @@ function TabTablero({envios,lc,zc,pagosCC=[]}){
     envios.forEach(e=>{
       if(getEstado(e)==="cancelado")return;
       const esTNCC=e.pagoEstado==="cuenta_corriente"&&e.importeOrden>0;
-      const esManualCC=e.esCC&&e.importeCC>0&&e.pagoEstado!=="pagado";
+      const esManualCC=e.esCC&&e.importeCC>0&&!(e.pagoEstado==="pagado"&&e.importeCC===e.importeOrden);
       if(!esTNCC&&!esManualCC)return;
       const montoOrig=esTNCC?(e.cobranza>0?e.cobranza:e.importeOrden):e.importeCC;
       // Calcular saldo real de este pedido descontando pagos específicos
