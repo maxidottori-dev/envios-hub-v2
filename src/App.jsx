@@ -4133,7 +4133,7 @@ function ModalRegistrarPago({clienteKey,clienteNombre,saldoPendiente,onClose,env
           <label style={{display:"block",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",color:"#6b7280",marginBottom:"4px"}}>Monto cobrado</label>
           <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
             <input type="number" value={monto} onChange={e=>{setMonto(e.target.value);setMontoManual(true);}} placeholder="0" style={{...S.input,flex:1}}/>
-            <button onClick={()=>{setMonto(String(saldoPendiente));setMontoManual(false);}} style={{...S.btnSm(false,"#10b981"),whiteSpace:"nowrap",fontSize:"0.7rem"}}>Total</button>
+            <button onClick={()=>{setMonto(String(haySeleccion?montoSeleccionado:saldoPendiente));setMontoManual(false);}} style={{...S.btnSm(false,"#10b981"),whiteSpace:"nowrap",fontSize:"0.7rem"}}>Total</button>
           </div>
         </div>
 
