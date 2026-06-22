@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import * as XLSXLib from "xlsx";
+import jsQR from "jsqr";
 import { db } from "./firebase.js";
 import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, updateDoc, query, where, getDocs, addDoc, serverTimestamp, limit, writeBatch } from "firebase/firestore";
 
@@ -4864,9 +4865,10 @@ function VistaArmador({envios,setEnvios,sesion,lc,armador}){
   const [resultado,setResultado]=useState(null);
   const [sesionContador,setSesionContador]=useState(0);
   const [camara,setCamara]=useState(false);
-  const soportaCamera=typeof window!=="undefined"&&"BarcodeDetector" in window&&"mediaDevices" in navigator;
+  const soportaCamera=typeof window!=="undefined"&&"mediaDevices" in navigator&&!!navigator.mediaDevices?.getUserMedia;
   const inputRef=useRef(null);
   const videoRef=useRef(null);
+  const canvasRef=useRef(null);
 
   useEffect(()=>{if(inputRef.current)inputRef.current.focus();},[]);
 
@@ -4912,7 +4914,8 @@ function VistaArmador({envios,setEnvios,sesion,lc,armador}){
     beepOK();
   },[envios,ejecutarArmado]);
 
-  // Escaneo QR/barcode via cámara — BarcodeDetector API (Chrome Android nativo)
+  // Escaneo QR via cámara — usa BarcodeDetector nativo si está disponible (Chrome/Android);
+  // si no existe (Safari/iPhone) decodifica con jsQR leyendo los frames del video por canvas.
   useEffect(()=>{
     if(!camara)return;
     let stream=null;let rafId=null;let activo=true;
@@ -4922,17 +4925,29 @@ function VistaArmador({envios,setEnvios,sesion,lc,armador}){
         if(!videoRef.current||!activo)return;
         videoRef.current.srcObject=stream;
         await videoRef.current.play();
-        if(!("BarcodeDetector" in window)){
-          setResultado({ok:false,msg:"Tu navegador no soporta escaneo. Usá el campo de texto."});
-          setCamara(false);return;
-        }
-        const detector=new window.BarcodeDetector({formats:["qr_code","code_128","code_39","ean_13"]});
+        const nativo=typeof window.BarcodeDetector!=="undefined";
+        const detector=nativo?new window.BarcodeDetector({formats:["qr_code","code_128","code_39","ean_13"]}):null;
+        if(!canvasRef.current)canvasRef.current=document.createElement("canvas");
+        const canvas=canvasRef.current;
+        const ctx=canvas.getContext("2d",{willReadFrequently:true});
         const scan=async()=>{
           if(!activo||!videoRef.current||videoRef.current.readyState<2){rafId=requestAnimationFrame(scan);return;}
           try{
-            const barcodes=await detector.detect(videoRef.current);
-            if(barcodes.length>0){
-              const val=barcodes[0].rawValue;
+            let val=null;
+            if(nativo){
+              const barcodes=await detector.detect(videoRef.current);
+              if(barcodes.length>0)val=barcodes[0].rawValue;
+            }else{
+              const w=videoRef.current.videoWidth,h=videoRef.current.videoHeight;
+              if(w&&h){
+                canvas.width=w;canvas.height=h;
+                ctx.drawImage(videoRef.current,0,0,w,h);
+                const imgData=ctx.getImageData(0,0,w,h);
+                const code=jsQR(imgData.data,w,h);
+                if(code)val=code.data;
+              }
+            }
+            if(val){
               setResultado({ok:"scanning",msg:"Escaneando..."});
               await new Promise(r=>setTimeout(r,800));
               if(!activo)return;
