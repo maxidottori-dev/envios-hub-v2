@@ -65,6 +65,7 @@ const FEATURES=[
   {key:"accion_exportar",     grupo:"acciones", label:"Exportar Excel",     desc:"Exportar la lista filtrada de envíos o informes a un archivo Excel descargable"},
   {key:"accion_imprimir",     grupo:"acciones", label:"Imprimir etiquetas", desc:"Imprimir etiquetas de envíos individuales con código QR y datos de entrega"},
   {key:"accion_abonar",       grupo:"acciones", label:"Abonar logística",   desc:"Registrar el pago de una liquidación completa o parcial a la logística"},
+  {key:"accion_autorizarcc",  grupo:"acciones", label:"Autorizar Cta. Corriente", desc:"Autorizar que un pedido de Tienda Nube con pago pendiente de acreditación pase a Cuenta Corriente, para poder asignarlo a una logística sin esperar el pago"},
 ];
 
 // Devuelve true si la sesión puede usar esa feature
@@ -882,7 +883,9 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
             <div style={{color:"#fb923c",fontWeight:700,fontSize:"0.85rem"}}>Pago pendiente de acreditacion</div>
             <div style={{color:"#9ca3af",fontSize:"0.72rem",marginTop:"2px"}}>El pago no fue confirmado. Podés esperar o autorizar la entrega igualmente.</div>
           </div>
-          <button onClick={()=>setE(p=>({...p,pagoEstado:"cuenta_corriente"}))} style={{...S.btn(true,"#7c3aed"),padding:"0.35rem 0.9rem",fontSize:"0.72rem",whiteSpace:"nowrap"}}>Autorizar — Cta. Corriente</button>
+          {puedeVer(sesion,"accion_autorizarcc")
+            ?<button onClick={autorizarCC} style={{...S.btn(true,"#7c3aed"),padding:"0.35rem 0.9rem",fontSize:"0.72rem",whiteSpace:"nowrap"}}>Autorizar — Cta. Corriente</button>
+            :<span style={{fontSize:"0.68rem",color:"#6b7280",fontStyle:"italic",whiteSpace:"nowrap"}}>No tenés permiso para autorizar</span>}
         </div>
       )}
       {esTN && e.pagoEstado === "cuenta_corriente" && (
