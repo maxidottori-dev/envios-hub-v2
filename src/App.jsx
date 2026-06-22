@@ -4383,7 +4383,7 @@ function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc,sesion=null}){
 function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{}}){
   const [usuarios,setUsuarios]=useState([]);
   const [loading,setLoading]=useState(true);
-  const [form,setForm]=useState({usuario:"",password:"",rol:"colaborador",logistica:"",esChofer:false,activo:true});
+  const [form,setForm]=useState({usuario:"",password:"",rol:"colaborador",logistica:"",armadorId:"",esChofer:false,activo:true});
   const [editId,setEditId]=useState(null);
   const [toast,setToast]=useState("");
   const [permsOpenId,setPermsOpenId]=useState(null);
@@ -4416,9 +4416,10 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{}}){
   const guardar=async()=>{
     if(!form.usuario||!form.password){mostrarToast("Completá usuario y contraseña");return;}
     if(form.rol==="logistica"&&!form.logistica){mostrarToast("Selecciona la logistica para este usuario");return;}
+    if(form.rol==="armador"&&!form.armadorId){mostrarToast("Selecciona el armador para este usuario");return;}
     const id=editId||("usr_"+Date.now());
     await setDoc(doc(db,"usuarios",id),{...form,usuario:form.usuario.toLowerCase().trim()});
-    setForm({usuario:"",password:"",rol:"colaborador",logistica:"",esChofer:false,activo:true});
+    setForm({usuario:"",password:"",rol:"colaborador",logistica:"",armadorId:"",esChofer:false,activo:true});
     setEditId(null);
     mostrarToast(editId?"Usuario actualizado":"Usuario creado");
   };
@@ -4427,7 +4428,7 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{}}){
     await setDoc(doc(db,"usuarios",u.id),{...u,activo:!u.activo});
   };
 
-  const editar=u=>{setForm({usuario:u.usuario,password:u.password,rol:u.rol,logistica:u.logistica||"",activo:u.activo});setEditId(u.id);};
+  const editar=u=>{setForm({usuario:u.usuario,password:u.password,rol:u.rol,logistica:u.logistica||"",armadorId:u.armadorId||"",esChofer:u.esChofer||false,activo:u.activo});setEditId(u.id);};
 
   const togglePerm=async(u,featureKey)=>{
     const actual=(u.permisos||{})[featureKey];
@@ -4437,7 +4438,7 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{}}){
     await setDoc(doc(db,"usuarios",u.id),{permisos:nuevosPermisos},{merge:true});
   };
 
-  const ROL_C={admin:{label:"Admin",color:"#6366f1"},colaborador:{label:"Colaborador",color:"#10b981"},logistica:{label:"Logistica",color:"#8b5cf6"},expedicion:{label:"Expedicion",color:"#f59e0b"}};
+  const ROL_C={admin:{label:"Admin",color:"#6366f1"},colaborador:{label:"Colaborador",color:"#10b981"},logistica:{label:"Logistica",color:"#8b5cf6"},expedicion:{label:"Expedicion",color:"#f59e0b"},armador:{label:"Armador",color:"#06b6d4"}};
 
   // Componente inline para el panel de permisos de un colaborador
   const PanelPermisos=({u})=>{
@@ -4524,11 +4525,12 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{}}){
           </div>
           <div>
             <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Rol</div>
-            <select value={form.rol} onChange={e=>setForm(p=>({...p,rol:e.target.value,logistica:""}))} style={{...S.input,width:"100%"}}>
+            <select value={form.rol} onChange={e=>setForm(p=>({...p,rol:e.target.value,logistica:"",armadorId:""}))} style={{...S.input,width:"100%"}}>
               <option value="admin">Administrador</option>
               <option value="colaborador">Colaborador</option>
               <option value="logistica">Logistica</option>
               <option value="expedicion">Expedicion</option>
+              <option value="armador">Armador</option>
             </select>
           </div>
           {form.rol==="logistica"&&<div>
@@ -4542,10 +4544,18 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{}}){
               {logActivas.map(l=><option key={l} value={l}>{l}</option>)}
             </select>
           </div>}
+          {form.rol==="armador"&&<div>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Armador vinculado</div>
+            <select value={form.armadorId} onChange={e=>setForm(p=>({...p,armadorId:e.target.value}))} style={{...S.input,width:"100%"}}>
+              <option value="">Elegir...</option>
+              {armadoresConfig.map(a=><option key={a.id} value={a.id}>{a.nombre}</option>)}
+            </select>
+            {armadoresConfig.length===0&&<div style={{color:"#f59e0b",fontSize:"0.7rem",marginTop:"4px"}}>No hay armadores configurados todavía — agregá uno en la sección Expedición más abajo.</div>}
+          </div>}
         </div>
         <div style={{display:"flex",gap:"0.5rem"}}>
           <button onClick={guardar} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)"}}>{editId?"Guardar cambios":"Crear usuario"}</button>
-          {editId&&<button onClick={()=>{setEditId(null);setForm({usuario:"",password:"",rol:"colaborador",logistica:"",esChofer:false,activo:true});}} style={S.btn(false)}>Cancelar</button>}
+          {editId&&<button onClick={()=>{setEditId(null);setForm({usuario:"",password:"",rol:"colaborador",logistica:"",armadorId:"",esChofer:false,activo:true});}} style={S.btn(false)}>Cancelar</button>}
         </div>
       </div>
 
@@ -4565,6 +4575,7 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{}}){
                     <span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.88rem"}}>{u.usuario}</span>
                     <span style={{padding:"1px 8px",background:rc.color+"22",color:rc.color,borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>{rc.label}</span>
                     {u.rol==="logistica"&&u.logistica&&<span style={{padding:"1px 8px",background:lc[u.logistica]?.bg||"#1a1f2e",color:lc[u.logistica]?.color||"#6b7280",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>{u.logistica}</span>}
+                    {u.rol==="armador"&&<span style={{padding:"1px 8px",background:"#0c2a30",color:armadoresConfig.find(a=>a.id===u.armadorId)?.color||"#06b6d4",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>{armadoresConfig.find(a=>a.id===u.armadorId)?.nombre||"⚠ armador no encontrado"}</span>}
                     {u.esChofer&&<span style={{padding:"1px 8px",background:"#1c1500",color:"#f59e0b",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>🛵 Chofer</span>}
                     {!u.activo&&<span style={{padding:"1px 8px",background:"#1c0a0a",color:"#f87171",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>Inactivo</span>}
                     {u.rol==="colaborador"&&u.permisos&&Object.values(u.permisos).some(v=>v===false)&&(
@@ -4844,6 +4855,184 @@ const MOTIVOS_FALLO=[
   {k:"rechazo",l:"Rechazo del pedido",icon:"📦"},
   {k:"otro",l:"Otro motivo",icon:"✏️"},
 ];
+
+// ════════════════════════════════════════════════════════════════════
+// VISTA ARMADOR — escaneo simple para celular propio, sesión personal
+// ════════════════════════════════════════════════════════════════════
+function VistaArmador({envios,setEnvios,sesion,lc,armador}){
+  const [qrInput,setQrInput]=useState("");
+  const [resultado,setResultado]=useState(null);
+  const [sesionContador,setSesionContador]=useState(0);
+  const [camara,setCamara]=useState(false);
+  const soportaCamera=typeof window!=="undefined"&&"BarcodeDetector" in window&&"mediaDevices" in navigator;
+  const inputRef=useRef(null);
+  const videoRef=useRef(null);
+
+  useEffect(()=>{if(inputRef.current)inputRef.current.focus();},[]);
+
+  const ejecutarArmado=useCallback((envio,bultos)=>{
+    const ts=new Date().toISOString();
+    setEnvios(pv=>pv.map(e=>e.id===envio.id?{...e,preparado:true,bultos,armadorId:armador.id,armadorNombre:armador.nombre,armadoTs:ts}:e));
+    setResultado({ok:true,envio,bultos,msg:"✓ "+armador.nombre+(bultos>1?" · "+bultos+" bultos":"")});
+    setTimeout(()=>setResultado(null),4000);
+    if(inputRef.current)inputRef.current.focus();
+    addDoc(collection(db,"armados"),{
+      envioId:envio.id,
+      nroSeguimiento:envio.nroSeguimiento||"",
+      nroOrdenTN:String(envio.nroOrdenTN||""),
+      armadorId:armador.id,armadorNombre:armador.nombre,
+      ts,fecha:envio.fecha||envio.fechaVenta||"",
+      bultos,logistica:envio.trans||"",
+      direccion:envio.direccion||"",
+      partido:envio.partido||"",
+      esFlex:envio.origen==="ML",
+      esEdicion:false,
+    }).catch(err=>console.error("Error guardando armado:",err));
+  },[setEnvios,armador]);
+
+  const procesarScan=useCallback((nro)=>{
+    const srch=nro.trim().replace(/^#/,"");if(!srch)return;
+    setResultado(null);
+    const nums=srch.replace(/\D/g,"");
+    const candidatos=envios
+      .map(e=>({e,score:scoreBusqueda(e,srch,nums)}))
+      .filter(x=>x.score>0)
+      .sort((a,b)=>b.score-a.score);
+    if(candidatos.length===0){
+      setResultado({ok:false,msg:"No encontrado: "+srch.slice(0,20)});
+      setTimeout(()=>setResultado(null),5000);return;
+    }
+    const found=candidatos[0].e;
+    if(found.preparado&&found.armadorNombre){
+      setResultado({ok:"ya",envio:found,msg:"Ya preparado por "+found.armadorNombre});
+      setTimeout(()=>setResultado(null),4000);return;
+    }
+    ejecutarArmado(found,found.bultos||1);
+    setSesionContador(p=>p+1);
+    beepOK();
+  },[envios,ejecutarArmado]);
+
+  // Escaneo QR/barcode via cámara — BarcodeDetector API (Chrome Android nativo)
+  useEffect(()=>{
+    if(!camara)return;
+    let stream=null;let rafId=null;let activo=true;
+    const startCam=async()=>{
+      try{
+        stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment",width:{ideal:1280},height:{ideal:720}}});
+        if(!videoRef.current||!activo)return;
+        videoRef.current.srcObject=stream;
+        await videoRef.current.play();
+        if(!("BarcodeDetector" in window)){
+          setResultado({ok:false,msg:"Tu navegador no soporta escaneo. Usá el campo de texto."});
+          setCamara(false);return;
+        }
+        const detector=new window.BarcodeDetector({formats:["qr_code","code_128","code_39","ean_13"]});
+        const scan=async()=>{
+          if(!activo||!videoRef.current||videoRef.current.readyState<2){rafId=requestAnimationFrame(scan);return;}
+          try{
+            const barcodes=await detector.detect(videoRef.current);
+            if(barcodes.length>0){
+              const val=barcodes[0].rawValue;
+              setResultado({ok:"scanning",msg:"Escaneando..."});
+              await new Promise(r=>setTimeout(r,800));
+              if(!activo)return;
+              procesarScan(val);
+              setCamara(false);return;
+            }
+          }catch(e){}
+          if(activo)rafId=requestAnimationFrame(scan);
+        };
+        rafId=requestAnimationFrame(scan);
+      }catch(err){
+        setResultado({ok:false,msg:"No se pudo acceder a la cámara. Verificá los permisos."});
+        setCamara(false);
+      }
+    };
+    startCam();
+    return()=>{
+      activo=false;
+      if(rafId)cancelAnimationFrame(rafId);
+      if(stream)stream.getTracks().forEach(t=>t.stop());
+    };
+  },[camara,procesarScan]);
+
+  // Tu usuario no está (o ya no está) vinculado a un armador válido
+  if(!armador){
+    return(
+      <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"2rem",textAlign:"center"}}>
+        <div style={{fontSize:"2rem",marginBottom:"0.75rem"}}>⚠️</div>
+        <div style={{fontWeight:700,fontSize:"1rem",marginBottom:"0.5rem"}}>Usuario sin armador vinculado</div>
+        <div style={{color:"#9ca3af",fontSize:"0.85rem",marginBottom:"1.5rem",maxWidth:"320px"}}>Tu cuenta no está vinculada a ningún armador activo. Pedile al administrador que lo revise en Usuarios.</div>
+        <button onClick={()=>{clearSession();window.location.reload();}} style={{...S.btnSm(false),color:"#f87171"}}>Salir</button>
+      </div>
+    );
+  }
+
+  return(
+    <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif",maxWidth:"500px",margin:"0 auto"}}>
+      <style>{`*{box-sizing:border-box;}`}</style>
+
+      {/* Header */}
+      <div style={{position:"sticky",top:0,zIndex:100,background:"#0f1420",borderBottom:"1px solid #1a1f2e"}}>
+        <div style={{padding:"0.7rem 1rem",display:"flex",alignItems:"center",gap:"0.75rem"}}>
+          <div style={{width:"26px",height:"26px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:"7px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:"14px"}}>📦</div>
+          <div>
+            <div style={{fontWeight:800,fontSize:"0.92rem"}}>EnviosHub <span style={{color:"#374151",fontSize:"0.6rem",fontWeight:400}}>v{VERSION}</span></div>
+            <div style={{color:armador.color||"#06b6d4",fontSize:"0.7rem",fontWeight:700}}>{armador.nombre}</div>
+          </div>
+          <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:"0.75rem"}}>
+            <span style={{color:"#4b5563",fontSize:"0.7rem"}}>{sesion.usuario}</span>
+            <button onClick={()=>{clearSession();window.location.reload();}} style={{...S.btnSm(false),color:"#f87171"}}>Salir</button>
+          </div>
+        </div>
+      </div>
+
+      <div style={{padding:"14px"}}>
+        {/* Contador de sesión */}
+        <div style={{...S.card,padding:"0.9rem 1rem",marginBottom:"0.85rem",textAlign:"center",borderLeft:"3px solid "+(armador.color||"#06b6d4")}}>
+          <div style={{fontWeight:900,fontSize:"2rem",color:armador.color||"#06b6d4",lineHeight:1}}>{sesionContador}</div>
+          <div style={{color:"#6b7280",fontSize:"0.65rem",textTransform:"uppercase",marginTop:"3px"}}>pedido{sesionContador!==1?"s":""} armado{sesionContador!==1?"s":""} hoy</div>
+        </div>
+
+        {/* Input escaneo */}
+        <div style={{...S.card,padding:"0.85rem 1rem",marginBottom:"0.75rem",border:"1px solid #6366f133"}}>
+          <div style={{color:"#a78bfa",fontWeight:700,fontSize:"0.7rem",textTransform:"uppercase",letterSpacing:".06em",marginBottom:"8px"}}>Escanear pedido</div>
+          <div style={{display:"flex",gap:"8px",marginBottom:(camara||resultado)?"8px":"0"}}>
+            <input ref={inputRef} value={qrInput} onChange={e=>setQrInput(e.target.value)}
+              onKeyDown={e=>{if(e.key==="Enter"){procesarScan(qrInput);setQrInput("");}}}
+              placeholder="Escaneá el código de barras o ingresá el nro..."
+              style={{...S.input,flex:1,fontSize:"0.88rem",padding:"10px 12px"}} autoComplete="off"/>
+            <button onClick={()=>{procesarScan(qrInput);setQrInput("");}}
+              style={{...S.btn(true),background:"#12172a",border:"1px solid #6366f1",color:"#a78bfa",padding:"8px 14px",fontWeight:700,fontSize:"0.8rem"}}>OK</button>
+            {soportaCamera&&(
+              <button onClick={()=>setCamara(p=>!p)}
+                title="Escanear con cámara"
+                style={{...S.btn(camara),background:camara?"#0d1c04":"#0f1420",border:"1px solid "+(camara?"#84cc16":"#252d40"),color:camara?"#84cc16":"#6b7280",padding:"8px 12px",fontSize:"1.1rem"}}>📷</button>
+            )}
+          </div>
+          {camara&&(
+            <div style={{marginBottom:"8px",borderRadius:"10px",overflow:"hidden",background:"#000",position:"relative"}}>
+              <video ref={videoRef} style={{width:"100%",maxHeight:"220px",objectFit:"cover",display:"block"}} playsInline muted/>
+              <div style={{position:"absolute",inset:0,border:"2px solid #84cc16",borderRadius:"10px",pointerEvents:"none"}}/>
+              <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"150px",height:"150px",border:"2px solid #84cc16",borderRadius:"8px",boxShadow:"0 0 0 9999px rgba(0,0,0,0.45)"}}/>
+              <button onClick={()=>setCamara(false)} style={{position:"absolute",top:"8px",right:"8px",background:"rgba(0,0,0,0.75)",border:"1px solid #84cc16",color:"#84cc16",borderRadius:"6px",padding:"4px 10px",fontSize:"0.75rem",cursor:"pointer"}}>Cerrar</button>
+            </div>
+          )}
+          {resultado&&(
+            <div onClick={()=>resultado.ok!==true&&setResultado(null)} style={{padding:"8px 12px",borderRadius:"8px",cursor:resultado.ok===true?"default":"pointer",
+              background:resultado.ok===true?"#041f14":resultado.ok==="ya"?"#12172a":"#1c0404",
+              border:"1px solid "+(resultado.ok===true?"#065f46":resultado.ok==="ya"?"#252d40":"#7f1d1d"),
+              color:resultado.ok===true?"#34d399":resultado.ok==="ya"?"#6b7280":"#f87171",
+              fontSize:"0.82rem",fontWeight:700,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"8px"}}>
+              <div>{resultado.msg}{resultado.envio&&<div style={{fontWeight:400,color:"#9ca3af",marginTop:"2px",fontSize:"0.75rem"}}>{resultado.envio.direccion}{resultado.envio.trans&&<span style={{color:lc[resultado.envio.trans]?.color||"#6b7280",fontWeight:700}}> · {resultado.envio.trans}</span>}{resultado.bultos>1&&<span style={{color:"#f59e0b",fontWeight:700}}> · {resultado.bultos} bultos</span>}</div>}</div>
+              {resultado.ok!==true&&<span style={{opacity:0.5,fontSize:"0.75rem",flexShrink:0}}>✕</span>}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function VistaChofer({envios,setEnvios,sesion,lc}){
   const hoy=fechaHoy();
@@ -7364,6 +7553,10 @@ export default function App(){
     return<VistaLogistica envios={envios} sesion={sesion} lc={lc}/>;
   }
   if(sesion.rol==="expedicion")return<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc} configExpedicion={configExpedicion}/>;
+  if(sesion.rol==="armador"){
+    const arm=(configExpedicion.armadores||[]).find(a=>a.id===sesion.armadorId);
+    return<VistaArmador envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc} armador={arm}/>;
+  }
 
   if(pantalla==="asignacion"){return<PantallaAsignacion borrador={borrador} fileName={fileName} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc} envios={envios} sesion={sesion}/>;}
   if(pantalla==="asignacion-tn"){return<PantallaAsignacionTN borrador={borrador} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc} sesion={sesion}/>;}
