@@ -6667,18 +6667,32 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
 
 function TabStatsArmado(){
   const hoy=fechaHoy();
-  const [statsFecha,setStatsFecha]=useState(hoy);
-  const [statsArmados,setStatsArmados]=useState([]);
+  const [statsDesde,setStatsDesde]=useState(hoy);
+  const [statsHasta,setStatsHasta]=useState(hoy);
+  const [statsArmadosRaw,setStatsArmadosRaw]=useState([]);
   const [loadingStats,setLoadingStats]=useState(false);
   const [statsFilArm,setStatsFilArm]=useState("TODOS"); // filtro log por armador
+  const [statsFilTipo,setStatsFilTipo]=useState("TODOS"); // TODOS | ENVIOS | COLECTAS
 
-  // Cargar stats al cambiar la fecha
+  // Cargar stats al cambiar el rango de fechas (vacío en ambos = todas las fechas)
   useEffect(()=>{
     setLoadingStats(true);
-    getDocs(query(collection(db,"armados"),where("fecha","==",statsFecha)))
-      .then(snap=>{setStatsArmados(snap.docs.map(d=>({id:d.id,...d.data()})));setLoadingStats(false);})
+    let q;
+    if(!statsDesde&&!statsHasta){
+      q=query(collection(db,"armados"),limit(3000));
+    }else if(statsDesde&&statsHasta&&statsDesde===statsHasta){
+      q=query(collection(db,"armados"),where("fecha","==",statsDesde));
+    }else{
+      q=query(collection(db,"armados"),where("fecha",">=",statsDesde||"0000-00-00"),where("fecha","<=",statsHasta||"9999-99-99"));
+    }
+    getDocs(q)
+      .then(snap=>{setStatsArmadosRaw(snap.docs.map(d=>({id:d.id,...d.data()})));setLoadingStats(false);})
       .catch(()=>setLoadingStats(false));
-  },[statsFecha]);
+  },[statsDesde,statsHasta]);
+
+  const statsArmados=useMemo(()=>{
+    return statsArmadosRaw.filter(a=>statsFilTipo==="TODOS"||(statsFilTipo==="COLECTAS"?a.esColecta:!a.esColecta));
+  },[statsArmadosRaw,statsFilTipo]);
 
   // Estadísticas por armador
   const statsPerArmador=useMemo(()=>{
@@ -6718,17 +6732,25 @@ function TabStatsArmado(){
     <div>
       <div style={{...S.card,padding:"0.6rem 1rem",marginBottom:"0.75rem",display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}}>
         <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Fecha</span>
-        {[{l:"Ayer",v:fechaAyer()},{l:"Hoy",v:hoy}].map(x=>(
-          <button key={x.v} onClick={()=>setStatsFecha(x.v)} style={S.btnSm(statsFecha===x.v)}>{x.l}</button>
+        <button onClick={()=>{setStatsDesde(fechaAyer());setStatsHasta(fechaAyer());}} style={S.btnSm(statsDesde===fechaAyer()&&statsHasta===fechaAyer())}>Ayer</button>
+        <button onClick={()=>{setStatsDesde(hoy);setStatsHasta(hoy);}} style={S.btnSm(statsDesde===hoy&&statsHasta===hoy)}>Hoy</button>
+        <button onClick={()=>{const d=new Date();d.setDate(d.getDate()-6);const d7=new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().split("T")[0];setStatsDesde(d7);setStatsHasta(hoy);}} style={S.btnSm(statsDesde!==hoy&&statsDesde!==""&&statsHasta===hoy)}>Últimos 7 días</button>
+        <button onClick={()=>{setStatsDesde("");setStatsHasta("");}} style={S.btnSm(!statsDesde&&!statsHasta)}>Todas</button>
+        <span style={{color:"#4b5563",fontSize:"0.65rem"}}>Desde</span>
+        <input type="date" value={statsDesde} onChange={e=>setStatsDesde(e.target.value)} style={{...S.input,padding:"3px 8px",width:"138px",fontSize:"0.78rem"}}/>
+        <span style={{color:"#4b5563",fontSize:"0.65rem"}}>Hasta</span>
+        <input type="date" value={statsHasta} onChange={e=>setStatsHasta(e.target.value)} style={{...S.input,padding:"3px 8px",width:"138px",fontSize:"0.78rem"}}/>
+        <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",marginLeft:"10px"}}>Tipo</span>
+        {[{l:"Todos",v:"TODOS"},{l:"📦 Envíos",v:"ENVIOS"},{l:"📋 Colectas",v:"COLECTAS"}].map(x=>(
+          <button key={x.v} onClick={()=>setStatsFilTipo(x.v)} style={S.btnSm(statsFilTipo===x.v)}>{x.l}</button>
         ))}
-        <input type="date" value={statsFecha} onChange={e=>setStatsFecha(e.target.value)} style={{...S.input,padding:"3px 8px",width:"138px",fontSize:"0.78rem"}}/>
         <span style={{color:"#4b5563",fontSize:"0.72rem",marginLeft:"4px"}}>{statsArmados.length} armados</span>
       </div>
 
       {loadingStats&&<div style={{textAlign:"center",padding:"2rem",color:"#4b5563",fontSize:"0.82rem"}}>Cargando...</div>}
 
       {!loadingStats&&statsArmados.length===0&&(
-        <div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📊</div><p style={{marginTop:"8px"}}>Sin registros para esta fecha</p></div>
+        <div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📊</div><p style={{marginTop:"8px"}}>Sin registros para este rango/filtro</p></div>
       )}
 
       {!loadingStats&&statsArmados.length>0&&(()=>{
@@ -6821,10 +6843,14 @@ function TabStatsArmado(){
           <div style={{display:"flex",flexDirection:"column",gap:"4px",maxHeight:"400px",overflowY:"auto"}}>
             {logDetalle.map((a,i)=>(
               <div key={a.id||i} style={{display:"flex",gap:"8px",alignItems:"flex-start",padding:"5px 6px",borderRadius:"6px",background:i%2===0?"#0d1020":"transparent"}}>
-                <div style={{fontFamily:"monospace",fontSize:"0.78rem",color:"#6366f1",fontWeight:700,flexShrink:0,minWidth:"42px"}}>{fmtHora(a.ts)}</div>
+                <div style={{flexShrink:0,minWidth:"42px"}}>
+                  <div style={{fontFamily:"monospace",fontSize:"0.78rem",color:"#6366f1",fontWeight:700}}>{fmtHora(a.ts)}</div>
+                  {statsDesde!==statsHasta&&<div style={{fontSize:"0.6rem",color:"#4b5563"}}>{a.fecha}</div>}
+                </div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:"0.78rem",color:"#e5e7eb",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.direccion||a.nroOrdenTN||a.envioId}</div>
                   <div style={{display:"flex",gap:"8px",marginTop:"1px",flexWrap:"wrap"}}>
+                    {a.esColecta&&<span style={{fontSize:"0.65rem",color:"#a78bfa",fontWeight:700}}>📋 Colecta</span>}
                     {a.nroOrdenTN&&<span style={{fontSize:"0.65rem",color:"#7dd3fc"}}>#{a.nroOrdenTN}</span>}
                     {a.logistica&&<span style={{fontSize:"0.65rem",color:"#4b5563"}}>{a.logistica}</span>}
                     {a.bultos>1&&<span style={{fontSize:"0.65rem",color:"#f59e0b"}}>{a.bultos}b</span>}
