@@ -3447,6 +3447,14 @@ function mkClienteKey(nombre){
   return (nombre||"").toLowerCase().trim().replace(/\s+/g,"_")||null;
 }
 
+// Saldo de un envío = deuda - pagado, tolerando diferencias de centavos (redondeo).
+// Si la diferencia es menor a $1 se considera saldado (evita pedidos "pendientes" eternos
+// por un desajuste de centavos entre el importe cargado y el pago registrado).
+function saldoTolerante(monto,pagado){
+  const s=(monto||0)-(pagado||0);
+  return s>0.99?s:0;
+}
+
 // ════════════════════════════════════════════════════════════════════
 // TAB CUENTAS CORRIENTES
 // ════════════════════════════════════════════════════════════════════
@@ -3561,7 +3569,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
     let saldo=0,cobradoConSaldo=0,pendienteCount=0,fechaMinPendiente="";
     c.envios.forEach(e=>{
       const pagEnvio=calcPagEnvio(e.id);
-      const saldoE=Math.max(0,(e._deuda?.monto||0)-pagEnvio);
+      const saldoE=saldoTolerante(e._deuda?.monto,pagEnvio);
       saldo+=saldoE;
       if(saldoE>0){
         pendienteCount++;
@@ -3652,7 +3660,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
           // Calcular saldo por envio para filtrar
           const enviosConSaldo=c.envios.map(e=>{
             const pagEnvio=calcPagEnvio(e.id);
-            return{...e,_saldoEnvio:Math.max(0,(e._deuda?.monto||0)-pagEnvio)};
+            return{...e,_saldoEnvio:saldoTolerante(e._deuda?.monto,pagEnvio)};
           }).filter(e=>e._saldoEnvio>0);
 
           // Todos los pedidos del cliente (incluyendo sin deuda)
@@ -3708,7 +3716,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
                   :todosEnviosCliente.map((e,i)=>{
                     const deuda=getDeudaEnvio(e);
                     const pagEnvio=deuda?calcPagEnvio(e.id):0;
-                    const saldoE=deuda?Math.max(0,(deuda.monto||0)-pagEnvio):0;
+                    const saldoE=deuda?saldoTolerante(deuda.monto,pagEnvio):0;
                     const esCancelado=e.estado==="cancelado";
                     return(
                       <div key={e.id} style={{padding:"0.6rem 1rem",borderBottom:i<todosEnviosCliente.length-1?"1px solid #1a1f2e":"none",display:"flex",gap:"0.75rem",alignItems:"center",flexWrap:"wrap",opacity:esCancelado?0.45:1}}>
@@ -3931,7 +3939,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
         <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Nombre, dirección o nro orden..." style={{...S.input,width:"240px",marginLeft:"auto"}}/>
         <button onClick={()=>{
           // Helper saldo por envio
-          const saldoE=e=>{const pE=pagos.filter(p=>p.envioIds?.includes(e.id)).reduce((s,p)=>{if(p.montosPorEnvio)return s+(p.montosPorEnvio[e.id]||0);if((p.envioIds?.length||0)===1)return s+(p.monto||0);return s;},0);return Math.max(0,(e._deuda?.monto||0)-pE);};
+          const saldoE=e=>{const pE=pagos.filter(p=>p.envioIds?.includes(e.id)).reduce((s,p)=>{if(p.montosPorEnvio)return s+(p.montosPorEnvio[e.id]||0);if((p.envioIds?.length||0)===1)return s+(p.monto||0);return s;},0);return saldoTolerante(e._deuda?.monto,pE);};
           const filas=[];
           clientesFiltrados.forEach((c,ci)=>{
             const vencido=c.saldo>0&&c.dias>=c.limite;
@@ -3971,7 +3979,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
         <button onClick={()=>{
           const ahora=new Date();
           const ts=ahora.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
-          const saldoE=e=>{const pE=pagos.filter(p=>p.envioIds?.includes(e.id)).reduce((s,p)=>{if(p.montosPorEnvio)return s+(p.montosPorEnvio[e.id]||0);if((p.envioIds?.length||0)===1)return s+(p.monto||0);return s;},0);return Math.max(0,(e._deuda?.monto||0)-pE);};
+          const saldoE=e=>{const pE=pagos.filter(p=>p.envioIds?.includes(e.id)).reduce((s,p)=>{if(p.montosPorEnvio)return s+(p.montosPorEnvio[e.id]||0);if((p.envioIds?.length||0)===1)return s+(p.monto||0);return s;},0);return saldoTolerante(e._deuda?.monto,pE);};
           const rows=clientesFiltrados.map((c,ci)=>{
             const vencido=c.saldo>0&&c.dias>=c.limite;
             const estadoBg=c.saldo===0?"#dcfce7":vencido?"#fee2e2":"#fef3c7";
@@ -4127,7 +4135,7 @@ function ModalRegistrarPago({clienteKey,clienteNombre,saldoPendiente,onClose,env
       // Pago generico con multiples envioIds (formato viejo bugueado): ignorar a nivel individual
       return s;
     },0);
-    return Math.max(0,(getDeudaEnvio(e)?.monto||0)-pagEnvio);
+    return saldoTolerante(getDeudaEnvio(e)?.monto,pagEnvio);
   };
 
   const toggleEnvio=(id,importe)=>{
@@ -5686,7 +5694,7 @@ function TabTablero({envios,lc,zc,pagosCC=[]}){
         if((p.envioIds?.length||0)===1)return s+(p.monto||0);
         return s;
       },0);
-      const saldoE=Math.max(0,montoOrig-pagadoEnvio);
+      const saldoE=saldoTolerante(montoOrig,pagadoEnvio);
       if(saldoE<=0)return; // ya pago, no cuenta para fechaMin
       const nombre=e.clienteNombre||"Sin nombre";
       const fecha=e.fecha||e.fechaVenta||"";
