@@ -4540,6 +4540,14 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{}}){
     await setDoc(doc(db,"usuarios",u.id),{permisos:nuevosPermisos},{merge:true});
   };
 
+  // Habilita/deshabilita que un armador puntual pueda pasar a modo Salida (despacho) sin re-loguearse.
+  // Default-deny: a diferencia de "permisos" (colaborador), acá lo que falta significa NO habilitado.
+  const toggleSalidaArmador=async(u)=>{
+    const nuevo=!u.puedeSalida;
+    setUsuarios(prev=>prev.map(x=>x.id===u.id?{...x,puedeSalida:nuevo}:x));
+    await setDoc(doc(db,"usuarios",u.id),{puedeSalida:nuevo},{merge:true});
+  };
+
   const ROL_C={admin:{label:"Admin",color:"#6366f1"},colaborador:{label:"Colaborador",color:"#10b981"},logistica:{label:"Logistica",color:"#8b5cf6"},expedicion:{label:"Expedicion",color:"#f59e0b"},armador:{label:"Armador",color:"#06b6d4"}};
 
   // Componente inline para el panel de permisos de un colaborador
@@ -4678,6 +4686,7 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{}}){
                     <span style={{padding:"1px 8px",background:rc.color+"22",color:rc.color,borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>{rc.label}</span>
                     {u.rol==="logistica"&&u.logistica&&<span style={{padding:"1px 8px",background:lc[u.logistica]?.bg||"#1a1f2e",color:lc[u.logistica]?.color||"#6b7280",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>{u.logistica}</span>}
                     {u.rol==="armador"&&<span style={{padding:"1px 8px",background:"#0c2a30",color:armadoresConfig.find(a=>a.id===u.armadorId)?.color||"#06b6d4",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>{armadoresConfig.find(a=>a.id===u.armadorId)?.nombre||"⚠ armador no encontrado"}</span>}
+                    {u.rol==="armador"&&u.puedeSalida&&<span style={{padding:"1px 8px",background:"#1a0f2e",color:"#a78bfa",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>🚚 + Salida</span>}
                     {u.esChofer&&<span style={{padding:"1px 8px",background:"#1c1500",color:"#f59e0b",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>🛵 Chofer</span>}
                     {!u.activo&&<span style={{padding:"1px 8px",background:"#1c0a0a",color:"#f87171",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>Inactivo</span>}
                     {u.rol==="colaborador"&&u.permisos&&Object.values(u.permisos).some(v=>v===false)&&(
@@ -4689,6 +4698,11 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{}}){
                   {u.rol==="colaborador"&&(
                     <button onClick={()=>setPermsOpenId(permsOpen?null:u.id)} style={{...S.btnSm(permsOpen,"#8b5cf6"),fontSize:"0.72rem"}}>
                       {permsOpen?"▲ Permisos":"▼ Permisos"}
+                    </button>
+                  )}
+                  {u.rol==="armador"&&(
+                    <button onClick={()=>toggleSalidaArmador(u)} style={{...S.btnSm(!!u.puedeSalida,"#a78bfa"),fontSize:"0.72rem"}}>
+                      {u.puedeSalida?"🚚 Salida: ON":"🚚 Salida: OFF"}
                     </button>
                   )}
                   <button onClick={()=>editar(u)} style={{...S.btnSm(false),color:"#6366f1"}}>Editar</button>
@@ -4962,6 +4976,8 @@ const MOTIVOS_FALLO=[
 // VISTA ARMADOR — escaneo simple para celular propio, sesión personal
 // ════════════════════════════════════════════════════════════════════
 function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armador}){
+  // "armado" = escaneo simple al armar; "salida" = TabSalida (despacho a logística) — mismo usuario, sin re-loguear.
+  const [modo,setModo]=useState("armado");
   const [qrInput,setQrInput]=useState("");
   const [resultado,setResultado]=useState(null);
   const [sesionContador,setSesionContador]=useState(0);
@@ -5120,17 +5136,24 @@ function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armado
   }
 
   return(
-    <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif",maxWidth:"500px",margin:"0 auto"}}>
+    <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif",maxWidth:modo==="salida"?"720px":"500px",margin:"0 auto"}}>
       <style>{`*{box-sizing:border-box;}`}</style>
 
       {/* Header */}
       <div style={{position:"sticky",top:0,zIndex:100,background:"#0f1420",borderBottom:"1px solid #1a1f2e"}}>
-        <div style={{padding:"0.7rem 1rem",display:"flex",alignItems:"center",gap:"0.75rem"}}>
+        <div style={{padding:"0.7rem 1rem",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
           <div style={{width:"26px",height:"26px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:"7px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:"14px"}}>📦</div>
           <div>
             <div style={{fontWeight:800,fontSize:"0.92rem"}}>EnviosHub <span style={{color:"#374151",fontSize:"0.6rem",fontWeight:400}}>v{VERSION}</span></div>
             <div style={{color:armador.color||"#06b6d4",fontSize:"0.7rem",fontWeight:700}}>{armador.nombre}</div>
           </div>
+          {sesion.puedeSalida&&(
+            <button onClick={()=>setModo(p=>p==="armado"?"salida":"armado")}
+              style={{padding:"0.35rem 0.7rem",borderRadius:"8px",fontWeight:700,fontSize:"0.72rem",cursor:"pointer",
+                background:modo==="salida"?"#1a0f2e":"#0d1c04",color:modo==="salida"?"#a78bfa":"#84cc16",border:"1px solid "+(modo==="salida"?"#a78bfa":"#84cc16")}}>
+              {modo==="salida"?"📦 Volver a Armado":"🚚 Modo Salida"}
+            </button>
+          )}
           <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:"0.75rem"}}>
             <span style={{color:"#4b5563",fontSize:"0.7rem"}}>{sesion.usuario}</span>
             <button onClick={()=>{clearSession();window.location.reload();}} style={{...S.btnSm(false),color:"#f87171"}}>Salir</button>
@@ -5138,6 +5161,11 @@ function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armado
         </div>
       </div>
 
+      {modo==="salida"?(
+        <div style={{padding:"14px"}}>
+          <TabSalida envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>
+        </div>
+      ):(
       <div style={{padding:"14px"}}>
         {/* Contador de sesión */}
         <div style={{...S.card,padding:"0.9rem 1rem",marginBottom:"0.85rem",textAlign:"center",borderLeft:"3px solid "+(armador.color||"#06b6d4")}}>
@@ -5181,6 +5209,7 @@ function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armado
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -6424,13 +6453,13 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
               <div style={{color:"#f59e0b",fontWeight:800,fontSize:"1.5rem",lineHeight:1}}>{total-preparados}</div>
               <div style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase",marginTop:"2px"}}>Pendientes</div>
             </div>
-            {colectas.length>0&&<div onClick={()=>setColectasAbierto(v=>!v)} style={{...S.card,padding:"0.7rem 1rem",flex:1,borderLeft:"3px solid #a78bfa",cursor:"pointer",userSelect:"none"}}>
+            <div onClick={()=>colectas.length>0&&setColectasAbierto(v=>!v)} style={{...S.card,padding:"0.7rem 1rem",flex:1,borderLeft:"3px solid #a78bfa",cursor:colectas.length>0?"pointer":"default",userSelect:"none"}}>
               <div style={{display:"flex",alignItems:"baseline",gap:"6px"}}>
                 <div style={{color:"#a78bfa",fontWeight:800,fontSize:"1.5rem",lineHeight:1}}>{colectas.length}</div>
-                <span style={{color:"#6b7280",fontSize:"0.7rem"}}>{colectasAbierto?"▲":"▼"}</span>
+                {colectas.length>0&&<span style={{color:"#6b7280",fontSize:"0.7rem"}}>{colectasAbierto?"▲":"▼"}</span>}
               </div>
               <div style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase",marginTop:"2px"}}>📋 Colectas pend.</div>
-            </div>}
+            </div>
             <div style={{...S.card,padding:"0.7rem 1rem",flex:2}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:"5px"}}>
                 <span style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase"}}>Progreso</span>
@@ -7238,7 +7267,11 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   const [resultado,setResultado]=useState(null);    // {ok,msg,envio}
   const [overlayError,setOverlayError]=useState(null); // {msg} → overlay rojo de pantalla completa
   const [sesionIds,setSesionIds]=useState([]);       // IDs despachados en esta sesión (en orden)
+  const [camara,setCamara]=useState(false);
+  const soportaCamera=typeof window!=="undefined"&&"mediaDevices" in navigator&&!!navigator.mediaDevices?.getUserMedia;
   const inputRef=useRef(null);
+  const videoRef=useRef(null);
+  const canvasRef=useRef(null);
 
   // Enfocar input cuando hay logística seleccionada
   useEffect(()=>{
@@ -7352,6 +7385,63 @@ function TabSalida({envios,setEnvios,lc,sesion}){
     setTimeout(()=>setResultado(null),5000);
     if(inputRef.current)inputRef.current.focus();
   },[envios,logSel,turnoSel,fecha,sesionIds,sesion,lc,setEnvios]);
+
+  // Escaneo QR via cámara — usa BarcodeDetector nativo si está disponible (Chrome/Android);
+  // si no existe (Safari/iPhone) decodifica con jsQR leyendo los frames del video por canvas.
+  useEffect(()=>{
+    if(!camara)return;
+    let stream=null;let rafId=null;let activo=true;
+    const startCam=async()=>{
+      try{
+        stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment",width:{ideal:1280},height:{ideal:720}}});
+        if(!videoRef.current||!activo)return;
+        videoRef.current.srcObject=stream;
+        await videoRef.current.play();
+        const nativo=typeof window.BarcodeDetector!=="undefined";
+        const detector=nativo?new window.BarcodeDetector({formats:["qr_code","code_128","code_39","ean_13"]}):null;
+        if(!canvasRef.current)canvasRef.current=document.createElement("canvas");
+        const canvas=canvasRef.current;
+        const ctx=canvas.getContext("2d",{willReadFrequently:true});
+        const scan=async()=>{
+          if(!activo||!videoRef.current||videoRef.current.readyState<2){rafId=requestAnimationFrame(scan);return;}
+          try{
+            let val=null;
+            if(nativo){
+              const barcodes=await detector.detect(videoRef.current);
+              if(barcodes.length>0)val=barcodes[0].rawValue;
+            }else{
+              const w=videoRef.current.videoWidth,h=videoRef.current.videoHeight;
+              if(w&&h){
+                canvas.width=w;canvas.height=h;
+                ctx.drawImage(videoRef.current,0,0,w,h);
+                const imgData=ctx.getImageData(0,0,w,h);
+                const code=jsQR(imgData.data,w,h);
+                if(code)val=code.data;
+              }
+            }
+            if(val){
+              setResultado({ok:"scanning",msg:"Escaneando..."});
+              await new Promise(r=>setTimeout(r,800));
+              if(!activo)return;
+              procesarScan(val);
+              setCamara(false);return;
+            }
+          }catch(e){}
+          if(activo)rafId=requestAnimationFrame(scan);
+        };
+        rafId=requestAnimationFrame(scan);
+      }catch(err){
+        setResultado({ok:false,msg:"No se pudo acceder a la cámara. Verificá los permisos."});
+        setCamara(false);
+      }
+    };
+    startCam();
+    return()=>{
+      activo=false;
+      if(rafId)cancelAnimationFrame(rafId);
+      if(stream)stream.getTracks().forEach(t=>t.stop());
+    };
+  },[camara,procesarScan]);
 
   const handleKey=e=>{if(e.key==="Enter"){procesarScan(qrInput);}};
 
@@ -7507,7 +7597,22 @@ function TabSalida({envios,setEnvios,lc,sesion}){
             style={{padding:"0.7rem 1.2rem",borderRadius:"10px",background:`linear-gradient(135deg,${logColor},${logColor}cc)`,border:"none",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:"0.85rem",flexShrink:0}}>
             OK
           </button>
+          {soportaCamera&&(
+            <button onClick={()=>setCamara(p=>!p)}
+              title="Escanear con cámara"
+              style={{padding:"0.7rem 0.9rem",borderRadius:"10px",background:camara?"#0d1c04":"#12172a",border:"1px solid "+(camara?"#84cc16":brd),color:camara?"#84cc16":muted,fontSize:"1.1rem",cursor:"pointer",flexShrink:0}}>
+              📷
+            </button>
+          )}
         </div>
+        {camara&&(
+          <div style={{marginTop:"0.8rem",borderRadius:"10px",overflow:"hidden",background:"#000",position:"relative"}}>
+            <video ref={videoRef} style={{width:"100%",maxHeight:"260px",objectFit:"cover",display:"block"}} playsInline muted/>
+            <div style={{position:"absolute",inset:0,border:"2px solid #84cc16",borderRadius:"10px",pointerEvents:"none"}}/>
+            <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"170px",height:"170px",border:"2px solid #84cc16",borderRadius:"8px",boxShadow:"0 0 0 9999px rgba(0,0,0,0.45)"}}/>
+            <button onClick={()=>setCamara(false)} style={{position:"absolute",top:"8px",right:"8px",background:"rgba(0,0,0,0.75)",border:"1px solid #84cc16",color:"#84cc16",borderRadius:"6px",padding:"4px 10px",fontSize:"0.75rem",cursor:"pointer"}}>Cerrar</button>
+          </div>
+        )}
         {/* Resultado del último scan */}
         {resultado&&(
           <div style={{marginTop:"0.75rem",padding:"0.65rem 0.9rem",borderRadius:"8px",fontWeight:600,fontSize:"0.85rem",
