@@ -4382,13 +4382,17 @@ function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc,sesion=null}){
   });
   const grupoKeys=Object.keys(grupos).sort();
   const totalAsig=borrador.filter(e=>getA(e.id).trans).length;
+  // Bloquea confirmar si algún pedido quedó con logística asignada pero sin turno
+  const incompletosTN=borrador.filter(e=>{const a=getA(e.id);return a.trans&&!a.turno;});
+  const puedeConfirmarTN=incompletosTN.length===0;
   const [confirmando,setConfirmando]=useState(false);
   const auditTN=mkAudit(sesion);
-  const confirmar=()=>{if(confirmando)return;setConfirmando(true);onConfirmar(borrador.map(e=>({...e,...getA(e.id),estado:getA(e.id).trans?"asignado":"sin_asignar",...(getA(e.id).trans&&auditTN?{asignadoPor:auditTN}:{})})));};
+  const confirmar=()=>{if(confirmando||!puedeConfirmarTN)return;setConfirmando(true);onConfirmar(borrador.map(e=>({...e,...getA(e.id),estado:getA(e.id).trans?"asignado":"sin_asignar",...(getA(e.id).trans&&auditTN?{asignadoPor:auditTN}:{})})));};
   const btnConfirmarTN=(padding="")=>(
-    <button onClick={confirmar} disabled={confirmando} style={{...S.btn(true),background:confirmando?"#0a1520":"#0d1c2e",border:"1px solid #38bdf8",color:confirmando?"#4b5563":"#38bdf8",...(padding?{padding}:{}),display:"flex",alignItems:"center",gap:"6px",opacity:confirmando?0.7:1}}>
+    <button onClick={confirmar} disabled={confirmando||!puedeConfirmarTN} style={{...S.btn(true),background:confirmando?"#0a1520":"#0d1c2e",border:"1px solid #38bdf8",color:confirmando?"#4b5563":"#38bdf8",...(padding?{padding}:{}),display:"flex",alignItems:"center",gap:"6px",opacity:(confirmando||!puedeConfirmarTN)?0.7:1}}>
       {confirmando&&<span style={{width:"10px",height:"10px",border:"2px solid #38bdf8",borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin 0.7s linear infinite"}}/>}
       {confirmando?`Guardando ${borrador.length} envíos...`:`Confirmar (${totalAsig}/${borrador.length})`}
+      {!puedeConfirmarTN&&!confirmando&&<span style={{fontSize:"0.68rem",marginLeft:"5px",color:"#f59e0b"}}>⚠ {incompletosTN.length}</span>}
     </button>
   );
 
@@ -4405,11 +4409,18 @@ function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc,sesion=null}){
         </div>
       </div>
       <div style={{padding:"1rem",maxWidth:"980px",margin:"0 auto"}}>
+        {incompletosTN.length>0&&(
+          <div style={{background:"#1c0a00",border:"1px solid #92400e",borderRadius:"8px",padding:"8px 14px",marginBottom:"0.75rem",display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
+            <span style={{color:"#fbbf24",fontSize:"0.78rem",fontWeight:700}}>⚠ {incompletosTN.length} envío{incompletosTN.length>1?"s":""} con logística asignada pero sin turno</span>
+            <span style={{color:"#78350f",fontSize:"0.72rem"}}>Asigná el turno antes de confirmar — no se puede dejar un pedido asignado sin turno</span>
+          </div>
+        )}
         {grupoKeys.map(key=>{
           const grupo=grupos[key];
           const ids=grupo.envios.map(e=>e.id);
           const idsPagados=grupo.envios.filter(e=>puedeAsignar(e)).map(e=>e.id);
           const gT=getGrupo(ids,"trans");
+          const gTu=getGrupo(ids,"turno");
           const turnoC=TURNO_C[grupo.turno]||{c:"#6b7280",bg:"#1a1f2e"};
           const asigCount=ids.filter(id=>getA(id).trans).length;
           return(
@@ -4421,17 +4432,23 @@ function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc,sesion=null}){
                   <span style={{color:"#4b5563",fontSize:"0.72rem"}}>{grupo.envios.length} pedidos</span>
                   <span style={{color:asigCount===grupo.envios.length?"#10b981":"#4b5563",fontSize:"0.7rem",marginLeft:"auto"}}>{asigCount}/{grupo.envios.length}</span>
                 </div>
-                <div style={{display:"flex",alignItems:"center",gap:"0.5rem",flexWrap:"wrap"}}>
+                <div style={{display:"flex",alignItems:"center",gap:"0.5rem",flexWrap:"wrap",marginBottom:"0.4rem"}}>
                   <span style={{color:"#6b7280",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Logistica:</span>
                   {logActivas.map(l =><button key={l} onClick={()=>setGrupo(idsPagados,"trans",gT===l?"":l)} style={S.btnSm(gT===l,lc[l]?.color||"#6366f1")} disabled={idsPagados.length===0}>{l}</button>)}
                   {gT&&<button onClick={()=>setGrupo(idsPagados,"trans","")} style={{...S.btnSm(false),color:"#6b7280"}}>x</button>}
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:"0.5rem",flexWrap:"wrap"}}>
+                  <span style={{color:"#6b7280",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Turno:</span>
+                  {TURNOS.map(t =><button key={t} onClick={()=>setGrupo(idsPagados,"turno",gTu===t?"":t)} style={S.btnSm(gTu===t,"#8b5cf6")} disabled={idsPagados.length===0}>{t}</button>)}
+                  {gTu&&<button onClick={()=>setGrupo(idsPagados,"turno","")} style={{...S.btnSm(false),color:"#6b7280"}}>x</button>}
                 </div>
               </div>
               {grupo.envios.map((e,i)=>{
                 const a=getA(e.id);
                 const zml=getZonaML(e.partido);
+                const incompletoTN=a.trans&&!a.turno;
                 return(
-                  <div key={e.id} style={{padding:"0.45rem 1rem",borderBottom:i<grupo.envios.length-1?"1px solid #1a1f2e":"none",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap",opacity:!puedeAsignar(e)?0.5:1}}>
+                  <div key={e.id} style={{padding:"0.45rem 1rem",borderBottom:i<grupo.envios.length-1?"1px solid #1a1f2e":"none",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap",opacity:!puedeAsignar(e)?0.5:1,background:incompletoTN?"#1c0a00":undefined,borderLeft:incompletoTN?"3px solid #f59e0b":"3px solid transparent"}}>
                     <div style={{flex:1,minWidth:"180px"}}>
                       <div style={{display:"flex",gap:"6px",alignItems:"baseline"}}>
                         <span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.75rem"}}>#{e.nroOrdenTN}</span>
@@ -4443,6 +4460,8 @@ function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc,sesion=null}){
                     </div>
                     <div style={{display:"flex",gap:"3px",flexWrap:"wrap",alignItems:"center"}}>
                       {logActivas.map(l =><button key={l} onClick={()=>setA(e.id,"trans",a.trans===l?"":l)} style={S.btnSm(a.trans===l,lc[l].color)} disabled={!puedeAsignar(e)}>{l}</button>)}
+                      <span style={{color:"#252d40",padding:"0 2px"}}>|</span>
+                      {TURNOS.map(t =><button key={t} onClick={()=>setA(e.id,"turno",a.turno===t?"":t)} style={S.btnSm(a.turno===t,"#8b5cf6")} disabled={!puedeAsignar(e)}>{t}</button>)}
                     </div>
                   </div>
                 );
@@ -5936,7 +5955,9 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
   const [filLog,setFilLog]=useState("TODOS");
   const [soloPendientes,setSoloPendientes]=useState(false);
   const [filTipo,setFilTipo]=useState("TODOS");
+  const [filTurno,setFilTurno]=useState("TODOS");
   const [busqueda,setBusqueda]=useState("");
+  const [colectasAbierto,setColectasAbierto]=useState(false);
 
   const [camara,setCamara]=useState(false);
   // BarcodeDetector solo existe en Chrome Android — ocultar botón si no hay soporte
@@ -5970,6 +5991,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
     if(filLog!=="TODOS"&&e.trans!==filLog)return false;
     if(filTipo==="FLEX"&&e.origen!=="ML")return false;
     if(filTipo==="NOFLEX"&&e.origen==="ML")return false;
+    if(filTurno!=="TODOS"){if(filTurno==="SIN_TURNO"){if(e.turno)return false;}else if(e.turno!==filTurno)return false;}
     if(soloPendientes&&e.preparado)return false;
     if(busqueda){const s=norm(busqueda);return norm(e.direccion).includes(s)||(e.nroOrdenTN||"").includes(s)||(e.nroSeguimiento||"").includes(s)||norm(e.partido).includes(s);}
     return true;
@@ -5977,12 +5999,15 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
     if(a.trans!==b.trans)return(a.trans||"").localeCompare(b.trans||"");
     if(a.origen!==b.origen)return a.origen==="ML"?1:-1;
     return TURNOS.indexOf(a.turno)-TURNOS.indexOf(b.turno);
-  }),[todosLista,filLog,filTipo,soloPendientes,busqueda]);
+  }),[todosLista,filLog,filTipo,filTurno,soloPendientes,busqueda]);
 
   const preparados=todosLista.filter(e=>e.preparado).length;
   const total=todosLista.length;
   const prepNoflex=deFecha.filter(e=>e.preparado).length;
   const prepFlex=flexFecha.filter(e=>e.preparado).length;
+
+  // Colectas pendientes de armar, ordenadas por fecha (más antiguas primero) para monitorear demoras
+  const colectasOrdenadas=useMemo(()=>[...colectas].sort((a,b)=>(a.fecha||"").localeCompare(b.fecha||"")),[colectas]);
   const pct=total>0?Math.round(preparados/total*100):0;
 
   // ── Abre el panel de armadores para un envío específico ───────────
@@ -6399,8 +6424,11 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
               <div style={{color:"#f59e0b",fontWeight:800,fontSize:"1.5rem",lineHeight:1}}>{total-preparados}</div>
               <div style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase",marginTop:"2px"}}>Pendientes</div>
             </div>
-            {colectas.length>0&&<div style={{...S.card,padding:"0.7rem 1rem",flex:1,borderLeft:"3px solid #a78bfa"}}>
-              <div style={{color:"#a78bfa",fontWeight:800,fontSize:"1.5rem",lineHeight:1}}>{colectas.length}</div>
+            {colectas.length>0&&<div onClick={()=>setColectasAbierto(v=>!v)} style={{...S.card,padding:"0.7rem 1rem",flex:1,borderLeft:"3px solid #a78bfa",cursor:"pointer",userSelect:"none"}}>
+              <div style={{display:"flex",alignItems:"baseline",gap:"6px"}}>
+                <div style={{color:"#a78bfa",fontWeight:800,fontSize:"1.5rem",lineHeight:1}}>{colectas.length}</div>
+                <span style={{color:"#6b7280",fontSize:"0.7rem"}}>{colectasAbierto?"▲":"▼"}</span>
+              </div>
               <div style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase",marginTop:"2px"}}>📋 Colectas pend.</div>
             </div>}
             <div style={{...S.card,padding:"0.7rem 1rem",flex:2}}>
@@ -6413,6 +6441,21 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
               </div>
             </div>
           </div>
+
+          {/* Panel de colectas pendientes — monitoreo */}
+          {colectasAbierto&&colectas.length>0&&(
+            <div style={{...S.card,padding:"0.6rem 0.8rem",marginBottom:"0.75rem",border:"1px solid #a78bfa44",maxHeight:"260px",overflowY:"auto"}}>
+              <div style={{color:"#a78bfa",fontWeight:700,fontSize:"0.72rem",textTransform:"uppercase",marginBottom:"0.4rem"}}>Colectas pendientes de armar ({colectasOrdenadas.length})</div>
+              {colectasOrdenadas.map(c=>(
+                <div key={c.id||c.nroSeguimiento} style={{display:"flex",alignItems:"center",gap:"8px",padding:"0.3rem 0",borderBottom:"1px solid #1a1f2e",fontSize:"0.74rem"}}>
+                  <span style={{color:"#6b7280",minWidth:"68px"}}>{c.fecha?fmtCorta(c.fecha):"sin fecha"}</span>
+                  <span style={{color:"#e5e7eb",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.destinatario||"—"}</span>
+                  <span style={{color:"#4b5563",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.direccion}{c.localidad?" · "+c.localidad:""}</span>
+                  <span style={{color:"#a78bfa",fontFamily:"monospace",fontSize:"0.68rem"}}>{c.nroSeguimiento}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Input escaneo */}
           <div style={{...S.card,padding:"0.85rem 1rem",marginBottom:"0.75rem",border:"1px solid #6366f133"}}>
@@ -6517,6 +6560,12 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
             <button onClick={()=>setFilTipo("FLEX")} style={{...S.btnSm(filTipo==="FLEX"),background:filTipo==="FLEX"?"#0d1c04":"#0f1420",color:filTipo==="FLEX"?"#84cc16":"#4b7a10",border:"1px solid "+(filTipo==="FLEX"?"#84cc16":"#1a3008")}}>FLEX</button>
             <button onClick={()=>setFilTipo("NOFLEX")} style={S.btnSm(filTipo==="NOFLEX","#6366f1")}>NO FLEX</button>
             <span style={{color:"#4b5563",fontSize:"0.68rem",marginLeft:"4px"}}>{filtrados.length} pedidos</span>
+          </div>
+          <div style={{display:"flex",gap:"6px",marginBottom:"0.6rem",alignItems:"center",flexWrap:"wrap"}}>
+            <span style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase"}}>Turno:</span>
+            <button onClick={()=>setFilTurno("TODOS")} style={S.btnSm(filTurno==="TODOS")}>Todos</button>
+            {TURNOS.map(t=><button key={t} onClick={()=>setFilTurno(t)} style={S.btnSm(filTurno===t,TURNO_C[t]?.c||"#8b5cf6")}>{t}</button>)}
+            <button onClick={()=>setFilTurno("SIN_TURNO")} style={{...S.btnSm(filTurno==="SIN_TURNO"),color:filTurno==="SIN_TURNO"?"#f59e0b":"#6b7280"}}>Sin turno</button>
           </div>
           <div style={{marginBottom:"0.6rem"}}>
             <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="🔍 Buscar..." style={{...S.input,width:"100%"}}/>
@@ -7184,6 +7233,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   // ── Estado ────────────────────────────────────────────────────────
   const [fecha,setFecha]=useState(hoy);
   const [logSel,setLogSel]=useState(null);          // logística "bloqueada" para la sesión
+  const [turnoSel,setTurnoSel]=useState(null);       // turno "bloqueado" para la sesión
   const [qrInput,setQrInput]=useState("");
   const [resultado,setResultado]=useState(null);    // {ok,msg,envio}
   const [overlayError,setOverlayError]=useState(null); // {msg} → overlay rojo de pantalla completa
@@ -7197,17 +7247,18 @@ function TabSalida({envios,setEnvios,lc,sesion}){
 
   // La sesión solo se cierra manualmente con "Liberar" (sin timer de inactividad)
   const liberarLogistica=useCallback(()=>{
-    setLogSel(null);setSesionIds([]);setResultado(null);setQrInput("");
+    setLogSel(null);setTurnoSel(null);setSesionIds([]);setResultado(null);setQrInput("");
   },[]);
 
-  // ── Pedidos del día para la logística seleccionada ────────────────
+  // ── Pedidos del día para la logística + turno seleccionados ───────
+  // Los envíos sin turno asignado (legacy) no se excluyen para no trabar pedidos viejos.
   const pedidosLog=useMemo(()=>{
-    if(!logSel)return[];
+    if(!logSel||!turnoSel)return[];
     return envios.filter(e=>{
       const f=e.fecha||e.fechaVenta||"";
-      return f===fecha&&e.trans===logSel&&getEstado(e)==="asignado"&&e.estado!=="cancelado";
+      return f===fecha&&e.trans===logSel&&getEstado(e)==="asignado"&&e.estado!=="cancelado"&&(!e.turno||e.turno===turnoSel);
     });
-  },[envios,logSel,fecha]);
+  },[envios,logSel,turnoSel,fecha]);
 
   const totalLog=pedidosLog.length;
   const despachados=pedidosLog.filter(e=>e.despachado);
@@ -7218,10 +7269,10 @@ function TabSalida({envios,setEnvios,lc,sesion}){
     const srch=raw.trim();
     if(!srch)return;
     setQrInput("");
-    if(!logSel){beepError();return;}
+    if(!logSel||!turnoSel){beepError();return;}
 
     const nums=srch.replace(/\D/g,"");
-    // Buscar en TODOS los envíos del día (sin filtro por logística) para detectar logística errónea
+    // Buscar en TODOS los envíos del día (sin filtro por logística/turno) para detectar el error específico
     const candidatos=envios.filter(e=>{
       const f=e.fecha||e.fechaVenta||"";
       return f===fecha&&getEstado(e)==="asignado"&&e.estado!=="cancelado";
@@ -7246,11 +7297,28 @@ function TabSalida({envios,setEnvios,lc,sesion}){
       beepError();
       const lcData=lc[best.trans]||{};
       setOverlayError({
-        msg:`⛔ LOGÍSTICA INCORRECTA`,
+        titulo:"LOGÍSTICA INCORRECTA",
         detalle:`Este pedido pertenece a ${best.trans||"otra logística"}, no a ${logSel}.`,
         envio:best,
         trans:best.trans,
         color:lcData.color||"#ef4444",
+      });
+      if(inputRef.current)inputRef.current.focus();
+      return;
+    }
+
+    // Turno incorrecto (logística correcta, pero otro turno) → overlay rojo bloqueante.
+    // Los pedidos sin turno asignado (legacy) no se bloquean.
+    if(best.turno&&best.turno!==turnoSel){
+      beepError();
+      const turnoC=TURNO_C[best.turno]||{};
+      setOverlayError({
+        titulo:"TURNO INCORRECTO",
+        detalle:`Este pedido es de turno ${best.turno}, no de ${turnoSel}.`,
+        envio:best,
+        trans:best.trans,
+        turno:best.turno,
+        color:turnoC.c||"#ef4444",
       });
       if(inputRef.current)inputRef.current.focus();
       return;
@@ -7283,7 +7351,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
     setResultado({ok:true,envio:best,msg:"✓ Despachado: "+(best.nroOrdenTN?"#"+best.nroOrdenTN+" — ":"")+best.direccion});
     setTimeout(()=>setResultado(null),5000);
     if(inputRef.current)inputRef.current.focus();
-  },[envios,logSel,fecha,sesionIds,sesion,lc,setEnvios]);
+  },[envios,logSel,turnoSel,fecha,sesionIds,sesion,lc,setEnvios]);
 
   const handleKey=e=>{if(e.key==="Enter"){procesarScan(qrInput);}};
 
@@ -7303,7 +7371,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
       <div onClick={()=>{setOverlayError(null);if(inputRef.current)inputRef.current.focus();}}
         style={{position:"fixed",inset:0,zIndex:9999,background:"#200000",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",padding:"2rem"}}>
         <div style={{fontSize:"5rem",marginBottom:"1rem"}}>⛔</div>
-        <div style={{fontSize:"2rem",fontWeight:900,color:"#ff4444",textAlign:"center",marginBottom:"0.5rem",letterSpacing:"0.05em"}}>LOGÍSTICA INCORRECTA</div>
+        <div style={{fontSize:"2rem",fontWeight:900,color:"#ff4444",textAlign:"center",marginBottom:"0.5rem",letterSpacing:"0.05em"}}>{overlayError.titulo||"ERROR"}</div>
         <div style={{fontSize:"1.1rem",color:"#fca5a5",textAlign:"center",marginBottom:"2rem",maxWidth:"500px"}}>{overlayError.detalle}</div>
         <div style={{background:"#1c0000",border:"2px solid #7f1d1d",borderRadius:"14px",padding:"1.2rem 2rem",textAlign:"center",marginBottom:"2rem",minWidth:"300px"}}>
           <div style={{color:"#9ca3af",fontSize:"0.75rem",marginBottom:"0.3rem"}}>Pedido escaneado</div>
@@ -7311,6 +7379,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
           {overlayError.envio?.direccion&&overlayError.envio?.nroOrdenTN&&<div style={{color:"#9ca3af",fontSize:"0.8rem"}}>{overlayError.envio.direccion}</div>}
           <div style={{marginTop:"0.6rem",display:"flex",gap:"8px",justifyContent:"center",alignItems:"center"}}>
             <span style={{background:lci.bg||"#1a1f2e",color:lci.color||"#9ca3af",padding:"4px 12px",borderRadius:"6px",fontWeight:700,fontSize:"0.85rem"}}>{overlayError.trans||"Desconocida"}</span>
+            {overlayError.turno&&<span style={{background:TURNO_C[overlayError.turno]?.bg||"#1a1f2e",color:TURNO_C[overlayError.turno]?.c||"#9ca3af",padding:"4px 12px",borderRadius:"6px",fontWeight:700,fontSize:"0.85rem",border:"1px solid "+(TURNO_C[overlayError.turno]?.c||"#9ca3af")}}>{overlayError.turno}</span>}
           </div>
         </div>
         <div style={{color:"#9ca3af",fontSize:"0.85rem"}}>Tocá en cualquier lugar para cerrar</div>
@@ -7327,23 +7396,41 @@ function TabSalida({envios,setEnvios,lc,sesion}){
       <div style={{maxWidth:"600px",margin:"0 auto",padding:"1rem 0"}}>
         <div style={{background:card,border:`1px solid ${brd}`,borderRadius:"14px",padding:"1.5rem"}}>
           <div style={{fontWeight:800,fontSize:"1.1rem",marginBottom:"0.3rem"}}>🚚 Salida</div>
-          <div style={{color:muted,fontSize:"0.8rem",marginBottom:"1.5rem"}}>Seleccioná la logística para iniciar la sesión de despacho</div>
+          <div style={{color:muted,fontSize:"0.8rem",marginBottom:"1.5rem"}}>Seleccioná turno y logística para iniciar la sesión de despacho</div>
           {/* Selector de fecha */}
           <div style={{marginBottom:"1.2rem"}}>
             <label style={{display:"block",color:muted,fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Fecha</label>
             <input type="date" value={fecha} onChange={e=>setFecha(e.target.value)}
               style={{background:"#12172a",border:`1px solid ${brd}`,borderRadius:"8px",color:"#fff",padding:"0.45rem 0.7rem",fontSize:"0.85rem",width:"auto"}}/>
           </div>
-          <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
+          {/* Selector de turno — obligatorio antes de elegir logística */}
+          <div style={{marginBottom:"1.2rem"}}>
+            <label style={{display:"block",color:muted,fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Turno</label>
+            <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
+              {TURNOS.map(t=>{
+                const tc=TURNO_C[t]||{c:"#8b5cf6",bg:"#1a1f2e"};
+                const sel=turnoSel===t;
+                return(
+                  <button key={t} onClick={()=>setTurnoSel(sel?null:t)}
+                    style={{padding:"0.5rem 1rem",borderRadius:"8px",fontWeight:700,fontSize:"0.85rem",cursor:"pointer",
+                      background:sel?tc.bg:"#12172a",color:sel?tc.c:muted,border:`2px solid ${sel?tc.c:brd}`}}>
+                    {t}
+                  </button>
+                );
+              })}
+            </div>
+            {!turnoSel&&<div style={{color:"#fbbf24",fontSize:"0.7rem",marginTop:"6px"}}>⚠ Elegí el turno antes de seleccionar la logística</div>}
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:"10px",opacity:turnoSel?1:0.4,pointerEvents:turnoSel?"auto":"none"}}>
             {logActivas.map(l=>{
               const lci=lc[l]||{};
-              const pedL=envios.filter(e=>{const f=e.fecha||e.fechaVenta||"";return f===fecha&&e.trans===l&&getEstado(e)==="asignado"&&e.estado!=="cancelado";});
+              const pedL=envios.filter(e=>{const f=e.fecha||e.fechaVenta||"";return f===fecha&&e.trans===l&&getEstado(e)==="asignado"&&e.estado!=="cancelado"&&(!turnoSel||!e.turno||e.turno===turnoSel);});
               const prepL=pedL.filter(e=>e.preparado).length;
               const despL=pedL.filter(e=>e.despachado).length;
               return(
-                <button key={l} onClick={()=>{setLogSel(l);setSesionIds([]);setResultado(null);}}
+                <button key={l} onClick={()=>{if(!turnoSel)return;setLogSel(l);setSesionIds([]);setResultado(null);}} disabled={!turnoSel}
                   style={{display:"flex",alignItems:"center",gap:"14px",padding:"1rem 1.2rem",borderRadius:"12px",
-                    background:"#12172a",border:`2px solid ${lci.color||brd}22`,cursor:"pointer",textAlign:"left",
+                    background:"#12172a",border:`2px solid ${lci.color||brd}22`,cursor:turnoSel?"pointer":"not-allowed",textAlign:"left",
                     transition:"border-color 0.15s"}}>
                   <div style={{width:"12px",height:"12px",borderRadius:"50%",background:lci.color||"#6b7280",flexShrink:0}}/>
                   <div style={{flex:1}}>
@@ -7385,7 +7472,10 @@ function TabSalida({envios,setEnvios,lc,sesion}){
       <div style={{background:logBg,border:`2px solid ${logColor}`,borderRadius:"14px",padding:"1rem 1.2rem",marginBottom:"1rem",display:"flex",alignItems:"center",gap:"12px"}}>
         <div style={{width:"14px",height:"14px",borderRadius:"50%",background:logColor,flexShrink:0}}/>
         <div style={{flex:1}}>
-          <div style={{fontWeight:900,fontSize:"1.05rem",color:logColor}}>{logSel}</div>
+          <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+            <div style={{fontWeight:900,fontSize:"1.05rem",color:logColor}}>{logSel}</div>
+            {turnoSel&&<span style={{background:TURNO_C[turnoSel]?.bg||"#1a1f2e",color:TURNO_C[turnoSel]?.c||"#8b5cf6",padding:"2px 9px",borderRadius:"6px",fontWeight:700,fontSize:"0.7rem",border:"1px solid "+(TURNO_C[turnoSel]?.c||"#8b5cf6")}}>{turnoSel}</span>}
+          </div>
           {lci.nombreFormal&&<div style={{color:muted,fontSize:"0.72rem"}}>{lci.nombreFormal}</div>}
         </div>
         <div style={{textAlign:"right",marginRight:"0.5rem"}}>
