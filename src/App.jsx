@@ -55,6 +55,7 @@ const FEATURES=[
   {key:"tab_ctasctes",    grupo:"tabs",    label:"Ctas. Ctes.",       desc:"Estado de cuenta corriente por cliente: saldo pendiente, deuda y pagos"},
   {key:"tab_localidades", grupo:"tabs",    label:"Localidades",       desc:"Administrar localidades y partidos: agregar CPs y reglas de mapeo"},
   {key:"tab_expedicion",  grupo:"tabs",    label:"Expedición",        desc:"Vista de expedición para preparar bultos y controlar salidas"},
+  {key:"tab_statsarmado", grupo:"tabs",    label:"Stats Armado",      desc:"Estadísticas de armado: ranking de velocidad por armador, actividad por hora y log detallado de escaneos"},
   {key:"tab_salida",      grupo:"tabs",    label:"Salida",            desc:"Escanear pedidos al entregarlos a la logística: despacho controlado por logística"},
   {key:"tab_usuarios",    grupo:"tabs",    label:"Usuarios",          desc:"Administrar usuarios del sistema, sus roles, contraseñas y permisos"},
   // ── Acciones ─────────────────────────────────────────────────────
@@ -5820,10 +5821,6 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
   const [soloPendientes,setSoloPendientes]=useState(false);
   const [filTipo,setFilTipo]=useState("TODOS");
   const [busqueda,setBusqueda]=useState("");
-  // Stats
-  const [statsArmados,setStatsArmados]=useState([]);
-  const [statsFecha,setStatsFecha]=useState(hoy);
-  const [loadingStats,setLoadingStats]=useState(false);
 
   const [camara,setCamara]=useState(false);
   // BarcodeDetector solo existe en Chrome Android — ocultar botón si no hay soporte
@@ -6062,50 +6059,6 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
     return()=>window.removeEventListener("keydown",h);
   },[matchesPendientes,scanPendiente,armadores,confirmarArmado,abrirPanelArmador,cancelarPanel]);
 
-  // Cargar stats al cambiar sub-tab o fecha
-  useEffect(()=>{
-    if(subTab!=="stats")return;
-    setLoadingStats(true);
-    getDocs(query(collection(db,"armados"),where("fecha","==",statsFecha)))
-      .then(snap=>{setStatsArmados(snap.docs.map(d=>({id:d.id,...d.data()})));setLoadingStats(false);})
-      .catch(()=>setLoadingStats(false));
-  },[subTab,statsFecha]);
-
-  // Estadísticas por armador
-  const [statsFilArm,setStatsFilArm]=useState("TODOS"); // filtro log por armador
-  const statsPerArmador=useMemo(()=>{
-    if(!statsArmados.length)return[];
-    const map={};
-    statsArmados.forEach(a=>{
-      const k=a.armadorId||a.armadorNombre||"?";
-      if(!map[k])map[k]={id:a.armadorId,nombre:a.armadorNombre||"?",count:0,bultos:0,times:[]};
-      map[k].count++;map[k].bultos+=(a.bultos||1);
-      if(a.ts)map[k].times.push(new Date(a.ts).getTime());
-    });
-    return Object.values(map).map(arm=>{
-      arm.times.sort((a,b)=>a-b);
-      const n=arm.times.length;
-      if(n>1){
-        const spanMs=arm.times[n-1]-arm.times[0];
-        const spanMin=spanMs/60000;
-        arm.spanMin=Math.round(spanMin);
-        arm.pedXhora=spanMin>0?Math.round(arm.count/(spanMin/60)*10)/10:null;
-        // avg gap entre scans consecutivos
-        const diffs=[];for(let i=1;i<n;i++)diffs.push((arm.times[i]-arm.times[i-1])/60000);
-        arm.avgGapMin=Math.round(diffs.reduce((s,d)=>s+d,0)/diffs.length*10)/10;
-      }else{arm.spanMin=0;arm.pedXhora=null;arm.avgGapMin=null;}
-      arm.inicioTs=n>0?arm.times[0]:null;
-      arm.finTs=n>0?arm.times[n-1]:null;
-      return arm;
-    }).sort((a,b)=>(b.pedXhora||0)-(a.pedXhora||0)); // ranking por velocidad
-  },[statsArmados]);
-
-  const actPorHora=useMemo(()=>{
-    const hrs=Array.from({length:24},(_,i)=>({h:i,count:0}));
-    statsArmados.forEach(a=>{if(a.ts)hrs[new Date(a.ts).getHours()].count++;});
-    return hrs.filter(h=>h.count>0);
-  },[statsArmados]);
-
   // Grupos para el listado
   const grupos={};
   filtrados.forEach(e=>{const k=e.trans||"Sin asignar";if(!grupos[k])grupos[k]=[];grupos[k].push(e);});
@@ -6224,7 +6177,6 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
         </div>
         <div style={{display:"flex",gap:"4px",marginLeft:"0.75rem"}}>
           <button onClick={()=>setSubTab("escaneo")} style={{...S.btnSm(subTab==="escaneo"),padding:"4px 12px",fontSize:"0.73rem"}}>📦 Escaneo</button>
-          <button onClick={()=>setSubTab("stats")} style={{...S.btnSm(subTab==="stats","#f59e0b"),padding:"4px 12px",fontSize:"0.73rem"}}>📊 Stats</button>
         </div>
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:"0.5rem"}}>
           <span style={{color:"#4b5563",fontSize:"0.72rem"}}>{sesion.usuario}</span>
@@ -6439,134 +6391,185 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
           })}
         </>)}
 
-        {/* ═══════════════ SUB-TAB ESTADÍSTICAS ═══════════════ */}
-        {subTab==="stats"&&(<>
-          <div style={{...S.card,padding:"0.6rem 1rem",marginBottom:"0.75rem",display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}}>
-            <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Fecha</span>
-            {[{l:"Ayer",v:ayer()},{l:"Hoy",v:hoy}].map(x=>(
-              <button key={x.v} onClick={()=>setStatsFecha(x.v)} style={S.btnSm(statsFecha===x.v)}>{x.l}</button>
-            ))}
-            <input type="date" value={statsFecha} onChange={e=>setStatsFecha(e.target.value)} style={{...S.input,padding:"3px 8px",width:"138px",fontSize:"0.78rem"}}/>
-            <span style={{color:"#4b5563",fontSize:"0.72rem",marginLeft:"4px"}}>{statsArmados.length} armados</span>
+      </div>
+    </div>
+  );
+}
+
+function TabStatsArmado(){
+  const hoy=fechaHoy();
+  const [statsFecha,setStatsFecha]=useState(hoy);
+  const [statsArmados,setStatsArmados]=useState([]);
+  const [loadingStats,setLoadingStats]=useState(false);
+  const [statsFilArm,setStatsFilArm]=useState("TODOS"); // filtro log por armador
+
+  // Cargar stats al cambiar la fecha
+  useEffect(()=>{
+    setLoadingStats(true);
+    getDocs(query(collection(db,"armados"),where("fecha","==",statsFecha)))
+      .then(snap=>{setStatsArmados(snap.docs.map(d=>({id:d.id,...d.data()})));setLoadingStats(false);})
+      .catch(()=>setLoadingStats(false));
+  },[statsFecha]);
+
+  // Estadísticas por armador
+  const statsPerArmador=useMemo(()=>{
+    if(!statsArmados.length)return[];
+    const map={};
+    statsArmados.forEach(a=>{
+      const k=a.armadorId||a.armadorNombre||"?";
+      if(!map[k])map[k]={id:a.armadorId,nombre:a.armadorNombre||"?",count:0,bultos:0,times:[]};
+      map[k].count++;map[k].bultos+=(a.bultos||1);
+      if(a.ts)map[k].times.push(new Date(a.ts).getTime());
+    });
+    return Object.values(map).map(arm=>{
+      arm.times.sort((a,b)=>a-b);
+      const n=arm.times.length;
+      if(n>1){
+        const spanMs=arm.times[n-1]-arm.times[0];
+        const spanMin=spanMs/60000;
+        arm.spanMin=Math.round(spanMin);
+        arm.pedXhora=spanMin>0?Math.round(arm.count/(spanMin/60)*10)/10:null;
+        // avg gap entre scans consecutivos
+        const diffs=[];for(let i=1;i<n;i++)diffs.push((arm.times[i]-arm.times[i-1])/60000);
+        arm.avgGapMin=Math.round(diffs.reduce((s,d)=>s+d,0)/diffs.length*10)/10;
+      }else{arm.spanMin=0;arm.pedXhora=null;arm.avgGapMin=null;}
+      arm.inicioTs=n>0?arm.times[0]:null;
+      arm.finTs=n>0?arm.times[n-1]:null;
+      return arm;
+    }).sort((a,b)=>(b.pedXhora||0)-(a.pedXhora||0)); // ranking por velocidad
+  },[statsArmados]);
+
+  const actPorHora=useMemo(()=>{
+    const hrs=Array.from({length:24},(_,i)=>({h:i,count:0}));
+    statsArmados.forEach(a=>{if(a.ts)hrs[new Date(a.ts).getHours()].count++;});
+    return hrs.filter(h=>h.count>0);
+  },[statsArmados]);
+
+  return(
+    <div>
+      <div style={{...S.card,padding:"0.6rem 1rem",marginBottom:"0.75rem",display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}}>
+        <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Fecha</span>
+        {[{l:"Ayer",v:fechaAyer()},{l:"Hoy",v:hoy}].map(x=>(
+          <button key={x.v} onClick={()=>setStatsFecha(x.v)} style={S.btnSm(statsFecha===x.v)}>{x.l}</button>
+        ))}
+        <input type="date" value={statsFecha} onChange={e=>setStatsFecha(e.target.value)} style={{...S.input,padding:"3px 8px",width:"138px",fontSize:"0.78rem"}}/>
+        <span style={{color:"#4b5563",fontSize:"0.72rem",marginLeft:"4px"}}>{statsArmados.length} armados</span>
+      </div>
+
+      {loadingStats&&<div style={{textAlign:"center",padding:"2rem",color:"#4b5563",fontSize:"0.82rem"}}>Cargando...</div>}
+
+      {!loadingStats&&statsArmados.length===0&&(
+        <div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📊</div><p style={{marginTop:"8px"}}>Sin registros para esta fecha</p></div>
+      )}
+
+      {!loadingStats&&statsArmados.length>0&&(()=>{
+        const totalPed=statsArmados.length;
+        const totalBultos=statsArmados.reduce((s,a)=>s+(a.bultos||1),0);
+        const maxVel=statsPerArmador[0]?.pedXhora||0;
+        const logDetalle=statsArmados
+          .filter(a=>statsFilArm==="TODOS"||a.armadorNombre===statsFilArm)
+          .slice().sort((a,b)=>new Date(a.ts)-new Date(b.ts));
+        return(<>
+        {/* ── Tarjetas resumen ── */}
+        <div style={{display:"flex",gap:"8px",marginBottom:"0.75rem",flexWrap:"wrap"}}>
+          <div style={{...S.card,padding:"0.8rem",flex:1,textAlign:"center",minWidth:"70px"}}>
+            <div style={{fontSize:"1.8rem",fontWeight:800,color:"#6366f1"}}>{totalPed}</div>
+            <div style={{fontSize:"0.6rem",color:"#6b7280",textTransform:"uppercase",marginTop:"2px"}}>Pedidos</div>
           </div>
+          <div style={{...S.card,padding:"0.8rem",flex:1,textAlign:"center",minWidth:"70px"}}>
+            <div style={{fontSize:"1.8rem",fontWeight:800,color:"#10b981"}}>{totalBultos}</div>
+            <div style={{fontSize:"0.6rem",color:"#6b7280",textTransform:"uppercase",marginTop:"2px"}}>Bultos</div>
+          </div>
+          <div style={{...S.card,padding:"0.8rem",flex:1,textAlign:"center",minWidth:"70px"}}>
+            <div style={{fontSize:"1.8rem",fontWeight:800,color:"#f59e0b"}}>{statsPerArmador.length}</div>
+            <div style={{fontSize:"0.6rem",color:"#6b7280",textTransform:"uppercase",marginTop:"2px"}}>Armadores</div>
+          </div>
+          {maxVel>0&&<div style={{...S.card,padding:"0.8rem",flex:1,textAlign:"center",minWidth:"80px"}}>
+            <div style={{fontSize:"1.8rem",fontWeight:800,color:"#f87171"}}>{maxVel}</div>
+            <div style={{fontSize:"0.6rem",color:"#6b7280",textTransform:"uppercase",marginTop:"2px"}}>Mejor ped/h</div>
+          </div>}
+        </div>
 
-          {loadingStats&&<div style={{textAlign:"center",padding:"2rem",color:"#4b5563",fontSize:"0.82rem"}}>Cargando...</div>}
-
-          {!loadingStats&&statsArmados.length===0&&(
-            <div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📊</div><p style={{marginTop:"8px"}}>Sin registros para esta fecha</p></div>
-          )}
-
-          {!loadingStats&&statsArmados.length>0&&(()=>{
-            const totalPed=statsArmados.length;
-            const totalBultos=statsArmados.reduce((s,a)=>s+(a.bultos||1),0);
-            const maxVel=statsPerArmador[0]?.pedXhora||0;
-            const logDetalle=statsArmados
-              .filter(a=>statsFilArm==="TODOS"||a.armadorNombre===statsFilArm)
-              .slice().sort((a,b)=>new Date(a.ts)-new Date(b.ts));
-            return(<>
-            {/* ── Tarjetas resumen ── */}
-            <div style={{display:"flex",gap:"8px",marginBottom:"0.75rem",flexWrap:"wrap"}}>
-              <div style={{...S.card,padding:"0.8rem",flex:1,textAlign:"center",minWidth:"70px"}}>
-                <div style={{fontSize:"1.8rem",fontWeight:800,color:"#6366f1"}}>{totalPed}</div>
-                <div style={{fontSize:"0.6rem",color:"#6b7280",textTransform:"uppercase",marginTop:"2px"}}>Pedidos</div>
+        {/* ── Ranking por velocidad ── */}
+        <div style={{...S.card,padding:"1rem",marginBottom:"0.75rem"}}>
+          <div style={{color:"#f59e0b",fontSize:"0.7rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:"12px"}}>🏆 Ranking — velocidad (ped/h)</div>
+          {statsPerArmador.map((arm,i)=>{
+            const pctBar=maxVel>0&&arm.pedXhora?Math.round(arm.pedXhora/maxVel*100):Math.round(arm.count/statsPerArmador[0].count*100);
+            const barColor=i===0?"#f59e0b":i===1?"#9ca3af":i===2?"#b45309":"#374151";
+            const spanH=arm.spanMin?Math.floor(arm.spanMin/60)+"h "+String(arm.spanMin%60).padStart(2,"0")+"m":null;
+            return(
+              <div key={arm.id||arm.nombre} style={{marginBottom:"14px"}}>
+                <div style={{display:"flex",alignItems:"flex-start",gap:"8px",marginBottom:"4px"}}>
+                  <span style={{fontSize:"0.9rem",fontWeight:800,color:barColor,minWidth:"20px",marginTop:"1px"}}>{i+1}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:700,fontSize:"0.9rem",color:"#e5e7eb"}}>{arm.nombre}</div>
+                    <div style={{display:"flex",gap:"10px",flexWrap:"wrap",marginTop:"2px"}}>
+                      {arm.inicioTs&&<span style={{fontSize:"0.67rem",color:"#4b5563"}}>{fmtHora(arm.inicioTs)} → {fmtHora(arm.finTs)}{spanH?" ("+spanH+")":""}</span>}
+                      {arm.avgGapMin!==null&&<span style={{fontSize:"0.67rem",color:"#4b5563"}}>⌀ gap {arm.avgGapMin}m</span>}
+                    </div>
+                  </div>
+                  <div style={{textAlign:"right",flexShrink:0}}>
+                    <div style={{fontWeight:800,fontSize:"1rem",color:"#6366f1"}}>{arm.count} ped <span style={{fontSize:"0.72rem",color:"#4b5563",fontWeight:400}}>· {arm.bultos}b</span></div>
+                    {arm.pedXhora&&<div style={{fontSize:"0.75rem",fontWeight:700,color:"#f87171"}}>{arm.pedXhora} ped/h</div>}
+                  </div>
+                </div>
+                <div style={{height:"6px",background:"#1a1f2e",borderRadius:"3px",overflow:"hidden"}}>
+                  <div style={{width:pctBar+"%",height:"100%",background:barColor,borderRadius:"3px",transition:"width 0.4s"}}/>
+                </div>
               </div>
-              <div style={{...S.card,padding:"0.8rem",flex:1,textAlign:"center",minWidth:"70px"}}>
-                <div style={{fontSize:"1.8rem",fontWeight:800,color:"#10b981"}}>{totalBultos}</div>
-                <div style={{fontSize:"0.6rem",color:"#6b7280",textTransform:"uppercase",marginTop:"2px"}}>Bultos</div>
-              </div>
-              <div style={{...S.card,padding:"0.8rem",flex:1,textAlign:"center",minWidth:"70px"}}>
-                <div style={{fontSize:"1.8rem",fontWeight:800,color:"#f59e0b"}}>{statsPerArmador.length}</div>
-                <div style={{fontSize:"0.6rem",color:"#6b7280",textTransform:"uppercase",marginTop:"2px"}}>Armadores</div>
-              </div>
-              {maxVel>0&&<div style={{...S.card,padding:"0.8rem",flex:1,textAlign:"center",minWidth:"80px"}}>
-                <div style={{fontSize:"1.8rem",fontWeight:800,color:"#f87171"}}>{maxVel}</div>
-                <div style={{fontSize:"0.6rem",color:"#6b7280",textTransform:"uppercase",marginTop:"2px"}}>Mejor ped/h</div>
-              </div>}
-            </div>
+            );
+          })}
+        </div>
 
-            {/* ── Ranking por velocidad ── */}
-            <div style={{...S.card,padding:"1rem",marginBottom:"0.75rem"}}>
-              <div style={{color:"#f59e0b",fontSize:"0.7rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:"12px"}}>🏆 Ranking — velocidad (ped/h)</div>
-              {statsPerArmador.map((arm,i)=>{
-                const pctBar=maxVel>0&&arm.pedXhora?Math.round(arm.pedXhora/maxVel*100):Math.round(arm.count/statsPerArmador[0].count*100);
-                const barColor=i===0?"#f59e0b":i===1?"#9ca3af":i===2?"#b45309":"#374151";
-                const spanH=arm.spanMin?Math.floor(arm.spanMin/60)+"h "+String(arm.spanMin%60).padStart(2,"0")+"m":null;
+        {/* ── Actividad por hora ── */}
+        {actPorHora.length>0&&(
+          <div style={{...S.card,padding:"1rem",marginBottom:"0.75rem"}}>
+            <div style={{color:"#38bdf8",fontSize:"0.7rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:"10px"}}>⏱ Actividad por hora</div>
+            <div style={{display:"flex",alignItems:"flex-end",gap:"3px",height:"64px"}}>
+              {actPorHora.map(h=>{
+                const maxH=Math.max(...actPorHora.map(x=>x.count));
+                const pctH=maxH>0?Math.round(h.count/maxH*100):0;
                 return(
-                  <div key={arm.id||arm.nombre} style={{marginBottom:"14px"}}>
-                    <div style={{display:"flex",alignItems:"flex-start",gap:"8px",marginBottom:"4px"}}>
-                      <span style={{fontSize:"0.9rem",fontWeight:800,color:barColor,minWidth:"20px",marginTop:"1px"}}>{i+1}</span>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontWeight:700,fontSize:"0.9rem",color:"#e5e7eb"}}>{arm.nombre}</div>
-                        <div style={{display:"flex",gap:"10px",flexWrap:"wrap",marginTop:"2px"}}>
-                          {arm.inicioTs&&<span style={{fontSize:"0.67rem",color:"#4b5563"}}>{fmtHora(arm.inicioTs)} → {fmtHora(arm.finTs)}{spanH?" ("+spanH+")":""}</span>}
-                          {arm.avgGapMin!==null&&<span style={{fontSize:"0.67rem",color:"#4b5563"}}>⌀ gap {arm.avgGapMin}m</span>}
-                        </div>
-                      </div>
-                      <div style={{textAlign:"right",flexShrink:0}}>
-                        <div style={{fontWeight:800,fontSize:"1rem",color:"#6366f1"}}>{arm.count} ped <span style={{fontSize:"0.72rem",color:"#4b5563",fontWeight:400}}>· {arm.bultos}b</span></div>
-                        {arm.pedXhora&&<div style={{fontSize:"0.75rem",fontWeight:700,color:"#f87171"}}>{arm.pedXhora} ped/h</div>}
-                      </div>
-                    </div>
-                    <div style={{height:"6px",background:"#1a1f2e",borderRadius:"3px",overflow:"hidden"}}>
-                      <div style={{width:pctBar+"%",height:"100%",background:barColor,borderRadius:"3px",transition:"width 0.4s"}}/>
-                    </div>
+                  <div key={h.h} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"2px"}}>
+                    <div style={{width:"100%",height:Math.max(3,pctH*0.58)+"px",background:"#38bdf8",borderRadius:"2px 2px 0 0"}}/>
+                    <div style={{fontSize:"8px",color:"#4b5563"}}>{h.h}h</div>
                   </div>
                 );
               })}
             </div>
+          </div>
+        )}
 
-            {/* ── Actividad por hora ── */}
-            {actPorHora.length>0&&(
-              <div style={{...S.card,padding:"1rem",marginBottom:"0.75rem"}}>
-                <div style={{color:"#38bdf8",fontSize:"0.7rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:"10px"}}>⏱ Actividad por hora</div>
-                <div style={{display:"flex",alignItems:"flex-end",gap:"3px",height:"64px"}}>
-                  {actPorHora.map(h=>{
-                    const maxH=Math.max(...actPorHora.map(x=>x.count));
-                    const pctH=maxH>0?Math.round(h.count/maxH*100):0;
-                    return(
-                      <div key={h.h} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"2px"}}>
-                        <div style={{width:"100%",height:Math.max(3,pctH*0.58)+"px",background:"#38bdf8",borderRadius:"2px 2px 0 0"}}/>
-                        <div style={{fontSize:"8px",color:"#4b5563"}}>{h.h}h</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* ── Log detallado — para cámaras ── */}
-            <div style={{...S.card,padding:"1rem"}}>
-              <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px",flexWrap:"wrap"}}>
-                <div style={{color:"#a78bfa",fontSize:"0.7rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",flex:1}}>🎥 Log de armados</div>
-                <div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>
-                  <button onClick={()=>setStatsFilArm("TODOS")} style={{...S.btnSm(statsFilArm==="TODOS"),padding:"2px 8px",fontSize:"0.68rem"}}>Todos</button>
-                  {statsPerArmador.map(a=><button key={a.nombre} onClick={()=>setStatsFilArm(a.nombre)} style={{...S.btnSm(statsFilArm===a.nombre),padding:"2px 8px",fontSize:"0.68rem"}}>{a.nombre}</button>)}
-                </div>
-              </div>
-              <div style={{display:"flex",flexDirection:"column",gap:"4px",maxHeight:"400px",overflowY:"auto"}}>
-                {logDetalle.map((a,i)=>(
-                  <div key={a.id||i} style={{display:"flex",gap:"8px",alignItems:"flex-start",padding:"5px 6px",borderRadius:"6px",background:i%2===0?"#0d1020":"transparent"}}>
-                    <div style={{fontFamily:"monospace",fontSize:"0.78rem",color:"#6366f1",fontWeight:700,flexShrink:0,minWidth:"42px"}}>{fmtHora(a.ts)}</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:"0.78rem",color:"#e5e7eb",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.direccion||a.nroOrdenTN||a.envioId}</div>
-                      <div style={{display:"flex",gap:"8px",marginTop:"1px",flexWrap:"wrap"}}>
-                        {a.nroOrdenTN&&<span style={{fontSize:"0.65rem",color:"#7dd3fc"}}>#{a.nroOrdenTN}</span>}
-                        {a.logistica&&<span style={{fontSize:"0.65rem",color:"#4b5563"}}>{a.logistica}</span>}
-                        {a.bultos>1&&<span style={{fontSize:"0.65rem",color:"#f59e0b"}}>{a.bultos}b</span>}
-                        {a.esEdicion&&<span style={{fontSize:"0.65rem",color:"#f59e0b",fontWeight:700}}>✏ edit</span>}
-                      </div>
-                    </div>
-                    <div style={{fontSize:"0.72rem",color:"#a78bfa",fontWeight:600,flexShrink:0}}>{a.armadorNombre}</div>
-                  </div>
-                ))}
-                {logDetalle.length===0&&<div style={{color:"#4b5563",fontSize:"0.78rem",textAlign:"center",padding:"1rem"}}>Sin registros para este filtro</div>}
-              </div>
+        {/* ── Log detallado — para cámaras ── */}
+        <div style={{...S.card,padding:"1rem"}}>
+          <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px",flexWrap:"wrap"}}>
+            <div style={{color:"#a78bfa",fontSize:"0.7rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",flex:1}}>🎥 Log de armados</div>
+            <div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>
+              <button onClick={()=>setStatsFilArm("TODOS")} style={{...S.btnSm(statsFilArm==="TODOS"),padding:"2px 8px",fontSize:"0.68rem"}}>Todos</button>
+              {statsPerArmador.map(a=><button key={a.nombre} onClick={()=>setStatsFilArm(a.nombre)} style={{...S.btnSm(statsFilArm===a.nombre),padding:"2px 8px",fontSize:"0.68rem"}}>{a.nombre}</button>)}
             </div>
-          </>);
-          })()}
-        </>)}
-
-      </div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:"4px",maxHeight:"400px",overflowY:"auto"}}>
+            {logDetalle.map((a,i)=>(
+              <div key={a.id||i} style={{display:"flex",gap:"8px",alignItems:"flex-start",padding:"5px 6px",borderRadius:"6px",background:i%2===0?"#0d1020":"transparent"}}>
+                <div style={{fontFamily:"monospace",fontSize:"0.78rem",color:"#6366f1",fontWeight:700,flexShrink:0,minWidth:"42px"}}>{fmtHora(a.ts)}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:"0.78rem",color:"#e5e7eb",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.direccion||a.nroOrdenTN||a.envioId}</div>
+                  <div style={{display:"flex",gap:"8px",marginTop:"1px",flexWrap:"wrap"}}>
+                    {a.nroOrdenTN&&<span style={{fontSize:"0.65rem",color:"#7dd3fc"}}>#{a.nroOrdenTN}</span>}
+                    {a.logistica&&<span style={{fontSize:"0.65rem",color:"#4b5563"}}>{a.logistica}</span>}
+                    {a.bultos>1&&<span style={{fontSize:"0.65rem",color:"#f59e0b"}}>{a.bultos}b</span>}
+                    {a.esEdicion&&<span style={{fontSize:"0.65rem",color:"#f59e0b",fontWeight:700}}>✏ edit</span>}
+                  </div>
+                </div>
+                <div style={{fontSize:"0.72rem",color:"#a78bfa",fontWeight:600,flexShrink:0}}>{a.armadorNombre}</div>
+              </div>
+            ))}
+            {logDetalle.length===0&&<div style={{color:"#4b5563",fontSize:"0.78rem",textAlign:"center",padding:"1rem"}}>Sin registros para este filtro</div>}
+          </div>
+        </div>
+      </>);
+      })()}
     </div>
   );
 }
@@ -7584,7 +7587,7 @@ export default function App(){
     imprimir:"tab_despacho",manual:"tab_manual",tarifas:"tab_tarifas",
     informe:"tab_informe",liquidacion:"tab_cobranzaslog",
     liquidacionlog:"tab_liquidacionlog",ctasctes:"tab_ctasctes",
-    localidades:"tab_localidades",expedicion:"tab_expedicion",salida:"tab_salida",usuarios:"tab_usuarios",
+    localidades:"tab_localidades",expedicion:"tab_expedicion",statsarmado:"tab_statsarmado",salida:"tab_salida",usuarios:"tab_usuarios",
   };
   const TABS=[
     {id:"tablero",l:"📊 Tablero"},
@@ -7600,6 +7603,7 @@ export default function App(){
     {id:"clientes",l:"Clientes"},
     {id:"localidades",l:"Localidades"},
     {id:"expedicion",l:"Expedicion"},
+    {id:"statsarmado",l:"📊 Stats Armado"},
     {id:"salida",l:"🚚 Salida"},
     {id:"usuarios",l:"Usuarios"},
   ].filter(t=>{
@@ -7787,6 +7791,7 @@ export default function App(){
         {tab==="localidades" &&<TabLocalidades cpExtra={cpExtra} setCpExtra={setCpExtra}/>}
         {tab==="usuarios"   &&<TabUsuarios lc={lc} setLc={setLcPersist} configExpedicion={configExpedicion} setConfigExpedicion={setConfigExpedicion}/>}
         {tab==="expedicion" &&<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc} configExpedicion={configExpedicion} esAdmin={esAdmin}/>}
+        {tab==="statsarmado"&&<TabStatsArmado/>}
         {tab==="salida"     &&<TabSalida envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>}
       </div>
     </div>
