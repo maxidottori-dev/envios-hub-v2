@@ -5997,7 +5997,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
   const [armadorActivo,setArmadorActivo]=useState(null);       // armador "bloqueado" para escaneo rápido
   const [sesionContador,setSesionContador]=useState(0);        // pedidos confirmados en la sesión activa
   const [filLog,setFilLog]=useState("TODOS");
-  const [soloPendientes,setSoloPendientes]=useState(false);
+  const [soloPendientes,setSoloPendientes]=useState(true);
   const [filTipo,setFilTipo]=useState("TODOS");
   const [filTurno,setFilTurno]=useState("TODOS");
   const [busqueda,setBusqueda]=useState("");
@@ -6726,8 +6726,13 @@ function TabStatsArmado(){
       arm.inicioTs=n>0?arm.times[0]:null;
       arm.finTs=n>0?arm.times[n-1]:null;
       return arm;
-    }).sort((a,b)=>(b.pedXhora||0)-(a.pedXhora||0)); // ranking por velocidad
+    }).sort((a,b)=>(b.count||0)-(a.count||0)); // ranking principal: cantidad de pedidos armados
   },[statsArmados]);
+
+  // Ranking secundario: por velocidad (ped/h) — solo armadores con velocidad calculable
+  const statsPerArmadorVelocidad=useMemo(()=>{
+    return statsPerArmador.filter(a=>a.pedXhora).slice().sort((a,b)=>(b.pedXhora||0)-(a.pedXhora||0));
+  },[statsPerArmador]);
 
   const actPorHora=useMemo(()=>{
     const hrs=Array.from({length:24},(_,i)=>({h:i,count:0}));
@@ -6763,7 +6768,8 @@ function TabStatsArmado(){
       {!loadingStats&&statsArmados.length>0&&(()=>{
         const totalPed=statsArmados.length;
         const totalBultos=statsArmados.reduce((s,a)=>s+(a.bultos||1),0);
-        const maxVel=statsPerArmador[0]?.pedXhora||0;
+        const maxVel=statsPerArmadorVelocidad[0]?.pedXhora||0;
+        const topCount=statsPerArmador[0]?.count||0;
         const logDetalle=statsArmados
           .filter(a=>statsFilArm==="TODOS"||a.armadorNombre===statsFilArm)
           .slice().sort((a,b)=>new Date(a.ts)-new Date(b.ts));
@@ -6788,11 +6794,11 @@ function TabStatsArmado(){
           </div>}
         </div>
 
-        {/* ── Ranking por velocidad ── */}
+        {/* ── Ranking principal: cantidad de pedidos armados ── */}
         <div style={{...S.card,padding:"1rem",marginBottom:"0.75rem"}}>
-          <div style={{color:"#f59e0b",fontSize:"0.7rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:"12px"}}>🏆 Ranking — velocidad (ped/h)</div>
+          <div style={{color:"#f59e0b",fontSize:"0.7rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:"12px"}}>🏆 Ranking — cantidad armada</div>
           {statsPerArmador.map((arm,i)=>{
-            const pctBar=maxVel>0&&arm.pedXhora?Math.round(arm.pedXhora/maxVel*100):Math.round(arm.count/statsPerArmador[0].count*100);
+            const pctBar=topCount>0?Math.round(arm.count/topCount*100):0;
             const barColor=i===0?"#f59e0b":i===1?"#9ca3af":i===2?"#b45309":"#374151";
             const spanH=arm.spanMin?Math.floor(arm.spanMin/60)+"h "+String(arm.spanMin%60).padStart(2,"0")+"m":null;
             return(
@@ -6818,6 +6824,29 @@ function TabStatsArmado(){
             );
           })}
         </div>
+
+        {/* ── Ranking secundario: velocidad (ped/h) ── */}
+        {statsPerArmadorVelocidad.length>0&&(
+          <div style={{...S.card,padding:"1rem",marginBottom:"0.75rem"}}>
+            <div style={{color:"#f87171",fontSize:"0.7rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:"12px"}}>⚡ Ranking secundario — velocidad (ped/h)</div>
+            {statsPerArmadorVelocidad.map((arm,i)=>{
+              const pctBar=maxVel>0?Math.round(arm.pedXhora/maxVel*100):0;
+              const barColor=i===0?"#f87171":i===1?"#9ca3af":i===2?"#b45309":"#374151";
+              return(
+                <div key={arm.id||arm.nombre} style={{marginBottom:"10px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"3px"}}>
+                    <span style={{fontSize:"0.8rem",fontWeight:800,color:barColor,minWidth:"18px"}}>{i+1}</span>
+                    <div style={{flex:1,fontWeight:600,fontSize:"0.82rem",color:"#e5e7eb"}}>{arm.nombre}</div>
+                    <div style={{fontSize:"0.78rem",fontWeight:700,color:"#f87171"}}>{arm.pedXhora} ped/h</div>
+                  </div>
+                  <div style={{height:"4px",background:"#1a1f2e",borderRadius:"2px",overflow:"hidden"}}>
+                    <div style={{width:pctBar+"%",height:"100%",background:barColor,borderRadius:"2px",transition:"width 0.4s"}}/>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* ── Actividad por hora ── */}
         {actPorHora.length>0&&(
