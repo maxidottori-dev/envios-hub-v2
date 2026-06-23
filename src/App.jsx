@@ -211,9 +211,13 @@ const parsearEtiquetasColectaPDF=async(file)=>{
     if(!txt.includes("Pack ID:"))continue; // solo etiquetas de Colecta (no Venta/Flex individual)
     const idxDom=txt.indexOf("Domicilio:");
     if(idxDom<0)continue;
-    const nroM=txt.match(/\b4\d{10}\b/); // nro de envio: 11 digitos empezando en 4
-    if(!nroM)continue;
-    const nroSeguimiento=nroM[0];
+    // Nro de seguimiento: el número de 9 a 11 cifras que sigue a "Pack ID:" en la etiqueta.
+    // No asumir que siempre arranca con "4" — ML cambia el prefijo según el lote (visto: arrancan con "1").
+    const idxPack=txt.indexOf("Pack ID:");
+    const winPack=txt.slice(idxPack,idxPack+150);
+    const nrosPack=winPack.match(/\d{9,11}/g)||[];
+    const nroSeguimiento=nrosPack.length?nrosPack[nrosPack.length-1]:"";
+    if(!nroSeguimiento)continue;
     const before=txt.slice(0,idxDom);
     const esMeta=l=>/[A-Z]{2,4}\d*>/.test(l)||/^[A-Z]{3}\s*\d{2}\/\d{2}\/\d{4}$/.test(l)||/^\d{2}\/\d{2}\/\d{4}$/.test(l)||/^\d{2}:\d{2}$/.test(l);
     const nombreLines=before.split("\n").map(s=>s.trim()).filter(Boolean).filter(l=>!esMeta(l));
