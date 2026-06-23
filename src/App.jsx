@@ -186,6 +186,54 @@ const parsearEtiquetasPDF=async(file)=>{
   }
   return etiquetas;
 };
+
+// ════════════════════════════════════════════════════════════════════
+// IMPORTAR ETIQUETAS COLECTA (PDF) — formato distinto a FLEX:
+// cada página trae "Pack ID:" (colecta) en vez de "Venta:" (flex/venta individual).
+// ════════════════════════════════════════════════════════════════════
+const parsarFechaColecta=(txt)=>{
+  const m=txt.match(/Despachar:\s*\S+\s+(\d{1,2})\/([a-zA-Z]{3})/);
+  if(!m)return"";
+  const dia=String(m[1]).padStart(2,"0");
+  const mes=MESES_ES[(m[2]||"").toUpperCase()]||"01";
+  const anio=new Date().getFullYear();
+  return`${anio}-${mes}-${dia}`;
+};
+const parsearEtiquetasColectaPDF=async(file)=>{
+  const lib=await cargarPDFLib();
+  const buf=await file.arrayBuffer();
+  const pdf=await lib.getDocument({data:buf}).promise;
+  const etiquetas=[];
+  for(let i=1;i<=pdf.numPages;i++){
+    const page=await pdf.getPage(i);
+    const tc=await page.getTextContent();
+    const txt=tc.items.map(x=>x.str).join("\n");
+    if(!txt.includes("Pack ID:"))continue; // solo etiquetas de Colecta (no Venta/Flex individual)
+    const idxDom=txt.indexOf("Domicilio:");
+    if(idxDom<0)continue;
+    const nroM=txt.match(/\b4\d{10}\b/); // nro de envio: 11 digitos empezando en 4
+    if(!nroM)continue;
+    const nroSeguimiento=nroM[0];
+    const before=txt.slice(0,idxDom);
+    const esMeta=l=>/[A-Z]{2,4}\d*>/.test(l)||/^[A-Z]{3}\s*\d{2}\/\d{2}\/\d{4}$/.test(l)||/^\d{2}\/\d{2}\/\d{4}$/.test(l)||/^\d{2}:\d{2}$/.test(l);
+    const nombreLines=before.split("\n").map(s=>s.trim()).filter(Boolean).filter(l=>!esMeta(l));
+    const destinatario=nombreLines.slice(-2).join(" ").trim();
+    const dirM=txt.match(/Domicilio:\s*([^\n]+)/);
+    const cpM=txt.match(/CP:\s*(\d{3,5})/);
+    const ciudadM=txt.match(/Ciudad de destino:\s*([^\n]+)/);
+    const refM=txt.match(/Referencia:\s*([\s\S]*)/);
+    etiquetas.push({
+      nroSeguimiento,
+      destinatario,
+      direccion:dirM?dirM[1].trim():"",
+      cp:cpM?cpM[1].trim():"",
+      localidad:ciudadM?ciudadM[1].trim():"",
+      referencia:refM?refM[1].replace(/\n/g," ").replace(/\s+/g," ").trim().slice(0,200):"",
+      fecha:parsarFechaColecta(txt),
+    });
+  }
+  return etiquetas;
+};
 function cargarXLSX() { return Promise.resolve(XLSXLib); }
 
 const CP_P = {"1601":"La Plata","1607":"San Isidro","1608":"Tigre","1609":"San Isidro","1610":"Tigre","1611":"Tigre","1612":"Malvinas Argentinas","1613":"Malvinas Argentinas","1614":"Malvinas Argentinas","1615":"Malvinas Argentinas","1616":"Malvinas Argentinas","1617":"Tigre","1618":"Tigre","1619":"Escobar","1620":"Escobar","1621":"Tigre","1622":"Escobar","1623":"Escobar","1624":"Tigre","1625":"Escobar","1626":"Escobar","1627":"Escobar","1628":"Escobar","1629":"Pilar","1630":"Pilar","1631":"Pilar","1632":"Pilar","1633":"Pilar","1634":"Pilar","1635":"Pilar","1636":"Vicente Lopez","1637":"Vicente Lopez","1638":"Vicente Lopez","1640":"San Isidro","1641":"San Isidro","1642":"San Isidro","1643":"San Isidro","1644":"San Fernando","1645":"San Fernando","1646":"San Fernando","1647":"Zarate","1648":"Tigre","1649":"San Fernando","1650":"San Martin","1651":"San Martin","1653":"San Martin","1655":"San Martin","1657":"San Martin","1659":"San Miguel","1660":"Jose C Paz","1661":"San Miguel","1662":"San Miguel","1663":"San Miguel","1664":"Pilar","1665":"Jose C Paz","1666":"Jose C Paz","1667":"Pilar","1669":"Pilar","1670":"Tigre","1671":"Tigre","1672":"San Martin","1674":"Tres de Febrero","1675":"Tres de Febrero","1676":"Tres de Febrero","1678":"Tres de Febrero","1682":"Tres de Febrero","1683":"Tres de Febrero","1684":"Moron","1685":"Moron","1686":"Hurlingham","1687":"Tres de Febrero","1688":"Hurlingham","1689":"La Matanza Norte","1692":"Tres de Febrero","1702":"Tres de Febrero","1703":"Tres de Febrero","1704":"La Matanza Norte","1706":"Moron","1707":"Moron","1708":"Moron","1712":"Moron","1713":"Ituzaingo","1714":"Ituzaingo","1715":"Ituzaingo","1716":"Merlo","1718":"Merlo","1721":"Merlo","1722":"Merlo","1723":"Merlo","1724":"Merlo","1727":"Marcos Paz","1736":"Moreno","1738":"Moreno","1740":"Moreno","1742":"Moreno","1743":"Moreno","1744":"Moreno","1745":"Moreno","1746":"Moreno","1748":"Gral. Rodriguez","1749":"Gral. Rodriguez","1751":"La Matanza Norte","1752":"La Matanza Norte","1753":"La Matanza Norte","1754":"La Matanza Norte","1755":"La Matanza Norte","1757":"La Matanza Sur","1758":"La Matanza Sur","1759":"La Matanza Sur","1761":"La Matanza Norte","1763":"La Matanza Sur","1764":"La Matanza Sur","1765":"La Matanza Sur","1766":"La Matanza Norte","1768":"La Matanza Norte","1770":"La Matanza Norte","1771":"La Matanza Norte","1772":"La Matanza Norte","1774":"La Matanza Norte","1778":"La Matanza Norte","1785":"La Matanza Norte","1786":"La Matanza Sur","1801":"Ezeiza","1802":"Ezeiza","1803":"Ezeiza","1804":"Ezeiza","1805":"Esteban Echeverria","1806":"Ezeiza","1807":"Ezeiza","1808":"Canuelas","1812":"Canuelas","1813":"Ezeiza","1814":"Canuelas","1815":"Canuelas","1816":"Canuelas","1821":"Lomas de Zamora","1822":"Lanus","1823":"Lanus","1824":"Lanus","1825":"Lanus","1826":"Lanus","1827":"Lomas de Zamora","1828":"Lomas de Zamora","1829":"Lomas de Zamora","1831":"Lomas de Zamora","1832":"Lomas de Zamora","1833":"Lomas de Zamora","1834":"Lomas de Zamora","1835":"Lomas de Zamora","1836":"Lomas de Zamora","1837":"Berazategui","1838":"Esteban Echeverria","1839":"Esteban Echeverria","1840":"Quilmes","1841":"Esteban Echeverria","1842":"Esteban Echeverria","1843":"Almirante Brown","1844":"Almirante Brown","1845":"Almirante Brown","1846":"Almirante Brown","1847":"Almirante Brown","1848":"Almirante Brown","1849":"Almirante Brown","1851":"Almirante Brown","1852":"Almirante Brown","1853":"Florencio Varela","1854":"Almirante Brown","1855":"Almirante Brown","1856":"Almirante Brown","1858":"Presidente Peron","1859":"Florencio Varela","1860":"Berazategui","1861":"Berazategui","1862":"Presidente Peron","1863":"Florencio Varela","1864":"San Vicente","1865":"San Vicente","1867":"Florencio Varela","1868":"Avellaneda","1869":"Avellaneda","1870":"Avellaneda","1871":"Avellaneda","1872":"Avellaneda","1873":"Avellaneda","1874":"Avellaneda","1875":"Avellaneda","1876":"Quilmes","1877":"Quilmes","1878":"Quilmes","1879":"Quilmes","1880":"Berazategui","1881":"Quilmes","1882":"Quilmes","1883":"Quilmes","1884":"Berazategui","1885":"Berazategui","1886":"Berazategui","1887":"Florencio Varela","1888":"Florencio Varela","1889":"Florencio Varela","1890":"Berazategui","1891":"Florencio Varela","1893":"Berazategui","1894":"La Plata","1895":"La Plata","1896":"La Plata","1897":"La Plata","1900":"La Plata","1901":"La Plata","1902":"La Plata","1903":"La Plata","1904":"La Plata","1905":"La Plata","1906":"La Plata","1907":"La Plata","1908":"La Plata","1909":"La Plata","1910":"La Plata","1912":"La Plata","1914":"La Plata","1923":"Berisso","1924":"Berisso","1925":"Ensenada","1926":"Ensenada","1927":"Ensenada","1929":"Berisso","1931":"Ensenada","1984":"San Vicente","2800":"Zarate","2801":"Zarate","2802":"Zarate","2804":"Campana","2805":"Campana","2806":"Zarate","2808":"Zarate","2812":"Campana","2814":"Ex.de la Cruz","2816":"Campana","6700":"Lujan","6701":"Lujan","6702":"Lujan","6703":"Ex.de la Cruz","6706":"Lujan","6708":"Lujan","6712":"Lujan"};
@@ -816,6 +864,39 @@ function ModalOpcionesPDF({onConfirm, onCancel}){
         <div style={{display:"flex",gap:"10px",justifyContent:"flex-end"}}>
           <button onClick={onCancel} style={{background:"#1a1f2e",border:"1px solid #252d40",color:"#9ca3af",padding:"8px 20px",borderRadius:"8px",cursor:"pointer",fontSize:"0.82rem"}}>Cancelar</button>
           <button onClick={()=>onConfirm({cargarEnvios,procesarArmado})} disabled={!cargarEnvios&&!procesarArmado} style={{background:(!cargarEnvios&&!procesarArmado)?"#252d40":"linear-gradient(135deg,#6366f1,#8b5cf6)",color:"#fff",border:"none",padding:"8px 24px",borderRadius:"8px",cursor:(!cargarEnvios&&!procesarArmado)?"not-allowed":"pointer",fontWeight:700,fontSize:"0.82rem"}}>Continuar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ModalOpcionesColecta({onConfirm, onCancel}){
+  const [cargarColectas, setCargarColectas] = useState(true);
+  const [procesarArmado, setProcesarArmado] = useState(true);
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:"#12172a",border:"1px solid #a78bfa",borderRadius:"16px",padding:"28px 32px",minWidth:"320px",boxShadow:"0 8px 40px #0008"}}>
+        <div style={{color:"#e5e7eb",fontWeight:800,fontSize:"1rem",marginBottom:"6px"}}>¿Qué querés hacer con este PDF de Colecta?</div>
+        <div style={{color:"#6b7280",fontSize:"0.75rem",marginBottom:"20px"}}>Podés elegir una o ambas opciones</div>
+        <div style={{display:"flex",flexDirection:"column",gap:"12px",marginBottom:"24px"}}>
+          <label style={{display:"flex",alignItems:"center",gap:"12px",cursor:"pointer",padding:"12px 16px",background:cargarColectas?"#1a0d2e":"#0f1420",border:"1px solid "+(cargarColectas?"#a78bfa":"#252d40"),borderRadius:"10px",transition:"all 0.15s"}}>
+            <input type="checkbox" checked={cargarColectas} onChange={e=>setCargarColectas(e.target.checked)} style={{width:"16px",height:"16px",accentColor:"#a78bfa"}}/>
+            <div>
+              <div style={{color:"#e5e7eb",fontWeight:700,fontSize:"0.85rem"}}>Cargar colectas pendientes</div>
+              <div style={{color:"#6b7280",fontSize:"0.72rem",marginTop:"2px"}}>Registra cada colecta en EnviosHub para poder trazar quién la armó</div>
+            </div>
+          </label>
+          <label style={{display:"flex",alignItems:"center",gap:"12px",cursor:"pointer",padding:"12px 16px",background:procesarArmado?"#0d1c04":"#0f1420",border:"1px solid "+(procesarArmado?"#84cc16":"#252d40"),borderRadius:"10px",transition:"all 0.15s"}}>
+            <input type="checkbox" checked={procesarArmado} onChange={e=>setProcesarArmado(e.target.checked)} style={{width:"16px",height:"16px",accentColor:"#84cc16"}}/>
+            <div>
+              <div style={{color:"#e5e7eb",fontWeight:700,fontSize:"0.85rem"}}>Procesar armado</div>
+              <div style={{color:"#6b7280",fontSize:"0.72rem",marginTop:"2px"}}>Anota el PDF con numeración y resaltado (ML Armado)</div>
+            </div>
+          </label>
+        </div>
+        <div style={{display:"flex",gap:"10px",justifyContent:"flex-end"}}>
+          <button onClick={onCancel} style={{background:"#1a1f2e",border:"1px solid #252d40",color:"#9ca3af",padding:"8px 20px",borderRadius:"8px",cursor:"pointer",fontSize:"0.82rem"}}>Cancelar</button>
+          <button onClick={()=>onConfirm({cargarColectas,procesarArmado})} disabled={!cargarColectas&&!procesarArmado} style={{background:(!cargarColectas&&!procesarArmado)?"#252d40":"linear-gradient(135deg,#a78bfa,#8b5cf6)",color:"#fff",border:"none",padding:"8px 24px",borderRadius:"8px",cursor:(!cargarColectas&&!procesarArmado)?"not-allowed":"pointer",fontWeight:700,fontSize:"0.82rem"}}>Continuar</button>
         </div>
       </div>
     </div>
@@ -4861,7 +4942,7 @@ const MOTIVOS_FALLO=[
 // ════════════════════════════════════════════════════════════════════
 // VISTA ARMADOR — escaneo simple para celular propio, sesión personal
 // ════════════════════════════════════════════════════════════════════
-function VistaArmador({envios,setEnvios,sesion,lc,armador}){
+function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armador}){
   const [qrInput,setQrInput]=useState("");
   const [resultado,setResultado]=useState(null);
   const [sesionContador,setSesionContador]=useState(0);
@@ -4893,6 +4974,30 @@ function VistaArmador({envios,setEnvios,sesion,lc,armador}){
     }).catch(err=>console.error("Error guardando armado:",err));
   },[setEnvios,armador]);
 
+  // Armado de colectas ML (circuito separado de envíos) — sin panel, directo con el armador fijo de la vista.
+  const ejecutarArmadoColecta=useCallback((colecta)=>{
+    const ts=new Date().toISOString();
+    if(setColectas)setColectas(pv=>pv.filter(c=>c.id!==colecta.id));
+    setResultado({ok:true,envio:colecta,bultos:1,msg:"📋 Colecta · "+armador.nombre});
+    setTimeout(()=>setResultado(null),4000);
+    if(inputRef.current)inputRef.current.focus();
+    updateDoc(doc(db,"colectas",colecta.id),{
+      estado:"armada",armadorId:armador.id,armadorNombre:armador.nombre,
+      fechaArmado:fechaHoy(),horaArmado:ts,
+    }).catch(err=>console.error("Error actualizando colecta:",err));
+    addDoc(collection(db,"armados"),{
+      envioId:colecta.id,
+      nroSeguimiento:colecta.nroSeguimiento||"",
+      nroOrdenTN:"",
+      armadorId:armador.id,armadorNombre:armador.nombre,
+      ts,fecha:colecta.fecha||fechaHoy(),
+      bultos:1,logistica:"Colecta",
+      direccion:colecta.direccion||"",
+      partido:colecta.partido||"",
+      esFlex:false,esColecta:true,esEdicion:false,
+    }).catch(err=>console.error("Error guardando armado:",err));
+  },[setColectas,armador]);
+
   const procesarScan=useCallback((nro)=>{
     const srch=nro.trim().replace(/^#/,"");if(!srch)return;
     setResultado(null);
@@ -4902,8 +5007,19 @@ function VistaArmador({envios,setEnvios,sesion,lc,armador}){
       .filter(x=>x.score>0)
       .sort((a,b)=>b.score-a.score);
     if(candidatos.length===0){
-      setResultado({ok:false,msg:"No encontrado: "+srch.slice(0,20)});
-      setTimeout(()=>setResultado(null),5000);return;
+      // Fallback: no matcheó en envíos → probar contra colectas pendientes (sin filtro de fecha)
+      const candColecta=colectas
+        .map(c=>({c,score:scoreBusqueda(c,srch,nums)}))
+        .filter(x=>x.score>0)
+        .sort((a,b)=>b.score-a.score);
+      if(candColecta.length===0){
+        setResultado({ok:false,msg:"No encontrado: "+srch.slice(0,20)});
+        setTimeout(()=>setResultado(null),5000);return;
+      }
+      ejecutarArmadoColecta(candColecta[0].c);
+      setSesionContador(p=>p+1);
+      beepOK();
+      return;
     }
     const found=candidatos[0].e;
     if(found.preparado&&found.armadorNombre){
@@ -4913,7 +5029,7 @@ function VistaArmador({envios,setEnvios,sesion,lc,armador}){
     ejecutarArmado(found,found.bultos||1);
     setSesionContador(p=>p+1);
     beepOK();
-  },[envios,ejecutarArmado]);
+  },[envios,colectas,ejecutarArmado,ejecutarArmadoColecta]);
 
   // Escaneo QR via cámara — usa BarcodeDetector nativo si está disponible (Chrome/Android);
   // si no existe (Safari/iPhone) decodifica con jsQR leyendo los frames del video por canvas.
@@ -5803,7 +5919,7 @@ function TabTablero({envios,lc,zc,pagosCC=[]}){
 }
 
 
-function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin=false}){
+function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,configExpedicion={},esAdmin=false}){
   const {impresionHabilitada=false,armadores=[]}=configExpedicion;
   const hoy=fechaHoy();
   const [subTab,setSubTab]=useState("escaneo");
@@ -5915,11 +6031,42 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
     if(bultos>1&&impresionHabilitada&&envio.origen!=="ML")imprimirEtiquetasExtra({...envio,bultos},lc);
   },[setEnvios,lc,impresionHabilitada]);
 
+  // ── Lógica de confirmación para colectas ML (circuito separado de envios) ──
+  const ejecutarArmadoColecta=useCallback((colecta,armador)=>{
+    const ts=new Date().toISOString();
+    if(setColectas)setColectas(pv=>pv.filter(c=>c.id!==colecta.id));
+    setUltimoArmador(armador);
+    setResultado({ok:true,envio:colecta,bultos:1,msg:"📋 Colecta · "+armador.nombre});
+    setTimeout(()=>setResultado(null),5000);
+    if(inputRef.current)inputRef.current.focus();
+    updateDoc(doc(db,"colectas",colecta.id),{
+      estado:"armada",armadorId:armador.id,armadorNombre:armador.nombre,
+      fechaArmado:fechaHoy(),horaArmado:ts,
+    }).catch(err=>console.error("Error actualizando colecta:",err));
+    addDoc(collection(db,"armados"),{
+      envioId:colecta.id,
+      nroSeguimiento:colecta.nroSeguimiento||"",
+      nroOrdenTN:"",
+      armadorId:armador.id,armadorNombre:armador.nombre,
+      ts,fecha:colecta.fecha||fechaHoy(),
+      bultos:1,logistica:"Colecta",
+      direccion:colecta.direccion||"",
+      partido:colecta.partido||"",
+      esFlex:false,esColecta:true,esEdicion:false,
+    }).catch(err=>console.error("Error guardando armado:",err));
+  },[setColectas]);
+
   // ── Scan handler con scoring ──────────────────────────────────────
   const procesarScan=useCallback((nro)=>{
     const srch=nro.trim().replace(/^#/,"");if(!srch)return;
     setResultado(null);
     const nums=srch.replace(/\D/g,"");
+    // Helper: busca contra colectas pendientes (ML, circuito separado) — SIN filtro de fecha,
+    // porque Maxi puede cargar colectas para el día siguiente con anticipación.
+    const buscarColecta=()=>colectas
+      .map(c=>({c,score:scoreBusqueda(c,srch,nums)}))
+      .filter(x=>x.score>0)
+      .sort((a,b)=>b.score-a.score);
     // Modo armador activo: buscar y confirmar automáticamente sin panel
     if(armadorActivo){
       const candidatos=envios
@@ -5927,6 +6074,14 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
         .filter(x=>x.score>0)
         .sort((a,b)=>b.score-a.score);
       if(candidatos.length===0){
+        const candColecta=buscarColecta();
+        if(candColecta.length>0){
+          ejecutarArmadoColecta(candColecta[0].c,armadorActivo);
+          setSesionContador(p=>p+1);
+          resetArmadorTimer();
+          beepOK();
+          return;
+        }
         setResultado({ok:false,msg:"No encontrado: "+srch.slice(0,20)});
         setTimeout(()=>setResultado(null),5000);return;
       }
@@ -5947,8 +6102,25 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
       .filter(x=>x.score>0)
       .sort((a,b)=>b.score-a.score);
     if(candidatos.length===0){
-      setResultado({ok:false,msg:"No encontrado: "+srch.slice(0,20)});
-      setTimeout(()=>setResultado(null),8000);return;
+      // Fallback: no matcheó en envíos → probar contra colectas pendientes
+      const candColecta=buscarColecta();
+      if(candColecta.length===0){
+        setResultado({ok:false,msg:"No encontrado: "+srch.slice(0,20)});
+        setTimeout(()=>setResultado(null),8000);return;
+      }
+      if(candColecta.length===1){
+        abrirPanelArmador({...candColecta[0].c,_isColecta:true});return;
+      }
+      // Múltiples colectas candidatas → mismo panel de disambiguation, tageado
+      setMatchesPendientes(candColecta.map(x=>({...x.c,_isColecta:true,_score:x.score})));
+      if(timeoutRef.current)clearTimeout(timeoutRef.current);
+      timeoutRef.current=setTimeout(()=>{
+        setMatchesPendientes([]);
+        setResultado({ok:false,msg:"Tiempo agotado. Escaneá de nuevo."});
+        setTimeout(()=>setResultado(null),5000);
+        if(inputRef.current)inputRef.current.focus();
+      },30000);
+      return;
     }
     // Un único resultado → siempre directo, sin importar el score
     if(candidatos.length===1){
@@ -5979,18 +6151,22 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
       setTimeout(()=>setResultado(null),5000);
       if(inputRef.current)inputRef.current.focus();
     },30000);
-  },[envios,armadorActivo,ejecutarArmado,abrirPanelArmador,resetArmadorTimer]);
+  },[envios,colectas,armadorActivo,ejecutarArmado,ejecutarArmadoColecta,abrirPanelArmador,resetArmadorTimer]);
 
   // ── Confirmar armado desde el panel flotante ──────────────────────
   const confirmarArmado=useCallback((armador)=>{
     if(!scanPendiente)return;
     if(timeoutRef.current)clearTimeout(timeoutRef.current);
-    const envio=scanPendiente;
+    const item=scanPendiente;
     const bultos=bultosSel;
     const esEdit=modoEdicion;
     setScanPendiente(null);setModoEdicion(false);
-    ejecutarArmado(envio,armador,bultos,esEdit);
-  },[scanPendiente,bultosSel,modoEdicion,ejecutarArmado]);
+    if(item._isColecta){
+      ejecutarArmadoColecta(item,armador);
+    } else {
+      ejecutarArmado(item,armador,bultos,esEdit);
+    }
+  },[scanPendiente,bultosSel,modoEdicion,ejecutarArmado,ejecutarArmadoColecta]);
 
   useEffect(()=>{if(inputRef.current)inputRef.current.focus();},[]);
 
@@ -6091,6 +6267,7 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
                       <div style={{width:"28px",height:"28px",borderRadius:"8px",background:"#0f1420",border:"1px solid #374151",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:"0.95rem",fontWeight:900,color:"#6b7280"}}>{i+1}</div>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap",marginBottom:"2px"}}>
+                          {e._isColecta&&<span style={{background:"#1a0d2e",color:"#a78bfa",border:"1px solid #a78bfa",padding:"1px 6px",borderRadius:"4px",fontSize:"0.65rem",fontWeight:700}}>📋 Colecta</span>}
                           {e.nroOrdenTN&&<span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.82rem"}}>#{e.nroOrdenTN}</span>}
                           {e.nroSeguimiento&&!e.nroOrdenTN&&<span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.82rem"}}>{e.nroSeguimiento}</span>}
                           {e.trans&&<span style={{color:lc[e.trans]?.color||"#9ca3af",fontWeight:700,fontSize:"0.75rem"}}>{e.trans}</span>}
@@ -6122,20 +6299,22 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
                 </div>
                 <div style={{fontWeight:700,fontSize:"0.95rem",color:"#e5e7eb",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{scanPendiente.direccion}</div>
                 <div style={{fontSize:"0.75rem",color:"#6b7280",marginTop:"3px",display:"flex",gap:"8px",flexWrap:"wrap"}}>
+                  {scanPendiente._isColecta&&<span style={{background:"#1a0d2e",color:"#a78bfa",border:"1px solid #a78bfa",padding:"1px 6px",borderRadius:"4px",fontWeight:700}}>📋 Colecta</span>}
+                  {scanPendiente._isColecta&&scanPendiente.nroSeguimiento&&<span style={{color:"#7dd3fc",fontWeight:700}}>{scanPendiente.nroSeguimiento}</span>}
                   {scanPendiente.nroOrdenTN&&<span style={{color:"#7dd3fc",fontWeight:700}}>#{scanPendiente.nroOrdenTN}</span>}
                   {scanPendiente.trans&&<span style={{color:lc[scanPendiente.trans]?.color||"#9ca3af",fontWeight:700}}>{scanPendiente.trans}</span>}
                   {scanPendiente.partido&&<span>{scanPendiente.partido}</span>}
                   {scanPendiente.cobranza&&<span style={{color:"#fbbf24",fontWeight:700}}>${Number(scanPendiente.cobranza).toLocaleString("es-AR")}</span>}
                 </div>
               </div>
-              {/* Selector de bultos */}
-              <div style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"1.1rem"}}>
+              {/* Selector de bultos — no aplica a colectas (siempre 1 bulto por etiqueta) */}
+              {!scanPendiente._isColecta&&<div style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"1.1rem"}}>
                 <span style={{fontSize:"0.7rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",minWidth:"50px"}}>Bultos</span>
                 <button onClick={()=>setBultosSel(b=>Math.max(1,b-1))} style={{width:"38px",height:"38px",borderRadius:"8px",background:"#1a1f2e",border:"1px solid #374151",color:"#e5e7eb",fontSize:"1.3rem",cursor:"pointer"}}>−</button>
                 <span style={{fontSize:"1.8rem",fontWeight:900,color:"#e5e7eb",minWidth:"32px",textAlign:"center"}}>{bultosSel}</span>
                 <button onClick={()=>setBultosSel(b=>b+1)} style={{width:"38px",height:"38px",borderRadius:"8px",background:"#1a1f2e",border:"1px solid #374151",color:"#e5e7eb",fontSize:"1.3rem",cursor:"pointer"}}>+</button>
                 {bultosSel>1&&<span style={{fontSize:"0.68rem",color:impresionHabilitada?"#f59e0b":"#374151",marginLeft:"4px"}}>{impresionHabilitada?"🖨 "+(bultosSel-1)+" etiqueta"+(bultosSel>2?"s":"")+" a imprimir":"impresión deshabilitada"}</span>}
-              </div>
+              </div>}
               {/* Botonera armadores */}
               <div style={{marginBottom:"0.85rem"}}>
                 <div style={{fontSize:"0.62rem",color:"#6b7280",textTransform:"uppercase",fontWeight:700,marginBottom:"8px"}}>¿Quién armó este pedido? <span style={{color:"#374151",fontWeight:400,textTransform:"none"}}>— o presioná el número</span></div>
@@ -6220,6 +6399,10 @@ function VistaExpedicion({envios,setEnvios,sesion,lc,configExpedicion={},esAdmin
               <div style={{color:"#f59e0b",fontWeight:800,fontSize:"1.5rem",lineHeight:1}}>{total-preparados}</div>
               <div style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase",marginTop:"2px"}}>Pendientes</div>
             </div>
+            {colectas.length>0&&<div style={{...S.card,padding:"0.7rem 1rem",flex:1,borderLeft:"3px solid #a78bfa"}}>
+              <div style={{color:"#a78bfa",fontWeight:800,fontSize:"1.5rem",lineHeight:1}}>{colectas.length}</div>
+              <div style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase",marginTop:"2px"}}>📋 Colectas pend.</div>
+            </div>}
             <div style={{...S.card,padding:"0.7rem 1rem",flex:2}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:"5px"}}>
                 <span style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase"}}>Progreso</span>
@@ -7347,7 +7530,15 @@ export default function App(){
   },[]);
   const [borrador,setBorrador]=useState([]);
   const [modalPDF,setModalPDF]=useState(null); // archivo pendiente mientras modal abierto
+  const [modalPDFColecta,setModalPDFColecta]=useState(null); // archivo Colecta pendiente mientras modal abierto
   const [envios,setEnviosLocal]=useState([]);
+  const [colectas,setColectas]=useState([]); // colectas ML pendientes de armado (estado=pendiente)
+  useEffect(()=>{
+    const unsub=onSnapshot(query(collection(db,"colectas"),where("estado","==","pendiente")),snap=>{
+      setColectas(snap.docs.map(d=>({...d.data(),id:d.id})));
+    });
+    return()=>unsub();
+  },[]);
   const [zc,setZc]=useState(ZONAS_INIT);
   const [lc,setLc]=useState(LOGISTICAS_INIT);
   const [cpExtra,setCpExtra]=useState({});
@@ -7570,10 +7761,10 @@ export default function App(){
     if(esChofer)return<VistaChofer envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>;
     return<VistaLogistica envios={envios} sesion={sesion} lc={lc}/>;
   }
-  if(sesion.rol==="expedicion")return<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc} configExpedicion={configExpedicion}/>;
+  if(sesion.rol==="expedicion")return<VistaExpedicion envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} configExpedicion={configExpedicion}/>;
   if(sesion.rol==="armador"){
     const arm=(configExpedicion.armadores||[]).find(a=>a.id===sesion.armadorId);
-    return<VistaArmador envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc} armador={arm}/>;
+    return<VistaArmador envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} armador={arm}/>;
   }
 
   if(pantalla==="asignacion"){return<PantallaAsignacion borrador={borrador} fileName={fileName} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc} envios={envios} sesion={sesion}/>;}
@@ -7752,17 +7943,56 @@ export default function App(){
           <label style={{cursor:"pointer"}}>
             <input type="file" accept=".pdf" style={{display:"none"}} onChange={async ev=>{
               const f=ev.target.files[0];if(!f){return;}ev.target.value="";
-              setLoading(true);
-              try{
-                await procesarConMLArmado(f,"Colecta",null);
-                mostrarToast("PDF Colecta procesado");
-              }catch(err){
-                mostrarToast("Error: "+(err.message||"ML Armado no disponible"));
-              }
-              setLoading(false);
+              setModalPDFColecta(f); // Abrir modal de opciones
             }}/>
             <span style={{display:"inline-block",padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#1a0d2e",border:"1px solid #a78bfa",color:"#a78bfa",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>{loading?"...":"📋 Colecta"}</span>
           </label>
+          {/* Modal opciones PDF Colecta */}
+          {modalPDFColecta&&<ModalOpcionesColecta
+            onCancel={()=>setModalPDFColecta(null)}
+            onConfirm={async({cargarColectas,procesarArmado})=>{
+              const f=modalPDFColecta;setModalPDFColecta(null);
+              setLoading(true);
+              try{
+                let nuevas=0;
+                if(cargarColectas){
+                  const etiquetas=await parsearEtiquetasColectaPDF(f);
+                  const loteTs=new Date().toISOString();
+                  for(const et of etiquetas){
+                    if(!et.nroSeguimiento)continue;
+                    const yaPendiente=colectas.some(c=>c.nroSeguimiento===et.nroSeguimiento);
+                    if(yaPendiente)continue; // ya está cargada y pendiente, no duplicar
+                    await addDoc(collection(db,"colectas"),{
+                      nroSeguimiento:et.nroSeguimiento,
+                      destinatario:et.destinatario||"",
+                      direccion:et.direccion||"",
+                      cp:et.cp||"",
+                      localidad:et.localidad||"",
+                      partido:cpAPartido(et.cp)||"",
+                      referencia:et.referencia||"",
+                      fecha:et.fecha||fechaHoy(),
+                      estado:"pendiente",
+                      armadorId:null,armadorNombre:null,fechaArmado:null,horaArmado:null,
+                      loteImportacion:loteTs,
+                    });
+                    nuevas++;
+                  }
+                }
+                if(procesarArmado){
+                  try{
+                    await procesarConMLArmado(f,"Colecta",null);
+                  }catch(mlErr){
+                    mostrarToast("ML Armado no disponible — intentá de nuevo en unos segundos");
+                  }
+                }
+                const partes=[];
+                if(cargarColectas)partes.push(nuevas+" colecta(s) nueva(s) pendiente(s)");
+                if(procesarArmado)partes.push("PDF procesado");
+                if(partes.length)mostrarToast(partes.join(" · "));
+              }catch(err){mostrarToast("Error: "+err.message);}
+              setLoading(false);
+            }}
+          />}
           {puedeVer(sesion,"accion_cargaexcel")&&<div style={{display:"flex",alignItems:"center",gap:"3px",background:"#12172a",border:"1px solid #6366f1",borderRadius:"7px",overflow:"hidden"}}>
             <input type="date" value={fechaImport} onChange={e=>setFechaImport(e.target.value)} style={{...S.input,border:"none",borderRadius:0,padding:"0.28rem 0.5rem",fontSize:"0.72rem",width:"130px",color:"#a5b4fc"}} title="Fecha de entrega para los envios del Excel"/>
             <label style={{cursor:"pointer",margin:0}}>
@@ -7790,7 +8020,7 @@ export default function App(){
         {tab==="clientes"       &&<TabClientes       envios={envios} lc={lc} pagosCC={pagosCC} facturaClientes={facturaClientes} setFacturaCliente={setFacturaCliente} sesion={sesion}/>}
         {tab==="localidades" &&<TabLocalidades cpExtra={cpExtra} setCpExtra={setCpExtra}/>}
         {tab==="usuarios"   &&<TabUsuarios lc={lc} setLc={setLcPersist} configExpedicion={configExpedicion} setConfigExpedicion={setConfigExpedicion}/>}
-        {tab==="expedicion" &&<VistaExpedicion envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc} configExpedicion={configExpedicion} esAdmin={esAdmin}/>}
+        {tab==="expedicion" &&<VistaExpedicion envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} configExpedicion={configExpedicion} esAdmin={esAdmin}/>}
         {tab==="statsarmado"&&<TabStatsArmado/>}
         {tab==="salida"     &&<TabSalida envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>}
       </div>
