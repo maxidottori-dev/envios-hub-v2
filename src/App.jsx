@@ -114,7 +114,7 @@ async function procesarConMLArmado(file, envioType, onProgress, logisticaMap = {
     }
   } catch(e) { /* Si no responde usar 1 */ }
 
-  if (onProgress) onProgress("Procesando con ML Armado...");
+  if (onProgress) onProgress("Procesando con ML Armado (puede tardar ~1 min)...");
 
   // 2. Enviar PDF a ML Armado
   const formData = new FormData();
@@ -204,6 +204,7 @@ const parsearEtiquetasColectaPDF=async(file)=>{
   const buf=await file.arrayBuffer();
   const pdf=await lib.getDocument({data:buf}).promise;
   const etiquetas=[];
+  const noProcesadas=[]; // páginas que parecían etiqueta de colecta pero no se pudo extraer el nro de seguimiento
   for(let i=1;i<=pdf.numPages;i++){
     const page=await pdf.getPage(i);
     const tc=await page.getTextContent();
@@ -220,7 +221,11 @@ const parsearEtiquetasColectaPDF=async(file)=>{
     const winDesp=txt.slice(idxDesp,idxDesp+200);
     const mBarra=winDesp.match(/(\d{4,6})\D+(\d{4,6})/);
     const nroSeguimiento=mBarra?(mBarra[1]+mBarra[2]):"";
-    if(!nroSeguimiento)continue;
+    if(!nroSeguimiento){
+      const packIdM=txt.match(/Pack ID:\s*([\d.]+)/);
+      noProcesadas.push({pagina:i,packId:packIdM?packIdM[1]:""});
+      continue;
+    }
     const before=txt.slice(0,idxDom);
     const esMeta=l=>/[A-Z]{2,4}\d*>/.test(l)||/^[A-Z]{3}\s*\d{2}\/\d{2}\/\d{4}$/.test(l)||/^\d{2}\/\d{2}\/\d{4}$/.test(l)||/^\d{2}:\d{2}$/.test(l);
     const nombreLines=before.split("\n").map(s=>s.trim()).filter(Boolean).filter(l=>!esMeta(l));
@@ -239,7 +244,7 @@ const parsearEtiquetasColectaPDF=async(file)=>{
       fecha:parsarFechaColecta(txt),
     });
   }
-  return etiquetas;
+  return {etiquetas,noProcesadas};
 };
 function cargarXLSX() { return Promise.resolve(XLSXLib); }
 
@@ -7796,6 +7801,7 @@ export default function App(){
   const [borrador,setBorrador]=useState([]);
   const [modalPDF,setModalPDF]=useState(null); // archivo pendiente mientras modal abierto
   const [modalPDFColecta,setModalPDFColecta]=useState(null); // archivo Colecta pendiente mientras modal abierto
+  const [colectaProgMsg,setColectaProgMsg]=useState(""); // texto de progreso a mostrar en el botón "Colecta" mientras se espera ML Armado
   const [envios,setEnviosLocal]=useState([]);
   const [colectas,setColectas]=useState([]); // colectas ML pendientes de armado (estado=pendiente)
   useEffect(()=>{
@@ -8210,7 +8216,7 @@ export default function App(){
               const f=ev.target.files[0];if(!f){return;}ev.target.value="";
               setModalPDFColecta(f); // Abrir modal de opciones
             }}/>
-            <span style={{display:"inline-block",padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#1a0d2e",border:"1px solid #a78bfa",color:"#a78bfa",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>{loading?"...":"📋 Colecta"}</span>
+            <span style={{display:"inline-block",padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#1a0d2e",border:"1px solid #a78bfa",color:"#a78bfa",fontWeight:700,fontSize:"0.72rem",cursor:"pointer",whiteSpace:"nowrap"}}>{loading?(colectaProgMsg||"..."):"📋 Colecta"}</span>
           </label>
           {/* Modal opciones PDF Colecta */}
           {modalPDFColecta&&<ModalOpcionesColecta
@@ -8218,10 +8224,15 @@ export default function App(){
             onConfirm={async({cargarColectas,procesarArmado})=>{
               const f=modalPDFColecta;setModalPDFColecta(null);
               setLoading(true);
+              setColectaProgMsg("");
               try{
                 let nuevas=0;
+                let noProcesadas=[];
                 if(cargarColectas){
-                  const etiquetas=await parsearEtiquetasColectaPDF(f);
+                  setColectaProgMsg("Leyendo etiquetas...");
+                  const res=await parsearEtiquetasColectaPDF(f);
+                  const etiquetas=res.etiquetas;
+                  noProcesadas=res.noProcesadas||[];
                   const loteTs=new Date().toISOString();
                   for(const et of etiquetas){
                     if(!et.nroSeguimiento)continue;
@@ -8245,7 +8256,7 @@ export default function App(){
                 }
                 if(procesarArmado){
                   try{
-                    await procesarConMLArmado(f,"Colecta",null);
+                    await procesarConMLArmado(f,"Colecta",setColectaProgMsg);
                   }catch(mlErr){
                     mostrarToast("ML Armado no disponible — intentá de nuevo en unos segundos");
                   }
@@ -8254,7 +8265,13 @@ export default function App(){
                 if(cargarColectas)partes.push(nuevas+" colecta(s) nueva(s) pendiente(s)");
                 if(procesarArmado)partes.push("PDF procesado");
                 if(partes.length)mostrarToast(partes.join(" · "));
+                // Aviso persistente (no se pierde como el toast) si alguna etiqueta no se pudo reconocer
+                if(noProcesadas.length){
+                  const detalle=noProcesadas.map(n=>"pág. "+n.pagina+(n.packId?" (Pack ID "+n.packId+")":"")).join(", ");
+                  agregarAlerta("error",`⚠️ ${noProcesadas.length} colecta(s) NO se pudieron cargar del PDF — ${detalle}. Revisar manualmente.`,true);
+                }
               }catch(err){mostrarToast("Error: "+err.message);}
+              setColectaProgMsg("");
               setLoading(false);
             }}
           />}
