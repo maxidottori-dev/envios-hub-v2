@@ -204,39 +204,54 @@ const parsearEtiquetasColectaPDF=async(file)=>{
   const buf=await file.arrayBuffer();
   const pdf=await lib.getDocument({data:buf}).promise;
   const etiquetas=[];
-  const noProcesadas=[]; // páginas que parecían etiqueta de colecta pero no se pudo extraer el nro de seguimiento
+  const noProcesadas=[]; // páginas que parecían etiqueta de colecta pero no se pudo extraer el nro de envío
   for(let i=1;i<=pdf.numPages;i++){
     const page=await pdf.getPage(i);
     const tc=await page.getTextContent();
     const txt=tc.items.map(x=>x.str).join("\n");
-    if(!txt.includes("Pack ID:"))continue; // solo etiquetas de Colecta (no Venta/Flex individual)
-    const idxDom=txt.indexOf("Domicilio:");
-    if(idxDom<0)continue;
-    // Nro de seguimiento: el número impreso debajo del código de barras (el que realmente
-    // escanea el armador), NO el "Pack ID". En la etiqueta aparece como dos grupos de dígitos
-    // justo después de "Despachar: ..." (ej. "473609" + "22937" = código de barras 47360922937).
-    // Confirmado decodificando el código de barras (Code128) y el QR de varias etiquetas reales:
-    // ambos codifican exactamente esta concatenación, distinta del Pack ID.
+    if(/\bFLEX\b/.test(txt))continue; // etiqueta de Flex real (palabra FLEX a la izq. de la fecha), no es Colecta
     const idxDesp=txt.indexOf("Despachar:");
+    if(idxDesp<0)continue; // no es una etiqueta individual (ej. página "Identificación/Productos" = lista de empaque resumen)
+    // Nro de envío: el número impreso debajo del código de barras (el que realmente
+    // escanea el armador), NO el "Pack ID" ni el "Venta". En la etiqueta aparece como dos grupos
+    // de dígitos justo después de "Despachar: ..." (ej. "473609" + "22937" = 47360922937).
+    // Confirmado decodificando el código de barras (Code128) y el QR de varias etiquetas reales:
+    // ambos codifican exactamente esta concatenación. SIEMPRE está presente, es el dato principal.
     const winDesp=txt.slice(idxDesp,idxDesp+200);
     const mBarra=winDesp.match(/(\d{4,6})\D+(\d{4,6})/);
     const nroSeguimiento=mBarra?(mBarra[1]+mBarra[2]):"";
     if(!nroSeguimiento){
-      const packIdM=txt.match(/Pack ID:\s*([\d.]+)/);
-      noProcesadas.push({pagina:i,packId:packIdM?packIdM[1]:""});
+      const packIdM0=txt.match(/Pack ID:\s*(\d{3,6})\s*(\d{6,})/);
+      noProcesadas.push({pagina:i,packId:packIdM0?(packIdM0[1]+packIdM0[2]):""});
       continue;
     }
-    const before=txt.slice(0,idxDom);
-    const esMeta=l=>/[A-Z]{2,4}\d*>/.test(l)||/^[A-Z]{3}\s*\d{2}\/\d{2}\/\d{4}$/.test(l)||/^\d{2}\/\d{2}\/\d{4}$/.test(l)||/^\d{2}:\d{2}$/.test(l);
-    const nombreLines=before.split("\n").map(s=>s.trim()).filter(Boolean).filter(l=>!esMeta(l));
-    const destinatario=nombreLines.slice(-2).join(" ").trim();
+    // Nro de Venta y/o Nro de Pack ID: secundarios, puede haber uno, el otro, o ambos.
+    const ventaM=txt.match(/Venta:\s*(\d{3,6})\s*(\d{6,})/);
+    const nroVenta=ventaM?(ventaM[1]+ventaM[2]):"";
+    const packIdM=txt.match(/Pack ID:\s*(\d{3,6})\s*(\d{6,})/);
+    const nroPackId=packIdM?(packIdM[1]+packIdM[2]):"";
+    // Destinatario y Usuario: el usuario siempre va entre paréntesis, a veces en la misma línea
+    // que el nombre ("Juan Perez (JUANP123)") y a veces en la línea siguiente
+    // ("Juan Perez" / "(JUANP123)"). Se buscan como dos campos separados.
+    const lineas=txt.split("\n").map(s=>s.trim()).filter(Boolean);
+    let destinatario="",usuario="";
+    for(let li=0;li<lineas.length;li++){
+      const soloUsuario=lineas[li].match(/^\(([A-Za-z0-9_ ]{4,})\)$/);
+      if(soloUsuario){usuario=soloUsuario[1].trim();destinatario=(lineas[li-1]||"").trim();break;}
+      const mismaLinea=lineas[li].match(/^(.+?)\s*\(([A-Za-z0-9_ ]{4,})\)$/);
+      if(mismaLinea){destinatario=mismaLinea[1].trim();usuario=mismaLinea[2].trim();break;}
+    }
+    // Domicilio/CP/Ciudad/Referencia: opcionales — algunas colectas no traen dirección.
     const dirM=txt.match(/Domicilio:\s*([^\n]+)/);
     const cpM=txt.match(/CP:\s*(\d{3,5})/);
     const ciudadM=txt.match(/Ciudad de destino:\s*([^\n]+)/);
     const refM=txt.match(/Referencia:\s*([\s\S]*)/);
     etiquetas.push({
       nroSeguimiento,
+      nroVenta,
+      nroPackId,
       destinatario,
+      usuario,
       direccion:dirM?dirM[1].trim():"",
       cp:cpM?cpM[1].trim():"",
       localidad:ciudadM?ciudadM[1].trim():"",
@@ -8240,7 +8255,10 @@ export default function App(){
                     if(yaPendiente)continue; // ya está cargada y pendiente, no duplicar
                     await addDoc(collection(db,"colectas"),{
                       nroSeguimiento:et.nroSeguimiento,
+                      nroVenta:et.nroVenta||"",
+                      nroPackId:et.nroPackId||"",
                       destinatario:et.destinatario||"",
+                      usuario:et.usuario||"",
                       direccion:et.direccion||"",
                       cp:et.cp||"",
                       localidad:et.localidad||"",
@@ -8258,19 +8276,20 @@ export default function App(){
                   try{
                     await procesarConMLArmado(f,"Colecta",setColectaProgMsg);
                   }catch(mlErr){
-                    mostrarToast("ML Armado no disponible — intentá de nuevo en unos segundos");
+                    agregarAlerta("error","ML Armado no disponible — intentá de nuevo en unos segundos",true);
                   }
                 }
                 const partes=[];
                 if(cargarColectas)partes.push(nuevas+" colecta(s) nueva(s) pendiente(s)");
                 if(procesarArmado)partes.push("PDF procesado");
-                if(partes.length)mostrarToast(partes.join(" · "));
-                // Aviso persistente (no se pierde como el toast) si alguna etiqueta no se pudo reconocer
+                // Confirmación persistente (no un toast de 2.5s que se pierde detrás del diálogo
+                // nativo de "guardar archivo" que dispara la descarga del PDF anotado)
+                if(partes.length)agregarAlerta("info","✅ "+partes.join(" · "),true);
                 if(noProcesadas.length){
                   const detalle=noProcesadas.map(n=>"pág. "+n.pagina+(n.packId?" (Pack ID "+n.packId+")":"")).join(", ");
                   agregarAlerta("error",`⚠️ ${noProcesadas.length} colecta(s) NO se pudieron cargar del PDF — ${detalle}. Revisar manualmente.`,true);
                 }
-              }catch(err){mostrarToast("Error: "+err.message);}
+              }catch(err){agregarAlerta("error","Error: "+err.message,true);}
               setColectaProgMsg("");
               setLoading(false);
             }}
