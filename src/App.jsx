@@ -6021,7 +6021,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
   const [filTipo,setFilTipo]=useState("TODOS");
   const [filTurno,setFilTurno]=useState("TODOS");
   const [busqueda,setBusqueda]=useState("");
-  const [colectasAbierto,setColectasAbierto]=useState(false);
+  const [colectasArmadasHoy,setColectasArmadasHoy]=useState([]);
 
   const [camara,setCamara]=useState(false);
   // BarcodeDetector solo existe en Chrome Android — ocultar botón si no hay soporte
@@ -6072,6 +6072,28 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
 
   // Colectas pendientes de armar, ordenadas por fecha (más antiguas primero) para monitorear demoras
   const colectasOrdenadas=useMemo(()=>[...colectas].sort((a,b)=>(a.fecha||"").localeCompare(b.fecha||"")),[colectas]);
+
+  // Colectas armadas en la fecha seleccionada (listener local, para mostrar en el listado)
+  useEffect(()=>{
+    if(!fecha)return;
+    const q=query(collection(db,"colectas"),where("estado","==","armada"),where("fechaArmado","==",fecha));
+    const unsub=onSnapshot(q,snap=>setColectasArmadasHoy(snap.docs.map(d=>({id:d.id,...d.data(),_isColecta:true}))),err=>console.error("colectasArmadas:",err));
+    return()=>unsub();
+  },[fecha]);
+
+  // Cómputos por logística para las cards de resumen
+  const statsPorLog=useMemo(()=>{
+    const m={};
+    todosLista.forEach(e=>{
+      const k=e.trans||"Sin asignar";
+      if(!m[k])m[k]={flex:{total:0,arm:0},noflex:{total:0,arm:0}};
+      const esFlex=e.origen==="ML";
+      if(esFlex){m[k].flex.total++;if(e.preparado)m[k].flex.arm++;}
+      else{m[k].noflex.total++;if(e.preparado)m[k].noflex.arm++;}
+    });
+    return m;
+  },[todosLista]);
+
   const pct=total>0?Math.round(preparados/total*100):0;
 
   // ── Abre el panel de armadores para un envío específico ───────────
@@ -6466,58 +6488,76 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
             <span style={{color:"#4b5563",fontSize:"0.72rem",marginLeft:"4px"}}>{total} · {preparados} prep.</span>
           </div>
 
-          {/* Resumen */}
-          <div style={{display:"flex",gap:"8px",marginBottom:"0.75rem"}}>
-            <div style={{...S.card,padding:"0.7rem 1rem",flex:1,borderLeft:"3px solid #6366f1"}}>
-              <div style={{color:"#6366f1",fontWeight:800,fontSize:"1.5rem",lineHeight:1}}>{total}</div>
-              <div style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase",marginTop:"2px"}}>Total</div>
-              <div style={{display:"flex",gap:"4px",marginTop:"4px",flexWrap:"wrap"}}>
-                <span style={{background:"#0d1c04",color:"#84cc16",border:"1px solid #84cc16",padding:"1px 6px",borderRadius:"4px",fontSize:"9px",fontWeight:700}}>F {flexFecha.length}</span>
-                <span style={{background:"#12172a",color:"#6366f1",border:"1px solid #6366f1",padding:"1px 6px",borderRadius:"4px",fontSize:"9px",fontWeight:700}}>NF {deFecha.length}</span>
-              </div>
-            </div>
-            <div style={{...S.card,padding:"0.7rem 1rem",flex:1,borderLeft:"3px solid #10b981"}}>
-              <div style={{color:"#10b981",fontWeight:800,fontSize:"1.5rem",lineHeight:1}}>{preparados}</div>
-              <div style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase",marginTop:"2px"}}>Preparados</div>
-              <div style={{display:"flex",gap:"4px",marginTop:"4px"}}>
-                <span style={{color:"#84cc16",fontSize:"9px",fontWeight:700}}>F:{prepFlex}</span>
-                <span style={{color:"#6366f1",fontSize:"9px",fontWeight:700}}>NF:{prepNoflex}</span>
-              </div>
-            </div>
-            <div style={{...S.card,padding:"0.7rem 1rem",flex:1,borderLeft:"3px solid #f59e0b"}}>
-              <div style={{color:"#f59e0b",fontWeight:800,fontSize:"1.5rem",lineHeight:1}}>{total-preparados}</div>
-              <div style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase",marginTop:"2px"}}>Pendientes</div>
-            </div>
-            <div onClick={()=>colectas.length>0&&setColectasAbierto(v=>!v)} style={{...S.card,padding:"0.7rem 1rem",flex:1,borderLeft:"3px solid #a78bfa",cursor:colectas.length>0?"pointer":"default",userSelect:"none"}}>
-              <div style={{display:"flex",alignItems:"baseline",gap:"6px"}}>
-                <div style={{color:"#a78bfa",fontWeight:800,fontSize:"1.5rem",lineHeight:1}}>{colectas.length}</div>
-                {colectas.length>0&&<span style={{color:"#6b7280",fontSize:"0.7rem"}}>{colectasAbierto?"▲":"▼"}</span>}
-              </div>
-              <div style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase",marginTop:"2px"}}>📋 Colectas pend.</div>
-            </div>
-            <div style={{...S.card,padding:"0.7rem 1rem",flex:2}}>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:"5px"}}>
-                <span style={{color:"#6b7280",fontSize:"0.6rem",textTransform:"uppercase"}}>Progreso</span>
-                <span style={{color:pct>=80?"#10b981":pct>=50?"#f59e0b":"#f87171",fontWeight:700,fontSize:"0.8rem"}}>{pct}%</span>
-              </div>
-              <div style={{height:"10px",background:"#0f1420",borderRadius:"5px",overflow:"hidden"}}>
-                <div style={{width:pct+"%",height:"100%",background:pct>=80?"#10b981":pct>=50?"#f59e0b":"#f87171",borderRadius:"5px",transition:"width 0.3s"}}/>
-              </div>
-            </div>
-          </div>
-
-          {/* Panel de colectas pendientes — monitoreo */}
-          {colectasAbierto&&colectas.length>0&&(
-            <div style={{...S.card,padding:"0.6rem 0.8rem",marginBottom:"0.75rem",border:"1px solid #a78bfa44",maxHeight:"260px",overflowY:"auto"}}>
-              <div style={{color:"#a78bfa",fontWeight:700,fontSize:"0.72rem",textTransform:"uppercase",marginBottom:"0.4rem"}}>Colectas pendientes de armar ({colectasOrdenadas.length})</div>
-              {colectasOrdenadas.map(c=>(
-                <div key={c.id||c.nroSeguimiento} style={{display:"flex",alignItems:"center",gap:"8px",padding:"0.3rem 0",borderBottom:"1px solid #1a1f2e",fontSize:"0.74rem"}}>
-                  <span style={{color:"#6b7280",minWidth:"68px"}}>{c.fecha?fmtCorta(c.fecha):"sin fecha"}</span>
-                  <span style={{color:"#e5e7eb",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.destinatario||"—"}</span>
-                  <span style={{color:"#4b5563",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.direccion}{c.localidad?" · "+c.localidad:""}</span>
-                  <span style={{color:"#a78bfa",fontFamily:"monospace",fontSize:"0.68rem"}}>{c.nroSeguimiento}</span>
+          {/* ── Barra de resumen (Opción B) ─────────────────────────────── */}
+          {(()=>{
+            const colTotal=colectas.length+colectasArmadasHoy.length;
+            const colArm=colectasArmadasHoy.length;
+            const colPend=colectas.length;
+            const flexPend=flexFecha.filter(e=>!e.preparado).length;
+            const noflexPend=deFecha.filter(e=>!e.preparado).length;
+            const pctFlex=flexFecha.length>0?Math.round(prepFlex/flexFecha.length*100):0;
+            const pctNoFlex=deFecha.length>0?Math.round(prepNoflex/deFecha.length*100):0;
+            const pctCol=colTotal>0?Math.round(colArm/colTotal*100):0;
+            const cols=[
+              {label:"Total",pend:total-preparados,arm:preparados,tot:total,pct,color:"#6366f1",bar:"#6366f1"},
+              {label:"FLEX",pend:flexPend,arm:prepFlex,tot:flexFecha.length,pct:pctFlex,color:"#84cc16",bar:"#84cc16"},
+              {label:"NO FLEX",pend:noflexPend,arm:prepNoflex,tot:deFecha.length,pct:pctNoFlex,color:"#38bdf8",bar:"#38bdf8"},
+              {label:"📋 Colectas",pend:colPend,arm:colArm,tot:colTotal,pct:pctCol,color:"#a78bfa",bar:"#a78bfa"},
+            ];
+            return(
+              <div style={{...S.card,padding:"0",marginBottom:"0.75rem",overflow:"hidden"}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)"}}>
+                  {cols.map((c,i)=>(
+                    <div key={c.label} style={{padding:"0.65rem 0.7rem",borderRight:i<3?"1px solid #1a1f2e":"none",position:"relative"}}>
+                      <div style={{fontSize:"0.55rem",color:"#6b7280",textTransform:"uppercase",fontWeight:700,letterSpacing:".05em",marginBottom:"2px"}}>{c.label}</div>
+                      <div style={{display:"flex",alignItems:"baseline",gap:"4px"}}>
+                        <span style={{fontSize:"1.4rem",fontWeight:800,color:c.color,lineHeight:1}}>{c.pend}</span>
+                        <span style={{fontSize:"0.58rem",color:"#4b5563"}}>pend</span>
+                      </div>
+                      <div style={{fontSize:"0.62rem",color:"#6b7280",marginTop:"1px"}}>{c.arm}/{c.tot} arm.</div>
+                      <div style={{marginTop:"5px",height:"3px",background:"#1a1f2e",borderRadius:"2px",overflow:"hidden"}}>
+                        <div style={{width:c.pct+"%",height:"100%",background:c.bar,borderRadius:"2px",transition:"width .3s"}}/>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
+            );
+          })()}
+
+          {/* ── Cards por logística ──────────────────────────────────────── */}
+          {Object.keys(statsPorLog).length>0&&(
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:"8px",marginBottom:"0.75rem"}}>
+              {Object.entries(statsPorLog).sort(([a],[b])=>a.localeCompare(b)).map(([log,st])=>{
+                const lcD=lc[log]||{color:"#6b7280",bg:"#1a1f2e"};
+                const flexPendL=st.flex.total-st.flex.arm;
+                const noflexPendL=st.noflex.total-st.noflex.arm;
+                const totPendL=flexPendL+noflexPendL;
+                return(
+                  <div key={log} style={{...S.card,padding:"0",overflow:"hidden",borderLeft:"3px solid "+(lcD.color||"#6b7280")}}>
+                    <div style={{padding:"0.5rem 0.7rem",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #1a1f2e"}}>
+                      <span style={{fontWeight:700,fontSize:"0.75rem",color:lcD.color||"#e5e7eb"}}>{log}</span>
+                      <span style={{fontSize:"0.68rem",color:"#f59e0b",fontWeight:700}}>{totPendL} pend</span>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderTop:"none"}}>
+                      {st.flex.total>0&&(
+                        <div style={{padding:"0.4rem 0.6rem",borderRight:"1px solid #1a1f2e"}}>
+                          <div style={{fontSize:"0.52rem",color:"#84cc16",fontWeight:700,textTransform:"uppercase",marginBottom:"1px"}}>FLEX</div>
+                          <div style={{fontSize:"0.88rem",fontWeight:800,color:"#84cc16"}}>{flexPendL}</div>
+                          <div style={{fontSize:"0.58rem",color:"#4b5563"}}>{st.flex.arm}/{st.flex.total} arm</div>
+                        </div>
+                      )}
+                      {st.noflex.total>0&&(
+                        <div style={{padding:"0.4rem 0.6rem",gridColumn:st.flex.total===0?"1/3":"auto"}}>
+                          <div style={{fontSize:"0.52rem",color:"#38bdf8",fontWeight:700,textTransform:"uppercase",marginBottom:"1px"}}>NO FX</div>
+                          <div style={{fontSize:"0.88rem",fontWeight:800,color:"#38bdf8"}}>{noflexPendL}</div>
+                          <div style={{fontSize:"0.58rem",color:"#4b5563"}}>{st.noflex.arm}/{st.noflex.total} arm</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -6685,6 +6725,67 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
               </div>
             );
           })}
+
+          {/* ── Grupo Colectas en el listado ─────────────────────────────── */}
+          {(()=>{
+            // Visible salvo que filLog sea una logística específica, o filTipo=FLEX
+            if(filLog!=="TODOS"||filTipo==="FLEX")return null;
+            const pendientes=colectasOrdenadas.filter(c=>{
+              if(busqueda){const s=norm(busqueda);return norm(c.destinatario||"").includes(s)||(c.nroSeguimiento||"").includes(s);}
+              return true;
+            });
+            const armadasHoy=colectasArmadasHoy.filter(c=>{
+              if(soloPendientes)return false; // si filtra solo pendientes, no mostrar armadas
+              if(busqueda){const s=norm(busqueda);return norm(c.destinatario||"").includes(s)||(c.nroSeguimiento||"").includes(s);}
+              return true;
+            });
+            if(pendientes.length===0&&armadasHoy.length===0)return null;
+            const items=[...pendientes,...armadasHoy];
+            return(
+              <div style={{marginBottom:"16px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}>
+                  <div style={{flex:1,height:"1px",background:"#1a1f2e"}}/>
+                  <div style={{background:"#1e1433",color:"#a78bfa",padding:"2px 12px",borderRadius:"10px",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>
+                    📋 Colectas · {armadasHoy.length}/{items.length}
+                  </div>
+                  <div style={{flex:1,height:"1px",background:"#1a1f2e"}}/>
+                </div>
+                <div style={{display:"grid",gap:"6px"}}>
+                  {items.map(c=>{
+                    const esArmada=c.estado==="armada";
+                    return(
+                      <div key={c.id||c.nroSeguimiento} style={{...S.card,overflow:"hidden",opacity:esArmada?0.6:1,borderColor:esArmada?"#4c1d95":"#3b1d6e",borderLeft:"3px solid #a78bfa"}}>
+                        <div style={{padding:"10px 14px",display:"flex",alignItems:"flex-start",gap:"10px"}}>
+                          <div style={{width:"26px",height:"26px",borderRadius:"7px",background:esArmada?"#1e1433":"#0f1420",border:"2px solid "+(esArmada?"#7c3aed":"#4c1d95"),display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:"2px"}}>
+                            <span style={{color:"#a78bfa",fontSize:"13px",lineHeight:1}}>{esArmada?"✓":"📋"}</span>
+                          </div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{display:"flex",gap:"4px",flexWrap:"wrap",marginBottom:"3px"}}>
+                              {c.fecha&&c.fecha!==fecha&&<Bdg label={fmtCorta(c.fecha)} bg="#1a1f2e" t="#f59e0b"/>}
+                              {esArmada&&<Bdg label={"✓ armada"+(c.armadorNombre?" · "+c.armadorNombre:"")} bg="#1e1433" t="#a78bfa"/>}
+                            </div>
+                            <div style={{color:"#e5e7eb",fontSize:"0.85rem",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.destinatario||c.direccion||"—"}</div>
+                            <div style={{color:"#6b7280",fontSize:"0.72rem",marginTop:"1px",fontFamily:"monospace"}}>{c.nroSeguimiento}</div>
+                          </div>
+                          <button
+                            onClick={()=>!esArmada&&abrirPanelArmador({...c,_isColecta:true})}
+                            disabled={esArmada}
+                            title={esArmada?"Ya armada":"Asignar armador"}
+                            style={{flexShrink:0,width:"34px",height:"34px",borderRadius:"8px",display:"flex",alignItems:"center",justifyContent:"center",cursor:esArmada?"default":"pointer",fontSize:"0.95rem",
+                              background:esArmada?"#1e1433":"#0f1420",
+                              border:"1px solid "+(esArmada?"#4c1d95":"#3b1d6e"),
+                              color:esArmada?"#7c3aed":"#a78bfa",
+                              transition:"all .15s",opacity:esArmada?0.5:1}}>
+                            {esArmada?"✓":"📦"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
         </>)}
 
       </div>
