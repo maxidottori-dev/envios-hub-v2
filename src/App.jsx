@@ -5304,10 +5304,11 @@ function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armado
         )}
 
         {/* Selector de controlador (solo si hay armadores configurados) */}
-        {sesionActiva&&armadores.length>1&&(
+        {(()=>{const ctrls=(armadores.some(a=>a.puedeControlar)?armadores.filter(a=>a.puedeControlar):armadores).filter(a=>a.id!==armador?.id);
+        return sesionActiva&&ctrls.length>0&&(
           <div style={{...S.card,padding:"0.6rem 0.8rem",marginBottom:"0.75rem",display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
             <span style={{fontSize:"0.58rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",whiteSpace:"nowrap"}}>🔍 Ctrl:</span>
-            {armadores.filter(a=>a.id!==armador.id).map(a=>(
+            {ctrls.map(a=>(
               <button key={a.id} onClick={()=>setControladorSel(c=>c?.id===a.id?null:a)}
                 style={{padding:"3px 9px",borderRadius:"6px",fontWeight:700,fontSize:"0.72rem",cursor:"pointer",
                   background:controladorSel?.id===a.id?"#13102a":"#12172a",
@@ -5316,9 +5317,9 @@ function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armado
                 {a.nombre}
               </button>
             ))}
-            {controladorSel&&<span style={{color:"#6366f1",fontSize:"0.65rem",fontWeight:700}}>✓ {controladorSel.nombre}</span>}
+            {controladorSel&&<span style={{color:"#10b981",fontSize:"0.65rem",fontWeight:700}}>✓ {controladorSel.nombre}</span>}
           </div>
-        )}
+        );})()}
 
         {/* Input escaneo */}
         <div style={{...S.card,padding:"0.85rem 1rem",marginBottom:"0.75rem",border:"1px solid #6366f133"}}>
