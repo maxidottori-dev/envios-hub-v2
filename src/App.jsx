@@ -6299,7 +6299,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
       if(candidatos.length===0){
         const candColecta=buscarColecta();
         if(candColecta.length>0){
-          ejecutarArmadoColecta(candColecta[0].c,armadorActivo);
+          ejecutarArmadoColecta(candColecta[0].c,armadorActivo,controladorSel||null);
           setSesionContador(p=>p+1);
           resetArmadorTimer();
           beepOK();
@@ -6313,7 +6313,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
         setResultado({ok:"ya",envio:found,msg:"Ya preparado por "+found.armadorNombre});
         setTimeout(()=>setResultado(null),4000);return;
       }
-      ejecutarArmado(found,armadorActivo,found.bultos||1);
+      ejecutarArmado(found,armadorActivo,found.bultos||1,controladorSel||null);
       setSesionContador(p=>p+1);
       resetArmadorTimer(); // reinicia el contador de inactividad
       beepOK();
@@ -6607,7 +6607,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
         </div>
       </div>
 
-      <div style={{padding:"0.85rem 1rem",maxWidth:"700px",margin:"0 auto"}}>
+      <div style={{padding:"0.85rem 1rem"}}>
 
         {/* ═══════════════ SUB-TAB ESCANEO ═══════════════ */}
         {subTab==="escaneo"&&(<>
@@ -6697,7 +6697,81 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
             </div>
           )}
 
-          {/* Input escaneo */}
+          {/* ── FILA 1: Controlador + Armadores ── */}
+          <div style={{display:"flex",gap:"8px",marginBottom:"0.75rem",alignItems:"flex-start",flexWrap:"wrap"}}>
+
+            {/* Controlador — siempre visible, requerido */}
+            {armadores.length>0&&(
+              <div style={{...S.card,padding:"0.75rem 1rem",border:"1px solid "+(controladorSel?"#10b98133":"#f59e0b55"),flexShrink:0,minWidth:"170px"}}>
+                <div style={{fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:"6px",display:"flex",alignItems:"center",gap:"5px",
+                  color:controladorSel?"#10b981":"#f59e0b"}}>
+                  🔍 Controlador
+                  {!controladorSel&&<span style={{background:"#7c2d12",color:"#fed7aa",fontSize:"0.55rem",fontWeight:700,padding:"1px 5px",borderRadius:"3px"}}>requerido</span>}
+                  {controladorSel&&<button onClick={()=>setControladorSel(null)} style={{marginLeft:"auto",background:"none",border:"none",color:"#6b7280",cursor:"pointer",fontSize:"0.68rem",fontWeight:700,lineHeight:1,padding:"0 2px"}}>✕</button>}
+                </div>
+                <div style={{display:"flex",gap:"5px",flexWrap:"wrap"}}>
+                  {armadores.map(arm=>(
+                    <button key={arm.id} onClick={()=>setControladorSel(c=>c?.id===arm.id?null:arm)}
+                      style={{padding:"6px 11px",borderRadius:"7px",fontWeight:700,fontSize:"0.78rem",cursor:"pointer",
+                        background:controladorSel?.id===arm.id?"#064e3b":"#12172a",
+                        border:"1px solid "+(controladorSel?.id===arm.id?"#10b981":"#252d40"),
+                        color:controladorSel?.id===arm.id?(arm.color||"#34d399"):"#9ca3af"}}>
+                      {arm.nombre}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Armadores */}
+            {armadores.length>0&&(
+              <div style={{...S.card,padding:"0.75rem 1rem",flex:1,border:"1px solid "+(armadorActivo?"#065f46":"#1a1f2e"),minWidth:"220px"}}>
+                {armadorActivo?(
+                  <div style={{display:"flex",alignItems:"center",gap:"10px",flexWrap:"wrap"}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:"0.6rem",color:"#10b981",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:"2px"}}>🔒 Armador activo</div>
+                      <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
+                        <span style={{fontWeight:900,fontSize:"1.1rem",color:armadorActivo.color||"#e5e7eb"}}>{armadorActivo.nombre}</span>
+                        {sesionContador>0&&<span style={{background:"#041f14",color:"#10b981",border:"1px solid #065f46",padding:"2px 10px",borderRadius:"20px",fontSize:"0.75rem",fontWeight:700}}>{sesionContador} pedido{sesionContador!==1?"s":""}</span>}
+                      </div>
+                    </div>
+                    <button onClick={()=>{if(armadorTimerRef.current)clearTimeout(armadorTimerRef.current);setArmadorActivo(null);setSesionContador(0);if(inputRef.current)inputRef.current.focus();}}
+                      style={{padding:"8px 16px",borderRadius:"8px",background:"#1c0404",border:"1px solid #7f1d1d",color:"#f87171",cursor:"pointer",fontWeight:700,fontSize:"0.8rem",flexShrink:0}}>
+                      Liberar
+                    </button>
+                    <div style={{width:"100%",display:"flex",gap:"6px",flexWrap:"wrap",marginTop:"6px"}}>
+                      {armadores.filter(a=>a.id!==armadorActivo.id).map(arm=>(
+                        <button key={arm.id} onClick={()=>{setArmadorActivo(arm);setSesionContador(0);resetArmadorTimer();if(inputRef.current)inputRef.current.focus();}}
+                          style={{padding:"5px 12px",borderRadius:"8px",background:"#12172a",border:"1px solid #252d40",color:arm.color||"#9ca3af",cursor:"pointer",fontSize:"0.78rem",fontWeight:600}}>
+                          {arm.nombre}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ):(
+                  <>
+                    <div style={{fontSize:"0.6rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:"8px"}}>
+                      ¿Quién va a escanear? — tocá tu nombre para activarte
+                    </div>
+                    <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
+                      {armadores.map((arm,i)=>(
+                        <button key={arm.id}
+                          onClick={()=>{setArmadorActivo(arm);setSesionContador(0);resetArmadorTimer();if(inputRef.current)inputRef.current.focus();}}
+                          style={{padding:"8px 14px",borderRadius:"8px",background:"#12172a",border:"2px solid "+(ultimoArmador?.id===arm.id?"#6366f1":"#252d40"),
+                            color:arm.color||"#e5e7eb",cursor:"pointer",fontWeight:700,fontSize:"0.85rem",position:"relative"}}>
+                          <span style={{fontSize:"0.6rem",color:"#374151",marginRight:"5px"}}>{i+1}</span>
+                          {arm.nombre}
+                          {ultimoArmador?.id===arm.id&&<span style={{position:"absolute",top:"-6px",right:"6px",fontSize:"0.5rem",color:"#6366f1",fontWeight:700,background:"#0f1420",padding:"0 3px"}}>último</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── FILA 2: Scan ── */}
           <div style={{...S.card,padding:"0.85rem 1rem",marginBottom:"0.75rem",border:"1px solid #6366f133"}}>
             <div style={{color:"#a78bfa",fontWeight:700,fontSize:"0.7rem",textTransform:"uppercase",letterSpacing:".06em",marginBottom:"8px"}}>
               Escanear pedido
@@ -6706,19 +6780,25 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
                 :ultimoArmador&&<span style={{color:"#4b5563",fontWeight:400,marginLeft:"8px",textTransform:"none"}}>· último: <span style={{color:ultimoArmador.color||"#a78bfa",fontWeight:600}}>{ultimoArmador.nombre}</span></span>
               }
             </div>
-            <div style={{display:"flex",gap:"8px",marginBottom:(camara||resultado)?"8px":"0"}}>
+            <div style={{display:"flex",gap:"8px",marginBottom:(camara||resultado||!controladorSel)?"8px":"0"}}>
               <input ref={inputRef} value={qrInput} onChange={e=>setQrInput(e.target.value)}
-                onKeyDown={e=>{if(e.key==="Enter"){procesarScan(qrInput);setQrInput("");}}}
+                onKeyDown={e=>{if(e.key==="Enter"&&controladorSel){procesarScan(qrInput);setQrInput("");}}}
                 placeholder="Escaneá el código de barras o ingresá el nro..."
                 style={{...S.input,flex:1,fontSize:"0.88rem",padding:"10px 12px"}} autoComplete="off"/>
-              <button onClick={()=>{procesarScan(qrInput);setQrInput("");}}
-                style={{...S.btn(true),background:"#12172a",border:"1px solid #6366f1",color:"#a78bfa",padding:"8px 14px",fontWeight:700,fontSize:"0.8rem"}}>OK</button>
+              <button onClick={()=>{if(controladorSel){procesarScan(qrInput);setQrInput("");}}}
+                disabled={!controladorSel}
+                style={{...S.btn(true),background:controladorSel?"#12172a":"#0a0e1a",border:"1px solid "+(controladorSel?"#6366f1":"#252d40"),color:controladorSel?"#a78bfa":"#374151",padding:"8px 14px",fontWeight:700,fontSize:"0.8rem",cursor:controladorSel?"pointer":"not-allowed"}}>OK</button>
               {soportaCamera&&(
-                <button onClick={()=>setCamara(p=>!p)}
+                <button onClick={()=>controladorSel&&setCamara(p=>!p)}
                   title="Escanear con cámara"
-                  style={{...S.btn(camara),background:camara?"#0d1c04":"#0f1420",border:"1px solid "+(camara?"#84cc16":"#252d40"),color:camara?"#84cc16":"#6b7280",padding:"8px 12px",fontSize:"1.1rem"}}>📷</button>
+                  style={{...S.btn(camara),background:camara?"#0d1c04":"#0f1420",border:"1px solid "+(camara?"#84cc16":"#252d40"),color:camara?"#84cc16":(controladorSel?"#6b7280":"#374151"),padding:"8px 12px",fontSize:"1.1rem",cursor:controladorSel?"pointer":"not-allowed"}}>📷</button>
               )}
             </div>
+            {!controladorSel&&(
+              <div style={{fontSize:"0.72rem",color:"#f97316",marginBottom:"4px",display:"flex",alignItems:"center",gap:"4px"}}>
+                ⚠ Seleccioná un controlador arriba para habilitar el escaneo
+              </div>
+            )}
             {camara&&(
               <div style={{marginBottom:"8px",borderRadius:"10px",overflow:"hidden",background:"#000",position:"relative"}}>
                 <video ref={videoRef} style={{width:"100%",maxHeight:"220px",objectFit:"cover",display:"block"}} playsInline muted/>
@@ -6738,56 +6818,6 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
               </div>
             )}
           </div>
-
-          {/* ── Botonera de armadores siempre visible ── */}
-          {armadores.length>0&&(
-            <div style={{...S.card,padding:"0.75rem 1rem",marginBottom:"0.75rem",border:"1px solid "+(armadorActivo?"#065f46":"#1a1f2e")}}>
-              {armadorActivo?(
-                /* Banner armador activo */
-                <div style={{display:"flex",alignItems:"center",gap:"10px",flexWrap:"wrap"}}>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:"0.6rem",color:"#10b981",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:"2px"}}>🔒 Armador activo</div>
-                    <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
-                      <span style={{fontWeight:900,fontSize:"1.1rem",color:armadorActivo.color||"#e5e7eb"}}>{armadorActivo.nombre}</span>
-                      {sesionContador>0&&<span style={{background:"#041f14",color:"#10b981",border:"1px solid #065f46",padding:"2px 10px",borderRadius:"20px",fontSize:"0.75rem",fontWeight:700}}>{sesionContador} pedido{sesionContador!==1?"s":""}</span>}
-                    </div>
-                  </div>
-                  <button onClick={()=>{if(armadorTimerRef.current)clearTimeout(armadorTimerRef.current);setArmadorActivo(null);setSesionContador(0);if(inputRef.current)inputRef.current.focus();}}
-                    style={{padding:"8px 16px",borderRadius:"8px",background:"#1c0404",border:"1px solid #7f1d1d",color:"#f87171",cursor:"pointer",fontWeight:700,fontSize:"0.8rem",flexShrink:0}}>
-                    Liberar
-                  </button>
-                  {/* Cambiar a otro armador rápido */}
-                  <div style={{width:"100%",display:"flex",gap:"6px",flexWrap:"wrap",marginTop:"6px"}}>
-                    {armadores.filter(a=>a.id!==armadorActivo.id).map(arm=>(
-                      <button key={arm.id} onClick={()=>{setArmadorActivo(arm);setSesionContador(0);resetArmadorTimer();if(inputRef.current)inputRef.current.focus();}}
-                        style={{padding:"5px 12px",borderRadius:"8px",background:"#12172a",border:"1px solid #252d40",color:arm.color||"#9ca3af",cursor:"pointer",fontSize:"0.78rem",fontWeight:600}}>
-                        {arm.nombre}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ):(
-                /* Selector inicial */
-                <>
-                  <div style={{fontSize:"0.6rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:"8px"}}>
-                    ¿Quién va a escanear? — tocá tu nombre para activarte
-                  </div>
-                  <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
-                    {armadores.map((arm,i)=>(
-                      <button key={arm.id}
-                        onClick={()=>{setArmadorActivo(arm);setSesionContador(0);resetArmadorTimer();if(inputRef.current)inputRef.current.focus();}}
-                        style={{padding:"8px 14px",borderRadius:"8px",background:"#12172a",border:"2px solid "+(ultimoArmador?.id===arm.id?"#6366f1":"#252d40"),
-                          color:arm.color||"#e5e7eb",cursor:"pointer",fontWeight:700,fontSize:"0.85rem",position:"relative"}}>
-                        <span style={{fontSize:"0.6rem",color:"#374151",marginRight:"5px"}}>{i+1}</span>
-                        {arm.nombre}
-                        {ultimoArmador?.id===arm.id&&<span style={{position:"absolute",top:"-6px",right:"6px",fontSize:"0.5rem",color:"#6366f1",fontWeight:700,background:"#0f1420",padding:"0 3px"}}>último</span>}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
 
           {/* Filtros */}
           <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"0.5rem",alignItems:"center"}}>
