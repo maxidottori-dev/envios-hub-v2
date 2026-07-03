@@ -5010,24 +5010,54 @@ const MOTIVOS_FALLO=[
 // ════════════════════════════════════════════════════════════════════
 // VISTA ARMADOR — escaneo simple para celular propio, sesión personal
 // ════════════════════════════════════════════════════════════════════
-function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armador}){
+function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armador,armadores=[]}){
   // "armado" = escaneo simple al armar; "salida" = TabSalida (despacho a logística) — mismo usuario, sin re-loguear.
   const [modo,setModo]=useState("armado");
   const [qrInput,setQrInput]=useState("");
   const [resultado,setResultado]=useState(null);
+  const [overlayRes,setOverlayRes]=useState(null); // fullscreen feedback (ok|false|"ya")
   const [sesionContador,setSesionContador]=useState(0);
+  const [controladorSel,setControladorSel]=useState(null); // sticky por sesión
+  const [sesionActiva,setSesionActiva]=useState(false);
+  const [sesionInicioTs,setSesionInicioTs]=useState(null);
   const [camara,setCamara]=useState(false);
   const soportaCamera=typeof window!=="undefined"&&"mediaDevices" in navigator&&!!navigator.mediaDevices?.getUserMedia;
   const inputRef=useRef(null);
   const videoRef=useRef(null);
   const canvasRef=useRef(null);
+  const sesionGapRef=useRef(null); // timer de inactividad de sesión
+  const GAP_MS=5*60*1000; // 5 minutos sin escanear → cierra sesión
+
+  const resetGapTimer=useCallback(()=>{
+    if(sesionGapRef.current)clearTimeout(sesionGapRef.current);
+    sesionGapRef.current=setTimeout(()=>{
+      setSesionActiva(false);setSesionInicioTs(null);
+      setResultado({ok:false,msg:"Sesión cerrada por inactividad (5 min)."});
+      setTimeout(()=>setResultado(null),6000);
+    },GAP_MS);
+  },[]);
+
+  const iniciarSesion=useCallback(()=>{
+    setSesionActiva(true);setSesionInicioTs(Date.now());setSesionContador(0);
+    resetGapTimer();
+    if(inputRef.current)inputRef.current.focus();
+  },[resetGapTimer]);
+
+  const cerrarSesion=useCallback(()=>{
+    if(sesionGapRef.current)clearTimeout(sesionGapRef.current);
+    setSesionActiva(false);setSesionInicioTs(null);
+  },[]);
 
   useEffect(()=>{if(inputRef.current)inputRef.current.focus();},[]);
 
   const ejecutarArmado=useCallback((envio,bultos)=>{
     const ts=new Date().toISOString();
+    const ctrl=controladorSel||null;
     setEnvios(pv=>pv.map(e=>e.id===envio.id?{...e,preparado:true,bultos,armadorId:armador.id,armadorNombre:armador.nombre,armadoTs:ts}:e));
-    setResultado({ok:true,envio,bultos,msg:"✓ "+armador.nombre+(bultos>1?" · "+bultos+" bultos":"")});
+    const msg="✓ "+armador.nombre+(bultos>1?" · "+bultos+" bultos":"")+(ctrl?" — ctrl: "+ctrl.nombre:"");
+    setResultado({ok:true,envio,bultos,msg});
+    setOverlayRes({ok:true,msg});
+    setTimeout(()=>setOverlayRes(null),1800);
     setTimeout(()=>setResultado(null),4000);
     if(inputRef.current)inputRef.current.focus();
     addDoc(collection(db,"armados"),{
@@ -5035,6 +5065,7 @@ function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armado
       nroSeguimiento:envio.nroSeguimiento||"",
       nroOrdenTN:String(envio.nroOrdenTN||""),
       armadorId:armador.id,armadorNombre:armador.nombre,
+      controladorId:ctrl?.id||"",controladorNombre:ctrl?.nombre||"",
       ts,fecha:envio.fecha||envio.fechaVenta||"",
       bultos,logistica:envio.trans||"",
       direccion:envio.direccion||"",
@@ -5042,17 +5073,22 @@ function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armado
       esFlex:envio.origen==="ML",
       esEdicion:false,
     }).catch(err=>console.error("Error guardando armado:",err));
-  },[setEnvios,armador]);
+  },[setEnvios,armador,controladorSel]);
 
   // Armado de colectas ML (circuito separado de envíos) — sin panel, directo con el armador fijo de la vista.
   const ejecutarArmadoColecta=useCallback((colecta)=>{
     const ts=new Date().toISOString();
+    const ctrl=controladorSel||null;
     if(setColectas)setColectas(pv=>pv.filter(c=>c.id!==colecta.id));
-    setResultado({ok:true,envio:colecta,bultos:1,msg:"📋 Colecta · "+armador.nombre});
+    const msg="📋 Colecta · "+armador.nombre+(ctrl?" — ctrl: "+ctrl.nombre:"");
+    setResultado({ok:true,envio:colecta,bultos:1,msg});
+    setOverlayRes({ok:true,msg});
+    setTimeout(()=>setOverlayRes(null),1800);
     setTimeout(()=>setResultado(null),4000);
     if(inputRef.current)inputRef.current.focus();
     updateDoc(doc(db,"colectas",colecta.id),{
       estado:"armada",armadorId:armador.id,armadorNombre:armador.nombre,
+      controladorId:ctrl?.id||"",controladorNombre:ctrl?.nombre||"",
       fechaArmado:fechaHoy(),horaArmado:ts,
     }).catch(err=>console.error("Error actualizando colecta:",err));
     addDoc(collection(db,"armados"),{
@@ -5060,13 +5096,14 @@ function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armado
       nroSeguimiento:colecta.nroSeguimiento||"",
       nroOrdenTN:"",
       armadorId:armador.id,armadorNombre:armador.nombre,
+      controladorId:ctrl?.id||"",controladorNombre:ctrl?.nombre||"",
       ts,fecha:colecta.fecha||fechaHoy(),
       bultos:1,logistica:"Colecta",
       direccion:colecta.direccion||"",
       partido:colecta.partido||"",
       esFlex:false,esColecta:true,esEdicion:false,
     }).catch(err=>console.error("Error guardando armado:",err));
-  },[setColectas,armador]);
+  },[setColectas,armador,controladorSel]);
 
   const procesarScan=useCallback((nro)=>{
     const srch=nro.trim().replace(/^#/,"");if(!srch)return;
@@ -5083,23 +5120,31 @@ function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armado
         .filter(x=>x.score>0)
         .sort((a,b)=>b.score-a.score);
       if(candColecta.length===0){
-        setResultado({ok:false,msg:"No encontrado: "+srch.slice(0,20)});
+        const msg="No encontrado: "+srch.slice(0,20);
+        setResultado({ok:false,msg});
+        setOverlayRes({ok:false,msg});
+        setTimeout(()=>setOverlayRes(null),1800);
         setTimeout(()=>setResultado(null),5000);return;
       }
       ejecutarArmadoColecta(candColecta[0].c);
       setSesionContador(p=>p+1);
+      if(sesionActiva)resetGapTimer();
       beepOK();
       return;
     }
     const found=candidatos[0].e;
     if(found.preparado&&found.armadorNombre){
-      setResultado({ok:"ya",envio:found,msg:"Ya preparado por "+found.armadorNombre});
+      const msg="Ya preparado por "+found.armadorNombre;
+      setResultado({ok:"ya",envio:found,msg});
+      setOverlayRes({ok:"ya",msg});
+      setTimeout(()=>setOverlayRes(null),1800);
       setTimeout(()=>setResultado(null),4000);return;
     }
     ejecutarArmado(found,found.bultos||1);
     setSesionContador(p=>p+1);
+    if(sesionActiva)resetGapTimer();
     beepOK();
-  },[envios,colectas,ejecutarArmado,ejecutarArmadoColecta]);
+  },[envios,colectas,ejecutarArmado,ejecutarArmadoColecta,sesionActiva,resetGapTimer]);
 
   // Escaneo QR via cámara — usa BarcodeDetector nativo si está disponible (Chrome/Android);
   // si no existe (Safari/iPhone) decodifica con jsQR leyendo los frames del video por canvas.
@@ -5174,6 +5219,20 @@ function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armado
     <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif",maxWidth:modo==="salida"?"720px":"500px",margin:"0 auto"}}>
       <style>{`*{box-sizing:border-box;}`}</style>
 
+      {/* ── Overlay fullscreen resultado ───────────────────────────── */}
+      {overlayRes&&(
+        <div onClick={()=>setOverlayRes(null)} style={{position:"fixed",inset:0,zIndex:9999,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+          background:overlayRes.ok===true?"rgba(4,31,20,0.96)":overlayRes.ok==="ya"?"rgba(10,14,26,0.96)":"rgba(28,4,4,0.96)",
+          cursor:"pointer"}}>
+          <div style={{fontSize:"5rem",lineHeight:1,marginBottom:"0.5rem"}}>
+            {overlayRes.ok===true?"✓":overlayRes.ok==="ya"?"⏸":"✗"}
+          </div>
+          <div style={{fontSize:"1.1rem",fontWeight:700,color:overlayRes.ok===true?"#34d399":overlayRes.ok==="ya"?"#9ca3af":"#f87171",textAlign:"center",padding:"0 2rem",maxWidth:"340px"}}>
+            {overlayRes.msg}
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div style={{position:"sticky",top:0,zIndex:100,background:"#0f1420",borderBottom:"1px solid #1a1f2e"}}>
         <div style={{padding:"0.7rem 1rem",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
@@ -5202,11 +5261,47 @@ function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armado
         </div>
       ):(
       <div style={{padding:"14px"}}>
-        {/* Contador de sesión */}
-        <div style={{...S.card,padding:"0.9rem 1rem",marginBottom:"0.85rem",textAlign:"center",borderLeft:"3px solid "+(armador.color||"#06b6d4")}}>
-          <div style={{fontWeight:900,fontSize:"2rem",color:armador.color||"#06b6d4",lineHeight:1}}>{sesionContador}</div>
-          <div style={{color:"#6b7280",fontSize:"0.65rem",textTransform:"uppercase",marginTop:"3px"}}>pedido{sesionContador!==1?"s":""} armado{sesionContador!==1?"s":""} hoy</div>
-        </div>
+        {/* Sesión + contador */}
+        {!sesionActiva?(
+          <div style={{...S.card,padding:"1.1rem 1rem",marginBottom:"0.85rem",textAlign:"center",borderLeft:"3px solid "+(armador.color||"#06b6d4")}}>
+            <div style={{color:"#4b5563",fontSize:"0.65rem",textTransform:"uppercase",marginBottom:"0.5rem"}}>Sesión no iniciada</div>
+            <button onClick={iniciarSesion}
+              style={{padding:"0.7rem 2rem",borderRadius:"12px",fontWeight:800,fontSize:"1rem",cursor:"pointer",
+                background:"linear-gradient(135deg,#6366f1,#8b5cf6)",border:"none",color:"#fff",letterSpacing:".02em"}}>
+              ▶ Iniciar sesión
+            </button>
+          </div>
+        ):(
+          <div style={{...S.card,padding:"0.7rem 1rem",marginBottom:"0.85rem",display:"flex",alignItems:"center",gap:"12px",borderLeft:"3px solid "+(armador.color||"#06b6d4")}}>
+            <div style={{flex:1}}>
+              <div style={{display:"flex",alignItems:"baseline",gap:"8px"}}>
+                <span style={{fontWeight:900,fontSize:"2rem",color:armador.color||"#06b6d4",lineHeight:1}}>{sesionContador}</span>
+                <span style={{color:"#6b7280",fontSize:"0.65rem",textTransform:"uppercase"}}>armado{sesionContador!==1?"s":""}</span>
+              </div>
+              {sesionInicioTs&&<div style={{color:"#4b5563",fontSize:"0.62rem",marginTop:"1px"}}>
+                desde {new Date(sesionInicioTs).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})} · cierra en {Math.round(GAP_MS/60000)} min sin escanear
+              </div>}
+            </div>
+            <button onClick={cerrarSesion} style={{padding:"4px 10px",borderRadius:"7px",background:"none",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:"0.7rem",fontWeight:700}}>⏹ Cerrar</button>
+          </div>
+        )}
+
+        {/* Selector de controlador (solo si hay armadores configurados) */}
+        {sesionActiva&&armadores.length>1&&(
+          <div style={{...S.card,padding:"0.6rem 0.8rem",marginBottom:"0.75rem",display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
+            <span style={{fontSize:"0.58rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",whiteSpace:"nowrap"}}>🔍 Ctrl:</span>
+            {armadores.filter(a=>a.id!==armador.id).map(a=>(
+              <button key={a.id} onClick={()=>setControladorSel(c=>c?.id===a.id?null:a)}
+                style={{padding:"3px 9px",borderRadius:"6px",fontWeight:700,fontSize:"0.72rem",cursor:"pointer",
+                  background:controladorSel?.id===a.id?"#13102a":"#12172a",
+                  border:"1px solid "+(controladorSel?.id===a.id?"#6366f1":"#252d40"),
+                  color:controladorSel?.id===a.id?(a.color||"#a78bfa"):"#6b7280"}}>
+                {a.nombre}
+              </button>
+            ))}
+            {controladorSel&&<span style={{color:"#6366f1",fontSize:"0.65rem",fontWeight:700}}>✓ {controladorSel.nombre}</span>}
+          </div>
+        )}
 
         {/* Input escaneo */}
         <div style={{...S.card,padding:"0.85rem 1rem",marginBottom:"0.75rem",border:"1px solid #6366f133"}}>
@@ -6022,6 +6117,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
   const [filTurno,setFilTurno]=useState("TODOS");
   const [busqueda,setBusqueda]=useState("");
   const [colectasArmadasHoy,setColectasArmadasHoy]=useState([]);
+  const [controladorSel,setControladorSel]=useState(null); // sticky por sesión
 
   const [camara,setCamara]=useState(false);
   // BarcodeDetector solo existe en Chrome Android — ocultar botón si no hay soporte
@@ -6052,6 +6148,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
   const todosLista=useMemo(()=>[...deFecha,...flexFecha],[deFecha,flexFecha]);
 
   const filtrados=useMemo(()=>todosLista.filter(e=>{
+    if(filLog==="__COLECTAS__")return false;
     if(filLog!=="TODOS"&&e.trans!==filLog)return false;
     if(filTipo==="FLEX"&&e.origen!=="ML")return false;
     if(filTipo==="NOFLEX"&&e.origen==="ML")return false;
@@ -6120,11 +6217,11 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
   },[]);
 
   // ── Lógica base de confirmación (debe ir ANTES de procesarScan) ───
-  const ejecutarArmado=useCallback((envio,armador,bultos,esEdit=false)=>{
+  const ejecutarArmado=useCallback((envio,armador,bultos,controlador,esEdit=false)=>{
     const ts=new Date().toISOString();
     setEnvios(pv=>pv.map(e=>e.id===envio.id?{...e,preparado:true,bultos,armadorId:armador.id,armadorNombre:armador.nombre,armadoTs:ts}:e));
     setUltimoArmador(armador);
-    setResultado({ok:true,envio,bultos,msg:(esEdit?"✏️ Editado: ":"✓ ")+armador.nombre+(bultos>1?" · "+bultos+" bultos":"")});
+    setResultado({ok:true,envio,bultos,msg:(esEdit?"✏️ Editado: ":"✓ ")+armador.nombre+(bultos>1?" · "+bultos+" bultos":"")+(controlador?" — ctrl: "+controlador.nombre:"")});
     setTimeout(()=>setResultado(null),5000);
     if(inputRef.current)inputRef.current.focus();
     addDoc(collection(db,"armados"),{
@@ -6132,6 +6229,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
       nroSeguimiento:envio.nroSeguimiento||"",
       nroOrdenTN:String(envio.nroOrdenTN||""),
       armadorId:armador.id,armadorNombre:armador.nombre,
+      controladorId:controlador?.id||"",controladorNombre:controlador?.nombre||"",
       ts,fecha:envio.fecha||envio.fechaVenta||"",
       bultos,logistica:envio.trans||"",
       direccion:envio.direccion||"",
@@ -6143,15 +6241,16 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
   },[setEnvios,lc,impresionHabilitada]);
 
   // ── Lógica de confirmación para colectas ML (circuito separado de envios) ──
-  const ejecutarArmadoColecta=useCallback((colecta,armador)=>{
+  const ejecutarArmadoColecta=useCallback((colecta,armador,controlador)=>{
     const ts=new Date().toISOString();
     if(setColectas)setColectas(pv=>pv.filter(c=>c.id!==colecta.id));
     setUltimoArmador(armador);
-    setResultado({ok:true,envio:colecta,bultos:1,msg:"📋 Colecta · "+armador.nombre});
+    setResultado({ok:true,envio:colecta,bultos:1,msg:"📋 Colecta · "+armador.nombre+(controlador?" — ctrl: "+controlador.nombre:"")});
     setTimeout(()=>setResultado(null),5000);
     if(inputRef.current)inputRef.current.focus();
     updateDoc(doc(db,"colectas",colecta.id),{
       estado:"armada",armadorId:armador.id,armadorNombre:armador.nombre,
+      controladorId:controlador?.id||"",controladorNombre:controlador?.nombre||"",
       fechaArmado:fechaHoy(),horaArmado:ts,
     }).catch(err=>console.error("Error actualizando colecta:",err));
     addDoc(collection(db,"armados"),{
@@ -6159,6 +6258,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
       nroSeguimiento:colecta.nroSeguimiento||"",
       nroOrdenTN:"",
       armadorId:armador.id,armadorNombre:armador.nombre,
+      controladorId:controlador?.id||"",controladorNombre:controlador?.nombre||"",
       ts,fecha:colecta.fecha||fechaHoy(),
       bultos:1,logistica:"Colecta",
       direccion:colecta.direccion||"",
@@ -6271,13 +6371,14 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
     const item=scanPendiente;
     const bultos=bultosSel;
     const esEdit=modoEdicion;
+    const ctrl=controladorSel||null;
     setScanPendiente(null);setModoEdicion(false);
     if(item._isColecta){
-      ejecutarArmadoColecta(item,armador);
+      ejecutarArmadoColecta(item,armador,ctrl);
     } else {
-      ejecutarArmado(item,armador,bultos,esEdit);
+      ejecutarArmado(item,armador,bultos,ctrl,esEdit);
     }
-  },[scanPendiente,bultosSel,modoEdicion,ejecutarArmado,ejecutarArmadoColecta]);
+  },[scanPendiente,bultosSel,modoEdicion,controladorSel,ejecutarArmado,ejecutarArmadoColecta]);
 
   useEffect(()=>{if(inputRef.current)inputRef.current.focus();},[]);
 
@@ -6426,6 +6527,26 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
                 <button onClick={()=>setBultosSel(b=>b+1)} style={{width:"38px",height:"38px",borderRadius:"8px",background:"#1a1f2e",border:"1px solid #374151",color:"#e5e7eb",fontSize:"1.3rem",cursor:"pointer"}}>+</button>
                 {bultosSel>1&&<span style={{fontSize:"0.68rem",color:impresionHabilitada?"#f59e0b":"#374151",marginLeft:"4px"}}>{impresionHabilitada?"🖨 "+(bultosSel-1)+" etiqueta"+(bultosSel>2?"s":"")+" a imprimir":"impresión deshabilitada"}</span>}
               </div>}
+              {/* Selector de controlador */}
+              {armadores.length>0&&(
+                <div style={{marginBottom:"0.9rem"}}>
+                  <div style={{fontSize:"0.6rem",color:"#6b7280",textTransform:"uppercase",fontWeight:700,marginBottom:"6px"}}>
+                    🔍 Controlador <span style={{color:"#374151",fontWeight:400,textTransform:"none"}}>— queda fijo hasta que lo cambiés</span>
+                    {controladorSel&&<button onClick={()=>setControladorSel(null)} style={{marginLeft:"8px",background:"none",border:"none",color:"#6366f1",cursor:"pointer",fontSize:"0.68rem",fontWeight:700}}>✕ quitar</button>}
+                  </div>
+                  <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
+                    {armadores.map(arm=>(
+                      <button key={arm.id} onClick={()=>setControladorSel(c=>c?.id===arm.id?null:arm)}
+                        style={{padding:"5px 10px",borderRadius:"7px",fontWeight:700,fontSize:"0.75rem",cursor:"pointer",
+                          background:controladorSel?.id===arm.id?"#13102a":"#12172a",
+                          border:"1px solid "+(controladorSel?.id===arm.id?"#6366f1":"#252d40"),
+                          color:controladorSel?.id===arm.id?(arm.color||"#a78bfa"):"#6b7280"}}>
+                        {arm.nombre}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {/* Botonera armadores */}
               <div style={{marginBottom:"0.85rem"}}>
                 <div style={{fontSize:"0.62rem",color:"#6b7280",textTransform:"uppercase",fontWeight:700,marginBottom:"8px"}}>¿Quién armó este pedido? <span style={{color:"#374151",fontWeight:400,textTransform:"none"}}>— o presioná el número</span></div>
@@ -6499,17 +6620,18 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
             const pctNoFlex=deFecha.length>0?Math.round(prepNoflex/deFecha.length*100):0;
             const pctCol=colTotal>0?Math.round(colArm/colTotal*100):0;
             const cols=[
-              {label:"Total",pend:total-preparados,arm:preparados,tot:total,pct,color:"#6366f1",bar:"#6366f1"},
-              {label:"FLEX",pend:flexPend,arm:prepFlex,tot:flexFecha.length,pct:pctFlex,color:"#84cc16",bar:"#84cc16"},
-              {label:"NO FLEX",pend:noflexPend,arm:prepNoflex,tot:deFecha.length,pct:pctNoFlex,color:"#38bdf8",bar:"#38bdf8"},
-              {label:"📋 Colectas",pend:colPend,arm:colArm,tot:colTotal,pct:pctCol,color:"#a78bfa",bar:"#a78bfa"},
+              {label:"Total",pend:total-preparados,arm:preparados,tot:total,pct,color:"#6366f1",bar:"#6366f1",onClick:()=>{setFilLog("TODOS");setFilTipo("TODOS");}},
+              {label:"FLEX",pend:flexPend,arm:prepFlex,tot:flexFecha.length,pct:pctFlex,color:"#84cc16",bar:"#84cc16",onClick:()=>{setFilLog("TODOS");setFilTipo("FLEX");}},
+              {label:"NO FLEX",pend:noflexPend,arm:prepNoflex,tot:deFecha.length,pct:pctNoFlex,color:"#38bdf8",bar:"#38bdf8",onClick:()=>{setFilLog("TODOS");setFilTipo("NOFLEX");}},
+              {label:"📋 Colectas",pend:colPend,arm:colArm,tot:colTotal,pct:pctCol,color:"#a78bfa",bar:"#a78bfa",onClick:()=>{setFilLog("__COLECTAS__");setFilTipo("TODOS");}},
             ];
+            const activeBar=(filLog==="__COLECTAS__")?3:(filTipo==="FLEX")?1:(filTipo==="NOFLEX")?2:-1;
             return(
               <div style={{...S.card,padding:"0",marginBottom:"0.75rem",overflow:"hidden"}}>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)"}}>
                   {cols.map((c,i)=>(
-                    <div key={c.label} style={{padding:"0.65rem 0.7rem",borderRight:i<3?"1px solid #1a1f2e":"none",position:"relative"}}>
-                      <div style={{fontSize:"0.55rem",color:"#6b7280",textTransform:"uppercase",fontWeight:700,letterSpacing:".05em",marginBottom:"2px"}}>{c.label}</div>
+                    <div key={c.label} onClick={c.onClick} style={{padding:"0.65rem 0.7rem",borderRight:i<3?"1px solid #1a1f2e":"none",position:"relative",cursor:"pointer",background:activeBar===i?"#12172a":"transparent",transition:"background .15s"}}>
+                      <div style={{fontSize:"0.55rem",color:activeBar===i?c.color:"#6b7280",textTransform:"uppercase",fontWeight:700,letterSpacing:".05em",marginBottom:"2px"}}>{c.label}{activeBar===i&&" ▾"}</div>
                       <div style={{display:"flex",alignItems:"baseline",gap:"4px"}}>
                         <span style={{fontSize:"1.4rem",fontWeight:800,color:c.color,lineHeight:1}}>{c.pend}</span>
                         <span style={{fontSize:"0.58rem",color:"#4b5563"}}>pend</span>
@@ -6533,10 +6655,12 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
                 const flexPendL=st.flex.total-st.flex.arm;
                 const noflexPendL=st.noflex.total-st.noflex.arm;
                 const totPendL=flexPendL+noflexPendL;
+                const esFiltroActivo=filLog===log;
                 return(
-                  <div key={log} style={{...S.card,padding:"0",overflow:"hidden",borderLeft:"3px solid "+(lcD.color||"#6b7280")}}>
+                  <div key={log} onClick={()=>setFilLog(esFiltroActivo?"TODOS":log)}
+                    style={{...S.card,padding:"0",overflow:"hidden",borderLeft:"3px solid "+(lcD.color||"#6b7280"),cursor:"pointer",background:esFiltroActivo?(lcD.bg||"#12172a"):"#0f1420",transition:"background .15s"}}>
                     <div style={{padding:"0.5rem 0.7rem",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #1a1f2e"}}>
-                      <span style={{fontWeight:700,fontSize:"0.75rem",color:lcD.color||"#e5e7eb"}}>{log}</span>
+                      <span style={{fontWeight:700,fontSize:"0.75rem",color:lcD.color||"#e5e7eb"}}>{log}{esFiltroActivo&&" ▾"}</span>
                       <span style={{fontSize:"0.68rem",color:"#f59e0b",fontWeight:700}}>{totPendL} pend</span>
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderTop:"none"}}>
@@ -6655,15 +6779,20 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
 
           {/* Filtros */}
           <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"0.5rem",alignItems:"center"}}>
-            <button onClick={()=>setFilLog("TODOS")} style={S.btnSm(filLog==="TODOS")}>Todos</button>
-            {logActivas.map(l=><button key={l} onClick={()=>setFilLog(l)} style={S.btnSm(filLog===l,lc[l]?.color)}>{l}</button>)}
+            <button onClick={()=>{setFilLog("TODOS");setFilTipo("TODOS");}} style={S.btnSm(filLog==="TODOS"&&filTipo==="TODOS")}>Todos</button>
+            {logActivas.map(l=><button key={l} onClick={()=>{setFilLog(filLog===l?"TODOS":l);}} style={S.btnSm(filLog===l,lc[l]?.color)}>{l}</button>)}
+            <button onClick={()=>{setFilLog("__COLECTAS__");setFilTipo("TODOS");}} style={{...S.btnSm(filLog==="__COLECTAS__","#a78bfa")}}>📋 Colectas</button>
             <button onClick={()=>setSoloPendientes(!soloPendientes)} style={{...S.btnSm(soloPendientes,"#f59e0b"),marginLeft:"auto"}}>Solo pendientes</button>
           </div>
           <div style={{display:"flex",gap:"6px",marginBottom:"0.6rem",alignItems:"center"}}>
-            <button onClick={()=>setFilTipo("TODOS")} style={S.btnSm(filTipo==="TODOS")}>Todos</button>
-            <button onClick={()=>setFilTipo("FLEX")} style={{...S.btnSm(filTipo==="FLEX"),background:filTipo==="FLEX"?"#0d1c04":"#0f1420",color:filTipo==="FLEX"?"#84cc16":"#4b7a10",border:"1px solid "+(filTipo==="FLEX"?"#84cc16":"#1a3008")}}>FLEX</button>
-            <button onClick={()=>setFilTipo("NOFLEX")} style={S.btnSm(filTipo==="NOFLEX","#6366f1")}>NO FLEX</button>
-            <span style={{color:"#4b5563",fontSize:"0.68rem",marginLeft:"4px"}}>{filtrados.length} pedidos</span>
+            <button onClick={()=>setFilTipo("TODOS")} style={S.btnSm(filTipo==="TODOS")} disabled={filLog==="__COLECTAS__"}>Todos</button>
+            <button onClick={()=>{setFilTipo("FLEX");if(filLog==="__COLECTAS__")setFilLog("TODOS");}} style={{...S.btnSm(filTipo==="FLEX"),background:filTipo==="FLEX"?"#0d1c04":"#0f1420",color:filTipo==="FLEX"?"#84cc16":"#4b7a10",border:"1px solid "+(filTipo==="FLEX"?"#84cc16":"#1a3008")}}>FLEX</button>
+            <button onClick={()=>{setFilTipo("NOFLEX");if(filLog==="__COLECTAS__")setFilLog("TODOS");}} style={S.btnSm(filTipo==="NOFLEX","#6366f1")}>NO FLEX</button>
+            <span style={{color:"#4b5563",fontSize:"0.68rem",marginLeft:"4px"}}>
+              {filLog==="__COLECTAS__"
+                ?(colectas.length+colectasArmadasHoy.length)+" colectas"
+                :filtrados.length+" pedidos"}
+            </span>
           </div>
           <div style={{display:"flex",gap:"6px",marginBottom:"0.6rem",alignItems:"center",flexWrap:"wrap"}}>
             <span style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase"}}>Turno:</span>
@@ -6728,8 +6857,8 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
 
           {/* ── Grupo Colectas en el listado ─────────────────────────────── */}
           {(()=>{
-            // Visible salvo que filLog sea una logística específica, o filTipo=FLEX
-            if(filLog!=="TODOS"||filTipo==="FLEX")return null;
+            // Visible cuando filLog es TODOS o __COLECTAS__, y no es filtro FLEX
+            if((filLog!=="TODOS"&&filLog!=="__COLECTAS__")||filTipo==="FLEX")return null;
             const pendientes=colectasOrdenadas.filter(c=>{
               if(busqueda){const s=norm(busqueda);return norm(c.destinatario||"").includes(s)||(c.nroSeguimiento||"").includes(s);}
               return true;
@@ -8151,7 +8280,7 @@ export default function App(){
   if(sesion.rol==="expedicion")return<VistaExpedicion envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} configExpedicion={configExpedicion}/>;
   if(sesion.rol==="armador"){
     const arm=(configExpedicion.armadores||[]).find(a=>a.id===sesion.armadorId);
-    return<VistaArmador envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} armador={arm}/>;
+    return<VistaArmador envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} armador={arm} armadores={configExpedicion.armadores||[]}/>;
   }
 
   if(pantalla==="asignacion"){return<PantallaAsignacion borrador={borrador} fileName={fileName} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc} envios={envios} sesion={sesion}/>;}
