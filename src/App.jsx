@@ -569,6 +569,9 @@ function scoreBusqueda(e,srch,nums){
 }
 const fmtN=n=>Number(n).toLocaleString("es-AR");
 const fmtHora=ts=>{if(!ts)return"";const d=new Date(ts);return d.getHours().toString().padStart(2,"0")+":"+d.getMinutes().toString().padStart(2,"0");};
+const UMBRAL_ACTIVO_MIN=15; // pausa ≥ 15 min = corte de sesión activa
+const fmtMin=m=>{if(!m||m<=0)return"";const h=Math.floor(m/60),mm=m%60;return h>0?h+"h "+String(mm).padStart(2,"0")+"m":mm+"m";};
+const calcTiempoActivo=(times,umbralMin=UMBRAL_ACTIVO_MIN)=>{if(!times||times.length===0)return 0;const umbralMs=umbralMin*60000;let total=0,inicio=times[0];for(let i=1;i<times.length;i++){if(times[i]-times[i-1]>umbralMs){total+=times[i-1]-inicio;inicio=times[i];}}total+=times[times.length-1]-inicio;return Math.round(total/60000);};
 
 function exportarXLSX(filas,nombreArchivo){
   const ws=XLSXLib.utils.json_to_sheet(filas);
@@ -7133,6 +7136,23 @@ function TabStatsArmado({configExpedicion={},setConfigExpedicion=()=>{},esAdmin=
     return statsPerArmador.filter(a=>a.pedXhora).slice().sort((a,b)=>(b.pedXhora||0)-(a.pedXhora||0));
   },[statsPerArmador]);
 
+  // Controladores: tiempo activo estimado (mismo umbral 15 min)
+  const statsControladores=useMemo(()=>{
+    const map={};
+    statsArmados.forEach(a=>{
+      if(!a.controladorId&&!a.controladorNombre)return;
+      const k=a.controladorId||a.controladorNombre;
+      if(!map[k])map[k]={id:a.controladorId,nombre:a.controladorNombre||"?",count:0,times:[]};
+      map[k].count++;
+      if(a.ts)map[k].times.push(new Date(a.ts).getTime());
+    });
+    return Object.values(map).map(ctrl=>{
+      ctrl.times.sort((a,b)=>a-b);
+      ctrl.tiempoActivoMin=calcTiempoActivo(ctrl.times);
+      return ctrl;
+    }).sort((a,b)=>b.count-a.count);
+  },[statsArmados]);
+
   // Sesiones por armador: bloques separados por gaps > gapUmbralMin
   const statsConSesiones=useMemo(()=>{
     const umbralMs=gapUmbralMin*60000;
@@ -7145,7 +7165,8 @@ function TabStatsArmado({configExpedicion={},setConfigExpedicion=()=>{},esAdmin=
         else grupo.push(times[i]);
       }
       sesiones.push(grupo);
-      return{...arm,sesiones:sesiones.map(ts=>{
+      const tiempoActivoMin=calcTiempoActivo(times);
+      return{...arm,tiempoActivoMin,sesiones:sesiones.map(ts=>{
         const n=ts.length,spanMs=n>1?ts[n-1]-ts[0]:0,spanMin=spanMs/60000;
         const diffs=[];for(let i=1;i<n;i++)diffs.push((ts[i]-ts[i-1])/60000);
         const avgGapMin=diffs.length>0?Math.round(diffs.reduce((s,d)=>s+d,0)/diffs.length*10)/10:null;
@@ -7253,7 +7274,8 @@ function TabStatsArmado({configExpedicion={},setConfigExpedicion=()=>{},esAdmin=
                   </div>
                   <div style={{textAlign:"right",flexShrink:0}}>
                     <div style={{fontWeight:800,fontSize:"1rem",color:"#6366f1"}}>{arm.count} ped <span style={{fontSize:"0.72rem",color:"#4b5563",fontWeight:400}}>· {arm.bultos}b</span></div>
-                    {arm.pedXhora&&<div style={{fontSize:"0.75rem",fontWeight:700,color:"#f87171"}}>{arm.pedXhora} ped/h</div>}
+                    {arm.tiempoActivoMin>0&&<div style={{fontSize:"0.72rem",fontWeight:700,color:"#10b981"}}>⏱ {fmtMin(arm.tiempoActivoMin)} activo</div>}
+                    {arm.pedXhora&&<div style={{fontSize:"0.72rem",fontWeight:700,color:"#f87171"}}>{arm.pedXhora} ped/h</div>}
                   </div>
                 </div>
                 <div style={{height:"6px",background:"#1a1f2e",borderRadius:"3px",overflow:"hidden"}}>
@@ -7284,6 +7306,24 @@ function TabStatsArmado({configExpedicion={},setConfigExpedicion=()=>{},esAdmin=
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* ── Controladores ── */}
+        {statsControladores.length>0&&(
+          <div style={{...S.card,padding:"1rem",marginBottom:"0.75rem"}}>
+            <div style={{color:"#06b6d4",fontSize:"0.7rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:"12px"}}>🔍 Controladores — tiempo activo</div>
+            {statsControladores.map((ctrl,i)=>(
+              <div key={ctrl.id||ctrl.nombre} style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px"}}>
+                <span style={{fontSize:"0.8rem",fontWeight:800,color:"#4b5563",minWidth:"18px"}}>{i+1}</span>
+                <div style={{flex:1,fontWeight:600,fontSize:"0.85rem",color:"#e5e7eb"}}>{ctrl.nombre}</div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:"0.78rem",color:"#06b6d4",fontWeight:700}}>{ctrl.count} pedidos</div>
+                  {ctrl.tiempoActivoMin>0&&<div style={{fontSize:"0.68rem",color:"#10b981",fontWeight:700}}>⏱ {fmtMin(ctrl.tiempoActivoMin)} activo</div>}
+                </div>
+              </div>
+            ))}
+            <div style={{fontSize:"0.58rem",color:"#374151",marginTop:"6px",borderTop:"1px solid #1a1f2e",paddingTop:"6px"}}>* Tiempo estimado: activo mientras había escaneos bajo control. Pausas ≥ {UMBRAL_ACTIVO_MIN} min excluidas.</div>
           </div>
         )}
 
