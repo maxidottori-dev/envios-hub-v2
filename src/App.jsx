@@ -5011,7 +5011,7 @@ const MOTIVOS_FALLO=[
 // ════════════════════════════════════════════════════════════════════
 // VISTA ARMADOR — escaneo simple para celular propio, sesión personal
 // ════════════════════════════════════════════════════════════════════
-function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armador,armadores=[]}){
+function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armador,armadores=[],gapUmbralMin=5}){
   // "armado" = escaneo simple al armar; "salida" = TabSalida (despacho a logística) — mismo usuario, sin re-loguear.
   const [modo,setModo]=useState("armado");
   const [qrInput,setQrInput]=useState("");
@@ -5027,13 +5027,13 @@ function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armado
   const videoRef=useRef(null);
   const canvasRef=useRef(null);
   const sesionGapRef=useRef(null); // timer de inactividad de sesión
-  const GAP_MS=5*60*1000; // 5 minutos sin escanear → cierra sesión
+  const GAP_MS=gapUmbralMin*60*1000; // minutos sin escanear → cierra sesión (configurable)
 
   const resetGapTimer=useCallback(()=>{
     if(sesionGapRef.current)clearTimeout(sesionGapRef.current);
     sesionGapRef.current=setTimeout(()=>{
       setSesionActiva(false);setSesionInicioTs(null);
-      setResultado({ok:false,msg:"Sesión cerrada por inactividad (5 min)."});
+      setResultado({ok:false,msg:"Sesión cerrada por inactividad ("+gapUmbralMin+" min)."});
       setTimeout(()=>setResultado(null),6000);
     },GAP_MS);
   },[]);
@@ -7068,8 +7068,11 @@ function TabConsultaArmado(){
   );
 }
 
-function TabStatsArmado(){
+function TabStatsArmado({configExpedicion={},setConfigExpedicion=()=>{},esAdmin=false}){
   const hoy=fechaHoy();
+  const gapUmbralMin=configExpedicion.gapUmbralMin||5;
+  const [gapEditVal,setGapEditVal]=useState(String(gapUmbralMin));
+  useEffect(()=>{setGapEditVal(String(gapUmbralMin));},[gapUmbralMin]);
   const [statsDesde,setStatsDesde]=useState(hoy);
   const [statsHasta,setStatsHasta]=useState(hoy);
   const [statsArmadosRaw,setStatsArmadosRaw]=useState([]);
@@ -7130,6 +7133,28 @@ function TabStatsArmado(){
     return statsPerArmador.filter(a=>a.pedXhora).slice().sort((a,b)=>(b.pedXhora||0)-(a.pedXhora||0));
   },[statsPerArmador]);
 
+  // Sesiones por armador: bloques separados por gaps > gapUmbralMin
+  const statsConSesiones=useMemo(()=>{
+    const umbralMs=gapUmbralMin*60000;
+    return statsPerArmador.map(arm=>{
+      const times=arm.times||[];
+      if(times.length===0)return{...arm,sesiones:[]};
+      const sesiones=[];let grupo=[times[0]];
+      for(let i=1;i<times.length;i++){
+        if(times[i]-times[i-1]>umbralMs){sesiones.push(grupo);grupo=[times[i]];}
+        else grupo.push(times[i]);
+      }
+      sesiones.push(grupo);
+      return{...arm,sesiones:sesiones.map(ts=>{
+        const n=ts.length,spanMs=n>1?ts[n-1]-ts[0]:0,spanMin=spanMs/60000;
+        const diffs=[];for(let i=1;i<n;i++)diffs.push((ts[i]-ts[i-1])/60000);
+        const avgGapMin=diffs.length>0?Math.round(diffs.reduce((s,d)=>s+d,0)/diffs.length*10)/10:null;
+        const pedXhora=spanMin>0?Math.round(n/(spanMin/60)*10)/10:null;
+        return{inicioTs:ts[0],finTs:ts[n-1],count:n,spanMin:Math.round(spanMin),pedXhora,avgGapMin};
+      })};
+    });
+  },[statsPerArmador,gapUmbralMin]);
+
   const actPorHora=useMemo(()=>{
     const hrs=Array.from({length:24},(_,i)=>({h:i,count:0}));
     statsArmados.forEach(a=>{if(a.ts)hrs[new Date(a.ts).getHours()].count++;});
@@ -7153,6 +7178,16 @@ function TabStatsArmado(){
           <button key={x.v} onClick={()=>setStatsFilTipo(x.v)} style={S.btnSm(statsFilTipo===x.v)}>{x.l}</button>
         ))}
         <span style={{color:"#4b5563",fontSize:"0.72rem",marginLeft:"4px"}}>{statsArmados.length} armados</span>
+        {esAdmin&&(
+          <div style={{display:"flex",alignItems:"center",gap:"5px",marginLeft:"auto"}}>
+            <span style={{color:"#4b5563",fontSize:"0.62rem",fontWeight:700}}>⚙ umbral sesión</span>
+            <input type="number" min="1" max="120" value={gapEditVal} onChange={e=>setGapEditVal(e.target.value)}
+              style={{...S.input,width:"50px",padding:"2px 6px",fontSize:"0.78rem",textAlign:"center"}}/>
+            <span style={{color:"#4b5563",fontSize:"0.62rem"}}>min</span>
+            <button onClick={()=>{const v=parseInt(gapEditVal);if(v>0)setConfigExpedicion(p=>({...p,gapUmbralMin:v}));}}
+              style={{...S.btnSm(false),padding:"2px 10px",fontSize:"0.72rem",background:"#1a1f2e",border:"1px solid #6366f1",color:"#a78bfa"}}>✓</button>
+          </div>
+        )}
       </div>
 
       {loadingStats&&<div style={{textAlign:"center",padding:"2rem",color:"#4b5563",fontSize:"0.82rem"}}>Cargando...</div>}
@@ -7193,20 +7228,28 @@ function TabStatsArmado(){
         {/* ── Ranking principal: cantidad de pedidos armados ── */}
         <div style={{...S.card,padding:"1rem",marginBottom:"0.75rem"}}>
           <div style={{color:"#f59e0b",fontSize:"0.7rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:"12px"}}>🏆 Ranking — cantidad armada</div>
-          {statsPerArmador.map((arm,i)=>{
+          {statsConSesiones.map((arm,i)=>{
             const pctBar=topCount>0?Math.round(arm.count/topCount*100):0;
             const barColor=i===0?"#f59e0b":i===1?"#9ca3af":i===2?"#b45309":"#374151";
-            const spanH=arm.spanMin?Math.floor(arm.spanMin/60)+"h "+String(arm.spanMin%60).padStart(2,"0")+"m":null;
+            const multiSesion=arm.sesiones.length>1;
             return(
               <div key={arm.id||arm.nombre} style={{marginBottom:"14px"}}>
                 <div style={{display:"flex",alignItems:"flex-start",gap:"8px",marginBottom:"4px"}}>
                   <span style={{fontSize:"0.9rem",fontWeight:800,color:barColor,minWidth:"20px",marginTop:"1px"}}>{i+1}</span>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontWeight:700,fontSize:"0.9rem",color:"#e5e7eb"}}>{arm.nombre}</div>
-                    <div style={{display:"flex",gap:"10px",flexWrap:"wrap",marginTop:"2px"}}>
-                      {arm.inicioTs&&<span style={{fontSize:"0.67rem",color:"#4b5563"}}>{fmtHora(arm.inicioTs)} → {fmtHora(arm.finTs)}{spanH?" ("+spanH+")":""}</span>}
-                      {arm.avgGapMin!==null&&<span style={{fontSize:"0.67rem",color:"#4b5563"}}>⌀ gap {arm.avgGapMin}m</span>}
-                    </div>
+                    {arm.sesiones.map((ses,si)=>{
+                      const spanH=ses.spanMin?Math.floor(ses.spanMin/60)+"h "+String(ses.spanMin%60).padStart(2,"0")+"m":null;
+                      const gapAlto=ses.avgGapMin!==null&&ses.avgGapMin>gapUmbralMin;
+                      return(
+                        <div key={si} style={{display:"flex",gap:"8px",flexWrap:"wrap",marginTop:"3px",alignItems:"center"}}>
+                          {multiSesion&&<span style={{fontSize:"0.58rem",color:"#6b7280",background:"#1a1f2e",padding:"0 4px",borderRadius:"3px",fontWeight:700}}>sesión {si+1}</span>}
+                          <span style={{fontSize:"0.67rem",color:"#4b5563"}}>{fmtHora(ses.inicioTs)} → {fmtHora(ses.finTs)}{spanH?" ("+spanH+")":""} · {ses.count}p</span>
+                          {ses.avgGapMin!==null&&<span style={{fontSize:"0.67rem",color:gapAlto?"#f87171":"#4b5563",fontWeight:gapAlto?700:400}}>⌀ {ses.avgGapMin}m{gapAlto?" ⚠":""}</span>}
+                          {ses.pedXhora&&<span style={{fontSize:"0.67rem",color:"#6366f1"}}>{ses.pedXhora}p/h</span>}
+                        </div>
+                      );
+                    })}
                   </div>
                   <div style={{textAlign:"right",flexShrink:0}}>
                     <div style={{fontWeight:800,fontSize:"1rem",color:"#6366f1"}}>{arm.count} ped <span style={{fontSize:"0.72rem",color:"#4b5563",fontWeight:400}}>· {arm.bultos}b</span></div>
@@ -8426,7 +8469,7 @@ export default function App(){
   if(sesion.rol==="expedicion")return<VistaExpedicion envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} configExpedicion={configExpedicion}/>;
   if(sesion.rol==="armador"){
     const arm=(configExpedicion.armadores||[]).find(a=>a.id===sesion.armadorId);
-    return<VistaArmador envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} armador={arm} armadores={configExpedicion.armadores||[]}/>;
+    return<VistaArmador envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} armador={arm} armadores={configExpedicion.armadores||[]} gapUmbralMin={configExpedicion.gapUmbralMin||5}/>;
   }
 
   if(pantalla==="asignacion"){return<PantallaAsignacion borrador={borrador} fileName={fileName} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc} envios={envios} sesion={sesion}/>;}
@@ -8699,7 +8742,7 @@ export default function App(){
         {tab==="localidades" &&<TabLocalidades cpExtra={cpExtra} setCpExtra={setCpExtra}/>}
         {tab==="usuarios"   &&<TabUsuarios lc={lc} setLc={setLcPersist} configExpedicion={configExpedicion} setConfigExpedicion={setConfigExpedicion}/>}
         {tab==="expedicion" &&<VistaExpedicion envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} configExpedicion={configExpedicion} esAdmin={esAdmin}/>}
-        {tab==="statsarmado"   &&<TabStatsArmado/>}
+        {tab==="statsarmado"   &&<TabStatsArmado configExpedicion={configExpedicion} setConfigExpedicion={setConfigExpedicion} esAdmin={esAdmin}/>}
         {tab==="consultaarmado"&&<TabConsultaArmado/>}
         {tab==="salida"        &&<TabSalida envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>}
       </div>
