@@ -4530,9 +4530,7 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{}}){
   const [permsOpenId,setPermsOpenId]=useState(null);
   const [tooltipKey,setTooltipKey]=useState(null);
   const [nuevoArmador,setNuevoArmador]=useState("");
-  const [nuevoControlador,setNuevoControlador]=useState("");
   const armadoresConfig=configExpedicion.armadores||[];
-  const controladoresConfig=configExpedicion.controladores||[];
   const impresionHabilitada=configExpedicion.impresionHabilitada||false;
 
   const agregarArmador=()=>{
@@ -4543,16 +4541,6 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{}}){
     const color=ARM_COLORS[armadoresConfig.length%ARM_COLORS.length];
     setConfigExpedicion(p=>({...p,armadores:[...(p.armadores||[]),{id,nombre,color}]}));
     setNuevoArmador("");
-  };
-
-  const agregarControlador=()=>{
-    const nombre=nuevoControlador.trim();
-    if(!nombre)return;
-    if(controladoresConfig.some(c=>c.nombre.toLowerCase()===nombre.toLowerCase())){mostrarToast("Ya existe un controlador con ese nombre");return;}
-    const id="ctrl_"+Date.now();
-    const color=ARM_COLORS[controladoresConfig.length%ARM_COLORS.length];
-    setConfigExpedicion(p=>({...p,controladores:[...(p.controladores||[]),{id,nombre,color}]}));
-    setNuevoControlador("");
   };
   const logActivas=Object.keys(lc).filter(k=>lc[k].activa);
 
@@ -4795,6 +4783,14 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{}}){
               <div key={arm.id} style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 12px",background:"#12172a",borderRadius:"8px",border:"1px solid #252d40"}}>
                 <span style={{fontSize:"0.8rem",fontWeight:800,color:"#374151",minWidth:"18px"}}>{i+1}</span>
                 <span style={{flex:1,fontSize:"0.9rem",fontWeight:600,color:arm.color||"#e5e7eb"}}>{arm.nombre}</span>
+                {/* Toggle controlador */}
+                <button onClick={()=>setConfigExpedicion(p=>({...p,armadores:p.armadores.map(a=>a.id===arm.id?{...a,puedeControlar:!a.puedeControlar}:a)}))}
+                  style={{padding:"3px 8px",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700,cursor:"pointer",flexShrink:0,
+                    background:arm.puedeControlar?"#0a2a1c":"#12172a",
+                    border:"1px solid "+(arm.puedeControlar?"#10b981":"#374151"),
+                    color:arm.puedeControlar?"#34d399":"#4b5563"}}>
+                  🔍 {arm.puedeControlar?"Control: ON":"Control: OFF"}
+                </button>
                 <div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>
                   {ARM_COLORS.map(c=>(
                     <button key={c} onClick={()=>setConfigExpedicion(p=>({...p,armadores:p.armadores.map(a=>a.id===arm.id?{...a,color:c}:a)}))}
@@ -4813,34 +4809,6 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{}}){
             <button onClick={agregarArmador} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",whiteSpace:"nowrap"}}>+ Agregar</button>
           </div>
 
-          {/* Lista controladores */}
-          <div style={{marginTop:"1.25rem",borderTop:"1px solid #1a1f2e",paddingTop:"1.25rem"}}>
-            <div style={{fontSize:"0.65rem",color:"#06b6d4",fontWeight:700,textTransform:"uppercase",marginBottom:"8px"}}>🔍 Controladores ({controladoresConfig.length})</div>
-            <div style={{fontSize:"0.68rem",color:"#4b5563",marginBottom:"10px"}}>Lista dedicada de personas que pueden actuar como controlador en Expedición. Aparece separada de los armadores en el selector.</div>
-            {controladoresConfig.length===0&&<div style={{padding:"0.75rem",background:"#12172a",borderRadius:"8px",color:"#4b5563",fontSize:"0.8rem",marginBottom:"8px"}}>Sin controladores. Agregá los nombres del equipo de control.</div>}
-            <div style={{display:"grid",gap:"6px",marginBottom:"0.75rem"}}>
-              {controladoresConfig.map((ctrl,i)=>(
-                <div key={ctrl.id} style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 12px",background:"#12172a",borderRadius:"8px",border:"1px solid #252d40"}}>
-                  <span style={{fontSize:"0.8rem",fontWeight:800,color:"#374151",minWidth:"18px"}}>{i+1}</span>
-                  <span style={{flex:1,fontSize:"0.9rem",fontWeight:600,color:ctrl.color||"#06b6d4"}}>{ctrl.nombre}</span>
-                  <div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>
-                    {ARM_COLORS.map(c=>(
-                      <button key={c} onClick={()=>setConfigExpedicion(p=>({...p,controladores:p.controladores.map(x=>x.id===ctrl.id?{...x,color:c}:x)}))}
-                        style={{width:"16px",height:"16px",borderRadius:"50%",background:c,border:ctrl.color===c?"2px solid #fff":"2px solid transparent",cursor:"pointer",padding:0,flexShrink:0}}/>
-                    ))}
-                  </div>
-                  <button onClick={()=>setConfigExpedicion(p=>({...p,controladores:p.controladores.filter(x=>x.id!==ctrl.id)}))}
-                    style={{background:"none",border:"none",color:"#f87171",cursor:"pointer",fontSize:"1.1rem",padding:"0 4px",lineHeight:1,flexShrink:0}}>✕</button>
-                </div>
-              ))}
-            </div>
-            <div style={{display:"flex",gap:"8px"}}>
-              <input value={nuevoControlador} onChange={e=>setNuevoControlador(e.target.value)}
-                onKeyDown={e=>{if(e.key==="Enter")agregarControlador();}}
-                placeholder="Nombre del controlador..." style={{...S.input,flex:1}}/>
-              <button onClick={agregarControlador} style={{...S.btn(true),background:"linear-gradient(135deg,#0891b2,#06b6d4)",whiteSpace:"nowrap"}}>+ Agregar</button>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -6147,9 +6115,9 @@ function TabTablero({envios,lc,zc,pagosCC=[]}){
 
 
 function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,configExpedicion={},esAdmin=false}){
-  const {impresionHabilitada=false,armadores=[],controladores=[]}=configExpedicion;
-  // Lista efectiva de controladores: usa lista dedicada si existe, si no cae a armadores (retrocompat.)
-  const listaControladores=controladores.length>0?controladores:armadores;
+  const {impresionHabilitada=false,armadores=[]}=configExpedicion;
+  // Lista efectiva de controladores: armadores con puedeControlar=true; fallback a todos si ninguno lo tiene
+  const listaControladores=armadores.some(a=>a.puedeControlar)?armadores.filter(a=>a.puedeControlar):armadores;
   const hoy=fechaHoy();
   const [subTab,setSubTab]=useState("escaneo");
   const [fecha,setFecha]=useState(hoy);
