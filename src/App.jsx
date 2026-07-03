@@ -7007,23 +7007,24 @@ function TabConsultaArmado(){
       {/* Lista */}
       <div style={{...S.card,padding:0,overflow:"hidden"}}>
         {/* Header */}
-        <div style={{display:"grid",gridTemplateColumns:"90px 1fr 90px 100px 80px",gap:"6px",padding:"0.45rem 0.9rem",background:"#12172a",borderBottom:"1px solid #252d40",fontSize:"0.58rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",letterSpacing:".04em"}}>
+        <div style={{display:"grid",gridTemplateColumns:"110px 1fr 90px 100px 80px",gap:"6px",padding:"0.45rem 0.9rem",background:"#12172a",borderBottom:"1px solid #252d40",fontSize:"0.58rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",letterSpacing:".04em"}}>
           <span>Fecha · Hora</span><span>Pedido</span><span>Logística</span><span>Armador</span><span>Ctrl.</span>
         </div>
         {loading&&<div style={{padding:"2.5rem",textAlign:"center",color:"#4b5563"}}>Cargando...</div>}
         {!loading&&filtrados.length===0&&<div style={{padding:"2.5rem",textAlign:"center",color:"#4b5563"}}>Sin resultados para este rango / búsqueda</div>}
         {filtrados.map(a=>{
-          const dtStr=a.ts?new Date(a.ts).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}):"—";
+          const fechaDDMM=(()=>{const f=a.fecha||"";const p=f.split("-");return p.length===3?p[2]+"/"+p[1]:(a.ts?new Date(a.ts).toLocaleDateString("es-AR",{day:"2-digit",month:"2-digit"}):"—");})();
+          const horaHHMM=fmtHora(a.ts)||"—";
           const expandido=expandId===a.id;
           return(
             <div key={a.id} style={{borderBottom:"1px solid #1a1f2e"}}>
               <div onClick={()=>setExpandId(expandido?null:a.id)}
-                style={{display:"grid",gridTemplateColumns:"90px 1fr 90px 100px 80px",gap:"6px",padding:"0.5rem 0.9rem",alignItems:"start",cursor:"pointer",background:expandido?"#12172a":"transparent",transition:"background .1s"}}>
+                style={{display:"grid",gridTemplateColumns:"110px 1fr 90px 100px 80px",gap:"6px",padding:"0.5rem 0.9rem",alignItems:"start",cursor:"pointer",background:expandido?"#12172a":"transparent",transition:"background .1s"}}>
                 {/* Fecha + Hora */}
                 <div>
-                  <div style={{color:"#9ca3af",fontSize:"0.68rem"}}>{dtStr.split(",")[0]}</div>
-                  <div style={{color:"#6b7280",fontSize:"0.62rem"}}>{dtStr.split(",")[1]||""}</div>
-                  {a.esEdicion&&<div style={{color:"#f59e0b",fontSize:"0.58rem",fontWeight:700,marginTop:"2px"}}>✏️ edit</div>}
+                  <div style={{color:"#6b7280",fontSize:"0.7rem",marginBottom:"1px"}}>{fechaDDMM}</div>
+                  <div style={{color:"#e5e7eb",fontSize:"1rem",fontWeight:800,letterSpacing:"0.03em",lineHeight:1}}>{horaHHMM}</div>
+                  {a.esEdicion&&<div style={{color:"#f59e0b",fontSize:"0.58rem",fontWeight:700,marginTop:"3px"}}>✏️ edit</div>}
                 </div>
                 {/* Pedido */}
                 <div>
