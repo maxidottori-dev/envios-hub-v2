@@ -4530,7 +4530,9 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{}}){
   const [permsOpenId,setPermsOpenId]=useState(null);
   const [tooltipKey,setTooltipKey]=useState(null);
   const [nuevoArmador,setNuevoArmador]=useState("");
+  const [nuevoControlador,setNuevoControlador]=useState("");
   const armadoresConfig=configExpedicion.armadores||[];
+  const controladoresConfig=configExpedicion.controladores||[];
   const impresionHabilitada=configExpedicion.impresionHabilitada||false;
 
   const agregarArmador=()=>{
@@ -4541,6 +4543,16 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{}}){
     const color=ARM_COLORS[armadoresConfig.length%ARM_COLORS.length];
     setConfigExpedicion(p=>({...p,armadores:[...(p.armadores||[]),{id,nombre,color}]}));
     setNuevoArmador("");
+  };
+
+  const agregarControlador=()=>{
+    const nombre=nuevoControlador.trim();
+    if(!nombre)return;
+    if(controladoresConfig.some(c=>c.nombre.toLowerCase()===nombre.toLowerCase())){mostrarToast("Ya existe un controlador con ese nombre");return;}
+    const id="ctrl_"+Date.now();
+    const color=ARM_COLORS[controladoresConfig.length%ARM_COLORS.length];
+    setConfigExpedicion(p=>({...p,controladores:[...(p.controladores||[]),{id,nombre,color}]}));
+    setNuevoControlador("");
   };
   const logActivas=Object.keys(lc).filter(k=>lc[k].activa);
 
@@ -4799,6 +4811,35 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{}}){
               onKeyDown={e=>{if(e.key==="Enter")agregarArmador();}}
               placeholder="Nombre del armador..." style={{...S.input,flex:1}}/>
             <button onClick={agregarArmador} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",whiteSpace:"nowrap"}}>+ Agregar</button>
+          </div>
+
+          {/* Lista controladores */}
+          <div style={{marginTop:"1.25rem",borderTop:"1px solid #1a1f2e",paddingTop:"1.25rem"}}>
+            <div style={{fontSize:"0.65rem",color:"#06b6d4",fontWeight:700,textTransform:"uppercase",marginBottom:"8px"}}>🔍 Controladores ({controladoresConfig.length})</div>
+            <div style={{fontSize:"0.68rem",color:"#4b5563",marginBottom:"10px"}}>Lista dedicada de personas que pueden actuar como controlador en Expedición. Aparece separada de los armadores en el selector.</div>
+            {controladoresConfig.length===0&&<div style={{padding:"0.75rem",background:"#12172a",borderRadius:"8px",color:"#4b5563",fontSize:"0.8rem",marginBottom:"8px"}}>Sin controladores. Agregá los nombres del equipo de control.</div>}
+            <div style={{display:"grid",gap:"6px",marginBottom:"0.75rem"}}>
+              {controladoresConfig.map((ctrl,i)=>(
+                <div key={ctrl.id} style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 12px",background:"#12172a",borderRadius:"8px",border:"1px solid #252d40"}}>
+                  <span style={{fontSize:"0.8rem",fontWeight:800,color:"#374151",minWidth:"18px"}}>{i+1}</span>
+                  <span style={{flex:1,fontSize:"0.9rem",fontWeight:600,color:ctrl.color||"#06b6d4"}}>{ctrl.nombre}</span>
+                  <div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>
+                    {ARM_COLORS.map(c=>(
+                      <button key={c} onClick={()=>setConfigExpedicion(p=>({...p,controladores:p.controladores.map(x=>x.id===ctrl.id?{...x,color:c}:x)}))}
+                        style={{width:"16px",height:"16px",borderRadius:"50%",background:c,border:ctrl.color===c?"2px solid #fff":"2px solid transparent",cursor:"pointer",padding:0,flexShrink:0}}/>
+                    ))}
+                  </div>
+                  <button onClick={()=>setConfigExpedicion(p=>({...p,controladores:p.controladores.filter(x=>x.id!==ctrl.id)}))}
+                    style={{background:"none",border:"none",color:"#f87171",cursor:"pointer",fontSize:"1.1rem",padding:"0 4px",lineHeight:1,flexShrink:0}}>✕</button>
+                </div>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:"8px"}}>
+              <input value={nuevoControlador} onChange={e=>setNuevoControlador(e.target.value)}
+                onKeyDown={e=>{if(e.key==="Enter")agregarControlador();}}
+                placeholder="Nombre del controlador..." style={{...S.input,flex:1}}/>
+              <button onClick={agregarControlador} style={{...S.btn(true),background:"linear-gradient(135deg,#0891b2,#06b6d4)",whiteSpace:"nowrap"}}>+ Agregar</button>
+            </div>
           </div>
         </div>
       </div>
@@ -6106,7 +6147,9 @@ function TabTablero({envios,lc,zc,pagosCC=[]}){
 
 
 function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,configExpedicion={},esAdmin=false}){
-  const {impresionHabilitada=false,armadores=[]}=configExpedicion;
+  const {impresionHabilitada=false,armadores=[],controladores=[]}=configExpedicion;
+  // Lista efectiva de controladores: usa lista dedicada si existe, si no cae a armadores (retrocompat.)
+  const listaControladores=controladores.length>0?controladores:armadores;
   const hoy=fechaHoy();
   const [subTab,setSubTab]=useState("escaneo");
   const [fecha,setFecha]=useState(hoy);
@@ -6539,21 +6582,21 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
                 <button onClick={()=>setBultosSel(b=>b+1)} style={{width:"38px",height:"38px",borderRadius:"8px",background:"#1a1f2e",border:"1px solid #374151",color:"#e5e7eb",fontSize:"1.3rem",cursor:"pointer"}}>+</button>
                 {bultosSel>1&&<span style={{fontSize:"0.68rem",color:impresionHabilitada?"#f59e0b":"#374151",marginLeft:"4px"}}>{impresionHabilitada?"🖨 "+(bultosSel-1)+" etiqueta"+(bultosSel>2?"s":"")+" a imprimir":"impresión deshabilitada"}</span>}
               </div>}
-              {/* Selector de controlador */}
-              {armadores.length>0&&(
+              {/* Selector de controlador — permite cambiar el ya seleccionado en fila 1 */}
+              {listaControladores.length>0&&(
                 <div style={{marginBottom:"0.9rem"}}>
                   <div style={{fontSize:"0.6rem",color:"#6b7280",textTransform:"uppercase",fontWeight:700,marginBottom:"6px"}}>
                     🔍 Controlador <span style={{color:"#374151",fontWeight:400,textTransform:"none"}}>— queda fijo hasta que lo cambiés</span>
                     {controladorSel&&<button onClick={()=>setControladorSel(null)} style={{marginLeft:"8px",background:"none",border:"none",color:"#6366f1",cursor:"pointer",fontSize:"0.68rem",fontWeight:700}}>✕ quitar</button>}
                   </div>
                   <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
-                    {armadores.map(arm=>(
-                      <button key={arm.id} onClick={()=>setControladorSel(c=>c?.id===arm.id?null:arm)}
+                    {listaControladores.map(ctrl=>(
+                      <button key={ctrl.id} onClick={()=>setControladorSel(c=>c?.id===ctrl.id?null:ctrl)}
                         style={{padding:"5px 10px",borderRadius:"7px",fontWeight:700,fontSize:"0.75rem",cursor:"pointer",
-                          background:controladorSel?.id===arm.id?"#13102a":"#12172a",
-                          border:"1px solid "+(controladorSel?.id===arm.id?"#6366f1":"#252d40"),
-                          color:controladorSel?.id===arm.id?(arm.color||"#a78bfa"):"#6b7280"}}>
-                        {arm.nombre}
+                          background:controladorSel?.id===ctrl.id?"#064e3b":"#12172a",
+                          border:"1px solid "+(controladorSel?.id===ctrl.id?"#10b981":"#252d40"),
+                          color:controladorSel?.id===ctrl.id?(ctrl.color||"#34d399"):"#6b7280"}}>
+                        {ctrl.nombre}
                       </button>
                     ))}
                   </div>
@@ -6701,7 +6744,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
           <div style={{display:"flex",gap:"8px",marginBottom:"0.75rem",alignItems:"flex-start",flexWrap:"wrap"}}>
 
             {/* Controlador — siempre visible, requerido */}
-            {armadores.length>0&&(
+            {listaControladores.length>0&&(
               <div style={{...S.card,padding:"0.75rem 1rem",border:"1px solid "+(controladorSel?"#10b98133":"#f59e0b55"),flexShrink:0,minWidth:"170px"}}>
                 <div style={{fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:"6px",display:"flex",alignItems:"center",gap:"5px",
                   color:controladorSel?"#10b981":"#f59e0b"}}>
@@ -6710,13 +6753,13 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
                   {controladorSel&&<button onClick={()=>setControladorSel(null)} style={{marginLeft:"auto",background:"none",border:"none",color:"#6b7280",cursor:"pointer",fontSize:"0.68rem",fontWeight:700,lineHeight:1,padding:"0 2px"}}>✕</button>}
                 </div>
                 <div style={{display:"flex",gap:"5px",flexWrap:"wrap"}}>
-                  {armadores.map(arm=>(
-                    <button key={arm.id} onClick={()=>setControladorSel(c=>c?.id===arm.id?null:arm)}
+                  {listaControladores.map(ctrl=>(
+                    <button key={ctrl.id} onClick={()=>setControladorSel(c=>c?.id===ctrl.id?null:ctrl)}
                       style={{padding:"6px 11px",borderRadius:"7px",fontWeight:700,fontSize:"0.78rem",cursor:"pointer",
-                        background:controladorSel?.id===arm.id?"#064e3b":"#12172a",
-                        border:"1px solid "+(controladorSel?.id===arm.id?"#10b981":"#252d40"),
-                        color:controladorSel?.id===arm.id?(arm.color||"#34d399"):"#9ca3af"}}>
-                      {arm.nombre}
+                        background:controladorSel?.id===ctrl.id?"#064e3b":"#12172a",
+                        border:"1px solid "+(controladorSel?.id===ctrl.id?"#10b981":"#252d40"),
+                        color:controladorSel?.id===ctrl.id?(ctrl.color||"#34d399"):"#9ca3af"}}>
+                      {ctrl.nombre}
                     </button>
                   ))}
                 </div>
