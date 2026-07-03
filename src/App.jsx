@@ -55,7 +55,8 @@ const FEATURES=[
   {key:"tab_ctasctes",    grupo:"tabs",    label:"Ctas. Ctes.",       desc:"Estado de cuenta corriente por cliente: saldo pendiente, deuda y pagos"},
   {key:"tab_localidades", grupo:"tabs",    label:"Localidades",       desc:"Administrar localidades y partidos: agregar CPs y reglas de mapeo"},
   {key:"tab_expedicion",  grupo:"tabs",    label:"Expedición",        desc:"Vista de expedición para preparar bultos y controlar salidas"},
-  {key:"tab_statsarmado", grupo:"tabs",    label:"Stats Armado",      desc:"Estadísticas de armado: ranking de velocidad por armador, actividad por hora y log detallado de escaneos"},
+  {key:"tab_statsarmado",    grupo:"tabs",    label:"Stats Armado",      desc:"Estadísticas de armado: ranking de velocidad por armador, actividad por hora y log detallado de escaneos"},
+  {key:"tab_consultaarmado", grupo:"tabs",    label:"Consulta Armado",   desc:"Consultar pedidos armados por rango de fecha; busca por nro de seguimiento, orden, venta, pack id, dirección, usuario o nombre"},
   {key:"tab_salida",      grupo:"tabs",    label:"Salida",            desc:"Escanear pedidos al entregarlos a la logística: despacho controlado por logística"},
   {key:"tab_usuarios",    grupo:"tabs",    label:"Usuarios",          desc:"Administrar usuarios del sistema, sus roles, contraseñas y permisos"},
   // ── Acciones ─────────────────────────────────────────────────────
@@ -5095,6 +5096,10 @@ function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armado
       envioId:colecta.id,
       nroSeguimiento:colecta.nroSeguimiento||"",
       nroOrdenTN:"",
+      nroVenta:colecta.nroVenta||"",
+      nroPackId:colecta.nroPackId||"",
+      destinatario:colecta.destinatario||"",
+      usuario:colecta.usuario||"",
       armadorId:armador.id,armadorNombre:armador.nombre,
       controladorId:ctrl?.id||"",controladorNombre:ctrl?.nombre||"",
       ts,fecha:colecta.fecha||fechaHoy(),
@@ -6257,6 +6262,10 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
       envioId:colecta.id,
       nroSeguimiento:colecta.nroSeguimiento||"",
       nroOrdenTN:"",
+      nroVenta:colecta.nroVenta||"",
+      nroPackId:colecta.nroPackId||"",
+      destinatario:colecta.destinatario||"",
+      usuario:colecta.usuario||"",
       armadorId:armador.id,armadorNombre:armador.nombre,
       controladorId:controlador?.id||"",controladorNombre:controlador?.nombre||"",
       ts,fecha:colecta.fecha||fechaHoy(),
@@ -6917,6 +6926,142 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
           })()}
         </>)}
 
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// TAB CONSULTA ARMADO — búsqueda histórica de pedidos armados
+// ════════════════════════════════════════════════════════════════════
+function TabConsultaArmado(){
+  const hoy=fechaHoy();
+  const d3=new Date(hoy+"T00:00:00");d3.setDate(d3.getDate()-2);
+  const defDesde=d3.toISOString().split("T")[0];
+  const [desde,setDesde]=useState(defDesde);
+  const [hasta,setHasta]=useState(hoy);
+  const [armados,setArmados]=useState([]);
+  const [loading,setLoading]=useState(false);
+  const [busqueda,setBusqueda]=useState("");
+  const [expandId,setExpandId]=useState(null);
+
+  const cargar=useCallback(async()=>{
+    if(!desde||!hasta)return;
+    setLoading(true);
+    try{
+      const q=query(collection(db,"armados"),where("fecha",">=",desde),where("fecha","<=",hasta));
+      const snap=await getDocs(q);
+      const data=snap.docs.map(d=>({id:d.id,...d.data()}));
+      data.sort((a,b)=>(b.ts||"").localeCompare(a.ts||""));
+      setArmados(data);
+    }catch(err){console.error("Error cargando armados:",err);}
+    finally{setLoading(false);}
+  },[desde,hasta]);
+
+  useEffect(()=>{cargar();},[cargar]);
+
+  const presets=[
+    {l:"Hoy",fn:()=>{setDesde(hoy);setHasta(hoy);}},
+    {l:"Ayer",fn:()=>{const d=new Date(hoy+"T00:00:00");d.setDate(d.getDate()-1);const v=d.toISOString().split("T")[0];setDesde(v);setHasta(v);}},
+    {l:"3 días",fn:()=>{const d=new Date(hoy+"T00:00:00");d.setDate(d.getDate()-2);setDesde(d.toISOString().split("T")[0]);setHasta(hoy);}},
+    {l:"7 días",fn:()=>{const d=new Date(hoy+"T00:00:00");d.setDate(d.getDate()-6);setDesde(d.toISOString().split("T")[0]);setHasta(hoy);}},
+  ];
+
+  const filtrados=useMemo(()=>{
+    const s=norm(busqueda.trim());
+    if(!s)return armados;
+    return armados.filter(a=>(
+      (a.nroSeguimiento||"").includes(busqueda.trim())||
+      (String(a.nroOrdenTN||"")).includes(busqueda.trim())||
+      (a.nroVenta||"").includes(busqueda.trim())||
+      (a.nroPackId||"").includes(busqueda.trim())||
+      norm(a.direccion||"").includes(s)||
+      norm(a.destinatario||"").includes(s)||
+      norm(a.usuario||"").includes(s)||
+      norm(a.armadorNombre||"").includes(s)||
+      norm(a.controladorNombre||"").includes(s)||
+      norm(a.partido||"").includes(s)
+    ));
+  },[armados,busqueda]);
+
+  return(
+    <div>
+      {/* Controles */}
+      <div style={{...S.card,padding:"0.75rem 1rem",marginBottom:"0.75rem"}}>
+        <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap",marginBottom:"0.55rem"}}>
+          {presets.map(p=><button key={p.l} onClick={p.fn} style={S.btnSm(false)}>{p.l}</button>)}
+          <span style={{color:"#374151",fontSize:"0.6rem"}}>·</span>
+          <input type="date" value={desde} onChange={e=>setDesde(e.target.value)} style={{...S.input,padding:"3px 8px",width:"138px",fontSize:"0.78rem"}}/>
+          <span style={{color:"#6b7280",fontSize:"0.65rem"}}>→</span>
+          <input type="date" value={hasta} onChange={e=>setHasta(e.target.value)} style={{...S.input,padding:"3px 8px",width:"138px",fontSize:"0.78rem"}}/>
+          <button onClick={cargar} style={{...S.btn(true),background:"#12172a",border:"1px solid #6366f1",color:"#a78bfa",padding:"5px 14px",fontSize:"0.8rem"}}>
+            {loading?"Cargando...":"🔄"}
+          </button>
+          <span style={{color:"#4b5563",fontSize:"0.68rem",marginLeft:"4px"}}>{armados.length} registros · {filtrados.length} en vista</span>
+        </div>
+        <input value={busqueda} onChange={e=>setBusqueda(e.target.value)}
+          placeholder="🔍  Buscar por nro envío · nro TN · nro venta · pack id · dirección · usuario · destinatario · armador..."
+          style={{...S.input,width:"100%"}}/>
+      </div>
+
+      {/* Lista */}
+      <div style={{...S.card,padding:0,overflow:"hidden"}}>
+        {/* Header */}
+        <div style={{display:"grid",gridTemplateColumns:"90px 1fr 90px 100px 80px",gap:"6px",padding:"0.45rem 0.9rem",background:"#12172a",borderBottom:"1px solid #252d40",fontSize:"0.58rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",letterSpacing:".04em"}}>
+          <span>Fecha · Hora</span><span>Pedido</span><span>Logística</span><span>Armador</span><span>Ctrl.</span>
+        </div>
+        {loading&&<div style={{padding:"2.5rem",textAlign:"center",color:"#4b5563"}}>Cargando...</div>}
+        {!loading&&filtrados.length===0&&<div style={{padding:"2.5rem",textAlign:"center",color:"#4b5563"}}>Sin resultados para este rango / búsqueda</div>}
+        {filtrados.map(a=>{
+          const dtStr=a.ts?new Date(a.ts).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}):"—";
+          const expandido=expandId===a.id;
+          return(
+            <div key={a.id} style={{borderBottom:"1px solid #1a1f2e"}}>
+              <div onClick={()=>setExpandId(expandido?null:a.id)}
+                style={{display:"grid",gridTemplateColumns:"90px 1fr 90px 100px 80px",gap:"6px",padding:"0.5rem 0.9rem",alignItems:"start",cursor:"pointer",background:expandido?"#12172a":"transparent",transition:"background .1s"}}>
+                {/* Fecha + Hora */}
+                <div>
+                  <div style={{color:"#9ca3af",fontSize:"0.68rem"}}>{dtStr.split(",")[0]}</div>
+                  <div style={{color:"#6b7280",fontSize:"0.62rem"}}>{dtStr.split(",")[1]||""}</div>
+                  {a.esEdicion&&<div style={{color:"#f59e0b",fontSize:"0.58rem",fontWeight:700,marginTop:"2px"}}>✏️ edit</div>}
+                </div>
+                {/* Pedido */}
+                <div>
+                  <div style={{display:"flex",gap:"3px",flexWrap:"wrap",marginBottom:"2px"}}>
+                    {a.esColecta&&<span style={{background:"#1a0d2e",color:"#a78bfa",border:"1px solid #a78bfa44",padding:"1px 5px",borderRadius:"3px",fontSize:"0.58rem",fontWeight:700}}>📋 Colecta</span>}
+                    {a.esFlex&&!a.esColecta&&<span style={{background:"#0d1c04",color:"#84cc16",border:"1px solid #84cc1644",padding:"1px 5px",borderRadius:"3px",fontSize:"0.58rem",fontWeight:700}}>FLEX</span>}
+                    {!a.esFlex&&!a.esColecta&&<span style={{background:"#12172a",color:"#6366f1",border:"1px solid #6366f144",padding:"1px 5px",borderRadius:"3px",fontSize:"0.58rem",fontWeight:700}}>NO FX</span>}
+                    {a.nroOrdenTN&&<span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.7rem"}}>#{a.nroOrdenTN}</span>}
+                    {(a.bultos||1)>1&&<span style={{color:"#f59e0b",fontSize:"0.62rem",fontWeight:700}}>{a.bultos}b</span>}
+                  </div>
+                  <div style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.8rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.esColecta?(a.destinatario||a.direccion||"—"):a.direccion||"—"}</div>
+                  <div style={{color:"#6b7280",fontSize:"0.62rem"}}>{a.partido}</div>
+                </div>
+                {/* Logística */}
+                <div style={{color:"#9ca3af",fontSize:"0.72rem",paddingTop:"2px"}}>{a.logistica||"—"}</div>
+                {/* Armador */}
+                <div style={{color:"#e5e7eb",fontSize:"0.75rem",fontWeight:600,paddingTop:"2px"}}>{a.armadorNombre||"—"}</div>
+                {/* Controlador */}
+                <div style={{color:"#6366f1",fontSize:"0.7rem",paddingTop:"2px"}}>{a.controladorNombre||<span style={{color:"#374151"}}>—</span>}</div>
+              </div>
+              {/* Detalle expandido */}
+              {expandido&&(
+                <div style={{padding:"0.5rem 0.9rem 0.7rem",background:"#080c17",borderTop:"1px solid #1a1f2e",display:"flex",gap:"1.5rem",flexWrap:"wrap",fontSize:"0.68rem",color:"#6b7280"}}>
+                  {a.nroSeguimiento&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Nro seguimiento</div><div style={{color:"#a78bfa",fontFamily:"monospace"}}>{a.nroSeguimiento}</div></div>}
+                  {a.nroOrdenTN&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Nro TN</div><div style={{color:"#7dd3fc"}}>#{a.nroOrdenTN}</div></div>}
+                  {a.nroVenta&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Nro venta</div><div style={{color:"#e5e7eb"}}>{a.nroVenta}</div></div>}
+                  {a.nroPackId&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Pack ID</div><div style={{color:"#e5e7eb"}}>{a.nroPackId}</div></div>}
+                  {a.usuario&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Usuario ML</div><div style={{color:"#e5e7eb"}}>{a.usuario}</div></div>}
+                  {a.destinatario&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Destinatario</div><div style={{color:"#e5e7eb"}}>{a.destinatario}</div></div>}
+                  {a.direccion&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Dirección</div><div style={{color:"#e5e7eb"}}>{a.direccion}</div></div>}
+                  <div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Armador</div><div style={{color:"#e5e7eb"}}>{a.armadorNombre||"—"}</div></div>
+                  {a.controladorNombre&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Controlador</div><div style={{color:"#6366f1"}}>{a.controladorNombre}</div></div>}
+                  <div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>TS completo</div><div style={{color:"#374151",fontFamily:"monospace"}}>{a.ts||"—"}</div></div>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -8294,7 +8439,7 @@ export default function App(){
     imprimir:"tab_despacho",manual:"tab_manual",tarifas:"tab_tarifas",
     informe:"tab_informe",liquidacion:"tab_cobranzaslog",
     liquidacionlog:"tab_liquidacionlog",ctasctes:"tab_ctasctes",
-    localidades:"tab_localidades",expedicion:"tab_expedicion",statsarmado:"tab_statsarmado",salida:"tab_salida",usuarios:"tab_usuarios",
+    localidades:"tab_localidades",expedicion:"tab_expedicion",statsarmado:"tab_statsarmado",consultaarmado:"tab_consultaarmado",salida:"tab_salida",usuarios:"tab_usuarios",
   };
   const TABS=[
     {id:"tablero",l:"📊 Tablero"},
@@ -8311,6 +8456,7 @@ export default function App(){
     {id:"localidades",l:"Localidades"},
     {id:"expedicion",l:"Expedicion"},
     {id:"statsarmado",l:"📊 Stats Armado"},
+    {id:"consultaarmado",l:"🔍 Consulta Armado"},
     {id:"salida",l:"🚚 Salida"},
     {id:"usuarios",l:"Usuarios"},
   ].filter(t=>{
@@ -8552,8 +8698,9 @@ export default function App(){
         {tab==="localidades" &&<TabLocalidades cpExtra={cpExtra} setCpExtra={setCpExtra}/>}
         {tab==="usuarios"   &&<TabUsuarios lc={lc} setLc={setLcPersist} configExpedicion={configExpedicion} setConfigExpedicion={setConfigExpedicion}/>}
         {tab==="expedicion" &&<VistaExpedicion envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} configExpedicion={configExpedicion} esAdmin={esAdmin}/>}
-        {tab==="statsarmado"&&<TabStatsArmado/>}
-        {tab==="salida"     &&<TabSalida envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>}
+        {tab==="statsarmado"   &&<TabStatsArmado/>}
+        {tab==="consultaarmado"&&<TabConsultaArmado/>}
+        {tab==="salida"        &&<TabSalida envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>}
       </div>
     </div>
   );
