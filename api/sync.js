@@ -12,8 +12,12 @@ export default async function handler(req, res) {
 
   let page = 1, guardados = 0, actualizados = 0, saltados = 0;
 
+  // Buscar órdenes de los últimos 60 días sin filtrar por status,
+  // para capturar pagos aprobados en órdenes que ya no están en estado "open".
+  const desde = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+
   while (true) {
-    const url = `https://api.tiendanube.com/v1/${TN_STOREID}/orders?page=${page}&per_page=50&status=open`;
+    const url = `https://api.tiendanube.com/v1/${TN_STOREID}/orders?page=${page}&per_page=50&created_at_min=${desde}`;
     const resp = await fetch(url, {
       headers: { "Authentication": `bearer ${TN_TOKEN}`, "User-Agent": "EnviosHub (maxidottori@gmail.com)" }
     });
