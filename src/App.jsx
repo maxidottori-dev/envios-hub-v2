@@ -3623,6 +3623,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
     if(filtro==="deuda"&&c.saldo===0)return false;
     if(filtro==="vencidos"&&c.dias<c.limite)return false;
     if(filtro==="saldados"&&c.saldo>0)return false;
+    if(filtro==="fc_pend"&&!(facturaClientes[c.key]&&c.envios.some(e=>e.trans&&!e.nroFactura&&e.estado!=="cancelado")))return false;
     if(busqueda){const s=norm(busqueda);const ok=norm(c.nombre).includes(s)||c.envios.some(e=>norm(e.direccion).includes(s)||(e.nroOrdenTN||"").includes(s)||(e.nroSeguimiento||"").includes(s));if(!ok)return false;}
     return true;
   }).sort((a,b)=>{
@@ -3964,7 +3965,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
 
       {/* Filtros + Exportar */}
       <div style={{display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center",marginBottom:"0.85rem"}}>
-        {[{k:"todos",l:"Todos"},{k:"deuda",l:"Con deuda"},{k:"vencidos",l:"Vencidos"},{k:"saldados",l:"Saldados"}].map(f=>(
+        {[{k:"todos",l:"Todos"},{k:"deuda",l:"Con deuda"},{k:"vencidos",l:"Vencidos"},{k:"saldados",l:"Saldados"},{k:"fc_pend",l:"🧾 FC pend."}].map(f=>(
           <button key={f.k} onClick={()=>setFiltro(f.k)} style={S.btnSm(filtro===f.k,"#6366f1")}>{f.l}</button>
         ))}
         <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Nombre, dirección o nro orden..." style={{...S.input,width:"240px",marginLeft:"auto"}}/>
