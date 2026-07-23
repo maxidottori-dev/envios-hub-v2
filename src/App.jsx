@@ -4113,7 +4113,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
                   </td>
                   <td style={{padding:"10px 10px"}}>
                     {(()=>{
-                      const facts=[...new Set(c.envios.filter(e=>e.nroFactura).map(e=>e.nroFactura))];
+                      const facts=[...new Set(c.envios.filter(e=>e.nroFactura&&calcPagEnvio&&saldoTolerante(e._deuda?.monto,calcPagEnvio(e.id))>0).map(e=>e.nroFactura))];
                       return facts.length>0
                         ?<div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{facts.map(f=><span key={f} style={{fontSize:"0.68rem",padding:"1px 7px",background:"#130d2a",color:"#c4b5fd",borderRadius:"4px",border:"1px solid #4c1d95",fontWeight:600,fontFamily:"monospace"}}>{f}</span>)}</div>
                         :<span style={{color:"#374151",fontSize:"0.72rem"}}>—</span>;
