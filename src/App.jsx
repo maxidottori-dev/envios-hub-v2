@@ -6234,6 +6234,18 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
   // Colectas pendientes de armar, ordenadas por fecha (más antiguas primero) para monitorear demoras
   const colectasOrdenadas=useMemo(()=>[...colectas].sort((a,b)=>(a.fecha||"").localeCompare(b.fecha||"")),[colectas]);
 
+  // Auto-expirar colectas sin registro: si pasaron 48hs desde loteImportacion y siguen pendientes → marcar sin_registro en Firestore
+  const LIMITE_COLECTA_MS=48*60*60*1000;
+  useEffect(()=>{
+    const ahora=Date.now();
+    colectas.forEach(c=>{
+      if(!c.loteImportacion)return;
+      if((ahora-new Date(c.loteImportacion).getTime())>LIMITE_COLECTA_MS){
+        updateDoc(doc(db,"colectas",c.id),{estado:"sin_registro"}).catch(()=>{});
+      }
+    });
+  },[colectas]);
+
   // Colectas armadas en la fecha seleccionada (listener local, para mostrar en el listado)
   useEffect(()=>{
     if(!fecha)return;
@@ -6959,7 +6971,9 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
           {(()=>{
             // Visible cuando filLog es TODOS o __COLECTAS__, y no es filtro FLEX
             if((filLog!=="TODOS"&&filLog!=="__COLECTAS__")||filTipo==="FLEX")return null;
+            const ahora=Date.now();
             const pendientes=colectasOrdenadas.filter(c=>{
+              if(c.loteImportacion&&(ahora-new Date(c.loteImportacion).getTime())>LIMITE_COLECTA_MS)return false;
               if(busqueda){const s=norm(busqueda);return norm(c.destinatario||"").includes(s)||(c.nroSeguimiento||"").includes(s);}
               return true;
             });
