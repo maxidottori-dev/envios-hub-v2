@@ -3,7 +3,7 @@ import * as XLSXLib from "xlsx";
 import jsQR from "jsqr";
 import { jsPDF } from "jspdf";
 import { db } from "./firebase.js";
-import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, updateDoc, query, where, getDocs, addDoc, serverTimestamp, limit, writeBatch } from "firebase/firestore";
+import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, updateDoc, query, where, getDocs, addDoc, serverTimestamp, limit, orderBy, writeBatch } from "firebase/firestore";
 
 const VERSION = "2.1";
 
@@ -7977,6 +7977,9 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   const [firmaData,setFirmaData]=useState(null);        // dataURL de la firma digital
   const [guardandoCierre,setGuardandoCierre]=useState(false);
   const firmaRef=useRef(null);                           // canvas de firma
+  const [sesiones,setSesiones]=useState([]);             // historial de cierres
+  const [sesionesLoading,setSesionesLoading]=useState(false);
+  const [sesionExpandida,setSesionExpandida]=useState(null); // id expandido en historial
 
   // La sesión solo se cierra manualmente (sin timer de inactividad)
   const liberarLogistica=useCallback(()=>{
@@ -8238,6 +8241,16 @@ function TabSalida({envios,setEnvios,lc,sesion}){
     );
   }
 
+  // Cargar historial de cierres de sesión desde Firestore
+  useEffect(()=>{
+    if(subTab!=="sesiones")return;
+    setSesionesLoading(true);
+    getDocs(query(collection(db,"sesionesSalida"),orderBy("creadoEn","desc"),limit(60)))
+      .then(snap=>setSesiones(snap.docs.map(d=>({id:d.id,...d.data()}))))
+      .catch(err=>console.error("Error cargando sesiones:",err))
+      .finally(()=>setSesionesLoading(false));
+  },[subTab]);
+
   // ── Historial de despacho ─────────────────────────────────────────
   const puedeHistorial=puedeVer(sesion,"accion_verhistorialdespacho");
 
@@ -8311,6 +8324,99 @@ function TabSalida({envios,setEnvios,lc,sesion}){
     );
   }
 
+  // ── Vista historial de cierres ───────────────────────────────────
+  if(subTab==="sesiones"){
+    return(
+      <div style={{maxWidth:"600px",margin:"0 auto",padding:"1rem 0"}}>
+        <div style={{display:"flex",gap:"6px",marginBottom:"1rem",alignItems:"center"}}>
+          <button onClick={()=>setSubTab("despacho")} style={{...S.btnSm(false),padding:"6px 16px",fontSize:"0.82rem"}}>← Salida</button>
+          <div style={{flex:1,fontWeight:700,fontSize:"0.95rem"}}>Cierres de sesión</div>
+          <button onClick={()=>{setSesionesLoading(true);getDocs(query(collection(db,"sesionesSalida"),orderBy("creadoEn","desc"),limit(60))).then(snap=>setSesiones(snap.docs.map(d=>({id:d.id,...d.data()})))).finally(()=>setSesionesLoading(false));}}
+            style={{...S.btnSm(false),padding:"4px 10px",fontSize:"0.75rem"}}>↺ Actualizar</button>
+        </div>
+        {sesionesLoading&&<div style={{color:"#6b7280",textAlign:"center",padding:"2rem",fontSize:"0.85rem"}}>Cargando…</div>}
+        {!sesionesLoading&&sesiones.length===0&&<div style={{color:"#4b5563",textAlign:"center",padding:"2rem",fontSize:"0.85rem"}}>No hay cierres registrados</div>}
+        <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+          {sesiones.map(s=>{
+            const lciS=lc[s.logistica]||{};
+            const expanded=sesionExpandida===s.id;
+            const fechaHora=s.creadoEn?new Date(s.creadoEn).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}):"";
+            return(
+              <div key={s.id} style={{background:"#0f1420",border:"1px solid #1a1f2e",borderRadius:"12px",overflow:"hidden"}}>
+                {/* Cabecera de sesión */}
+                <div onClick={()=>setSesionExpandida(expanded?null:s.id)}
+                  style={{padding:"0.75rem 1rem",cursor:"pointer",display:"flex",alignItems:"center",gap:"10px",flexWrap:"wrap"}}>
+                  <div style={{width:"9px",height:"9px",borderRadius:"50%",background:lciS.color||"#6b7280",flexShrink:0}}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}}>
+                      <span style={{fontWeight:700,color:lciS.color||"#fff",fontSize:"0.88rem"}}>{lciS.nombreFormal||s.logistica}</span>
+                      {s.turno&&<span style={{background:TURNO_C[s.turno]?.bg||"#1a1f2e",color:TURNO_C[s.turno]?.c||"#8b5cf6",padding:"1px 7px",borderRadius:"5px",fontWeight:700,fontSize:"0.65rem",border:"1px solid "+(TURNO_C[s.turno]?.c||"#8b5cf6")}}>{s.turno}</span>}
+                      {s.firmaDataUrl&&<span style={{background:"#041f14",color:"#34d399",padding:"1px 7px",borderRadius:"5px",fontSize:"0.62rem",fontWeight:700,border:"1px solid #065f46"}}>✓ Firmado</span>}
+                    </div>
+                    <div style={{color:"#6b7280",fontSize:"0.7rem",marginTop:"2px"}}>{fechaHora}{s.operador&&" · "+s.operador}</div>
+                  </div>
+                  <div style={{display:"flex",gap:"10px",alignItems:"center",flexShrink:0}}>
+                    <div style={{textAlign:"center"}}>
+                      <div style={{fontWeight:800,fontSize:"1rem",color:"#fff"}}>{s.totalPedidos}</div>
+                      <div style={{color:"#6b7280",fontSize:"0.6rem"}}>pedidos</div>
+                    </div>
+                    <div style={{textAlign:"center"}}>
+                      <div style={{fontWeight:700,fontSize:"0.85rem",color:"#34d399"}}>{s.totalFlex}</div>
+                      <div style={{color:"#6b7280",fontSize:"0.6rem"}}>FLEX</div>
+                    </div>
+                    <div style={{textAlign:"center"}}>
+                      <div style={{fontWeight:700,fontSize:"0.85rem",color:"#f59e0b"}}>{s.totalNoFlex}</div>
+                      <div style={{color:"#6b7280",fontSize:"0.6rem"}}>NO FL.</div>
+                    </div>
+                    <div style={{textAlign:"center"}}>
+                      <div style={{fontWeight:700,fontSize:"0.85rem",color:"#a78bfa"}}>{s.totalBultos}</div>
+                      <div style={{color:"#6b7280",fontSize:"0.6rem"}}>bultos</div>
+                    </div>
+                    <div style={{color:"#6b7280",fontSize:"0.85rem"}}>{expanded?"▲":"▼"}</div>
+                  </div>
+                </div>
+                {/* Detalle expandido */}
+                {expanded&&(
+                  <div style={{borderTop:"1px solid #1a1f2e",padding:"0.8rem 1rem"}}>
+                    {/* Firma */}
+                    {s.firmaDataUrl&&(
+                      <div style={{marginBottom:"0.8rem"}}>
+                        <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"5px"}}>Firma</div>
+                        <img src={s.firmaDataUrl} alt="Firma" style={{maxWidth:"180px",borderRadius:"6px",border:"1px solid #1a1f2e",background:"#0f1420"}}/>
+                      </div>
+                    )}
+                    {/* Envíos */}
+                    {s.enviosDetalle&&s.enviosDetalle.length>0&&(
+                      <div>
+                        <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"5px"}}>Envíos despachados</div>
+                        <div style={{display:"flex",flexDirection:"column",gap:"3px"}}>
+                          {s.enviosDetalle.map((e,i)=>(
+                            <div key={i} style={{display:"flex",gap:"8px",alignItems:"center",padding:"0.3rem 0.5rem",borderRadius:"6px",background:"#080c14"}}>
+                              <div style={{color:"#4b5563",fontSize:"0.65rem",width:"16px",textAlign:"right",flexShrink:0}}>{i+1}</div>
+                              <div style={{flex:1,minWidth:0}}>
+                                <span style={{color:"#e5e7eb",fontSize:"0.75rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{e.direccion}</span>
+                                {e.nroOrdenTN&&<span style={{color:"#6b7280",fontSize:"0.65rem"}}>#{e.nroOrdenTN}</span>}
+                              </div>
+                              <div style={{display:"flex",gap:"5px",flexShrink:0,alignItems:"center"}}>
+                                {e.reprogramado&&<span style={{background:"#1c1500",color:"#fbbf24",border:"1px solid #78350f",padding:"0 4px",borderRadius:"3px",fontSize:"0.55rem",fontWeight:700}}>⟳R</span>}
+                                <span style={{color:(e.origen||"")==="ML"?"#34d399":"#f59e0b",fontSize:"0.62rem",fontWeight:700}}>{(e.origen||"")==="ML"?"FLEX":"NO FL."}</span>
+                                <span style={{color:"#6b7280",fontSize:"0.62rem"}}>{e.bultos||1}b</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   // ── Vista selector de logística (Paso 1) ────────────────────────
   if(!logSel&&!logPreSel){
     return(
@@ -8318,7 +8424,10 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         <div style={{background:card,border:`1px solid ${brd}`,borderRadius:"14px",padding:"1.5rem"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"0.3rem"}}>
             <div style={{fontWeight:800,fontSize:"1.1rem"}}>🚚 Salida</div>
-            {puedeHistorial&&<button onClick={()=>setSubTab("historial")} style={{...S.btnSm(false),padding:"4px 12px",fontSize:"0.75rem",color:"#6b7280"}}>📋 Historial</button>}
+            <div style={{display:"flex",gap:"6px"}}>
+              {puedeHistorial&&<button onClick={()=>setSubTab("historial")} style={{...S.btnSm(false),padding:"4px 10px",fontSize:"0.75rem",color:"#6b7280"}}>📋 Historial</button>}
+              {esAdmin&&<button onClick={()=>setSubTab("sesiones")} style={{...S.btnSm(false),padding:"4px 10px",fontSize:"0.75rem",color:"#6b7280"}}>📄 Cierres</button>}
+            </div>
           </div>
           <div style={{color:muted,fontSize:"0.8rem",marginBottom:"1.5rem"}}>Seleccioná la logística para iniciar la sesión de despacho</div>
           {/* Selector de fecha */}
@@ -8422,7 +8531,8 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         // Info
         let y=40;
         doc.setFontSize(10);doc.setFont("helvetica","normal");
-        doc.text(`Logística: ${logSel}`,20,y);doc.text(`Fecha: ${fecha}`,110,y);y+=7;
+        const logNombre=lci.nombreFormal?`${lci.nombreFormal} (${logSel})`:logSel;
+        doc.text(`Logística: ${logNombre}`,20,y);doc.text(`Fecha: ${fecha}`,110,y);y+=7;
         doc.text(`Turno: ${turnoSel}`,20,y);doc.text(`Operador: ${operador}`,110,y);y+=7;
         doc.text(`Generado: ${new Date().toLocaleString("es-AR")}`,20,y);y+=12;
         // Resumen
@@ -8445,8 +8555,8 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         doc.setFont("helvetica","bold");doc.setFontSize(10);doc.text("DETALLE DE ENVÍOS",20,y);y+=6;
         doc.setFillColor(30,40,70);doc.rect(20,y,W-40,7,"F");
         doc.setTextColor(255,255,255);doc.setFontSize(7.5);
-        doc.text("#",22,y+5);doc.text("Dirección",30,y+5);doc.text("N° Orden",120,y+5);
-        doc.text("Bultos",152,y+5);doc.text("Tipo",168,y+5);y+=7;
+        doc.text("#",22,y+5);doc.text("Dirección",30,y+5);doc.text("N° Orden",118,y+5);
+        doc.text("Bultos",150,y+5);doc.text("Tipo",162,y+5);doc.text("Estado",178,y+5);y+=7;
         doc.setTextColor(0,0,0);doc.setFont("helvetica","normal");
         despSesion.forEach((e,i)=>{
           if(y>270){doc.addPage();y=20;}
@@ -8454,11 +8564,12 @@ function TabSalida({envios,setEnvios,lc,sesion}){
           doc.setFontSize(7.5);
           doc.text(String(i+1),22,y+4.5);
           const dir=(e.direccion||"");
-          doc.text(dir.length>42?dir.slice(0,39)+"…":dir,30,y+4.5);
-          doc.text(e.nroOrdenTN?"#"+e.nroOrdenTN:"-",120,y+4.5);
-          doc.text(String(e.bultos||1),154,y+4.5);
-          const tipo=(e.origen||"")==="ML"?"FLEX":"NO FLEX";
-          doc.text(tipo,168,y+4.5);
+          doc.text(dir.length>40?dir.slice(0,37)+"…":dir,30,y+4.5);
+          doc.text(e.nroOrdenTN?"#"+e.nroOrdenTN:"-",118,y+4.5);
+          doc.text(String(e.bultos||1),152,y+4.5);
+          const tipo=(e.origen||"")==="ML"?"FLEX":"NO FL.";
+          doc.text(tipo,162,y+4.5);
+          if(e.reprogramado){doc.setTextColor(180,120,0);doc.text("REPROG.",178,y+4.5);doc.setTextColor(0,0,0);}
           y+=6.5;
         });
         // Firma
@@ -8484,6 +8595,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
           id:e.id,direccion:e.direccion,bultos:e.bultos||1,
           origen:e.origen||"",nroOrdenTN:e.nroOrdenTN||null,
           nroSeguimiento:e.nroSeguimiento||null,despachoTs:e.despachoTs||null,
+          reprogramado:e.reprogramado||false,
         })),
       });
     }catch(err){console.error("Error cierre sesión:",err);}
@@ -8501,7 +8613,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         <div style={{background:"#0f1420",border:"1px solid #1a1f2e",borderRadius:"18px",padding:"1.5rem",width:"100%",maxWidth:"480px",maxHeight:"90vh",overflowY:"auto"}}>
           {/* Header */}
           <div style={{fontWeight:900,fontSize:"1.1rem",marginBottom:"0.3rem"}}>Cerrar sesión de despacho</div>
-          <div style={{color:"#6b7280",fontSize:"0.8rem",marginBottom:"1.2rem"}}>{logSel} · Turno {turnoSel} · {fecha}</div>
+          <div style={{color:"#6b7280",fontSize:"0.8rem",marginBottom:"1.2rem"}}>{lci.nombreFormal||logSel}{lci.nombreFormal?` (${logSel})`:""} · Turno {turnoSel} · {fecha}</div>
           {/* Resumen */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:"8px",marginBottom:"1.2rem"}}>
             {[
@@ -8530,8 +8642,8 @@ function TabSalida({envios,setEnvios,lc,sesion}){
                 Limpiar
               </button>
             </div>
-            <canvas ref={firmaRef} width={440} height={120}
-              style={{width:"100%",height:"120px",borderRadius:"10px",border:"1px solid #1a1f2e",cursor:"crosshair",touchAction:"none",display:"block"}}/>
+            <canvas ref={firmaRef} width={440} height={180}
+              style={{width:"100%",height:"180px",borderRadius:"10px",border:"1px solid #1a1f2e",cursor:"crosshair",touchAction:"none",display:"block"}}/>
             {!firmaData&&<div style={{color:"#4b5563",fontSize:"0.72rem",marginTop:"4px",textAlign:"center"}}>Firmá arriba con el dedo o el mouse</div>}
           </div>
           {/* Acciones */}
