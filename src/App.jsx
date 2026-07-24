@@ -955,12 +955,23 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
   const [guardando,setGuardando]=useState(false);
   const audit=mkAudit(sesion);
   const transAsignado=e.trans&&e.trans!==envio.trans;
+  // Si el envío ya fue despachado y se cambia fecha/turno/logística → marcar reprogramado
+  const esReprogramado=envio.despachado&&(e.fecha!==envio.fecha||e.turno!==envio.turno||e.trans!==envio.trans);
   const handleSave=()=>{setGuardando(true);onSave({...e,importeOverride:costoOverride||null,
+    ...(esReprogramado?{reprogramado:true}:{}),
     ...(audit?{ultimaEdicionPor:audit}:{}),
     ...(transAsignado&&audit?{asignadoPor:audit}:{}),
     ...(costoOverride!==null&&costoOverride!==(envio.importeOverride||null)&&audit?{importeEditadoPor:audit}:{})});}
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const handleTrans=l=>{const t=e.trans===l?"":l;setE(p=>({...p,trans:t,estado:t?"asignado":(p.estado==="cancelado"?"cancelado":"sin_asignar")}));};
+  // Cuando un envío ya despachado pasa a Cancelado, se marca devolucionPendiente + Sin cargo en liq.
+  const handleEstado=v=>{
+    if(v==="cancelado"&&envio.despachado){
+      setE(p=>({...p,estado:v,devolucionPendiente:true,estadoLiq:"cancelado_liq"}));
+    } else {
+      set("estado",v);
+    }
+  };
   const esTN = e.origen === "Tienda Nube";
   const confirmado=envio.estadoPago==="confirmado"||envio.estadoPago==="abonado";
   const bloqueado=confirmado&&!esAdmin;
@@ -1075,7 +1086,7 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
         </div>
         <div>
           <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Estado</div>
-          <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{Object.entries(ESTADO_C).map(([k,v])=><button key={k} onClick={()=>set("estado",k)} style={S.chip(e.estado===k,v.t,v.bg)}>{v.label}</button>)}</div>
+          <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{Object.entries(ESTADO_C).map(([k,v])=><button key={k} onClick={()=>handleEstado(k)} style={S.chip(e.estado===k,v.t,v.bg)}>{v.label}</button>)}</div>
         </div>
         <div>
           <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Bultos</div>
@@ -1145,7 +1156,7 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
       {e.trans&&<div style={{marginBottom:"0.65rem"}}>
         <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"6px"}}>Estado de liquidacion</div>
         <div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>
-          {[{k:"normal",l:"Normal",c:"#10b981"},{k:"cancelado_liq",l:"Cancelado",c:"#f87171"},{k:"no_abonado",l:"No abonado por demora",c:"#f59e0b"}].map(x =>(
+          {[{k:"normal",l:"Normal",c:"#10b981"},{k:"cancelado_liq",l:"Sin cargo",c:"#f87171"},{k:"no_abonado",l:"No abonado por demora",c:"#f59e0b"}].map(x =>(
             <button key={x.k} onClick={()=>set("estadoLiq",x.k)} style={{...S.btnSm((e.estadoLiq||"normal")===x.k,x.c),padding:"3px 10px",fontSize:"0.72rem"}}>{x.l}</button>
           ))}
         </div>
@@ -1533,8 +1544,13 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
           return(
             <div key={e.id} style={{width:"100%",minWidth:0,overflow:"hidden"}}>
               <div style={{...S.card,padding:"0.55rem 0.75rem",display:"flex",alignItems:"flex-start",gap:"0.5rem",opacity:getEstado(e)==="cancelado"?0.45:1,borderColor:isEdit||isSel?"#6366f1":e.alertaDireccion||!e.partido?"#f59e0b":"#252d40",background:isSel?"#12172a":"#1a1f2e",minWidth:0,overflow:"hidden"}}>
-                {modoSel?<div style={{paddingTop:"2px"}}><Chk checked={isSel} onChange={()=>toggleSel(e.id)}/></div>:<span style={{color:"#374151",fontSize:"0.65rem",minWidth:"20px",textAlign:"right",paddingTop:"3px"}}>{i+1}</span>}
-                <div style={{flex:1,cursor:puedeVer(sesion,"accion_editarenvio")?"pointer":"default",minWidth:0}} onClick={()=>{if(modoSel)toggleSel(e.id);else if(puedeVer(sesion,"accion_editarenvio"))setEditId(isEdit?null:e.id);}}>
+                {modoSel
+                  ?<div style={{paddingTop:"2px"}}><Chk checked={isSel} onChange={()=>toggleSel(e.id)}/></div>
+                  :puedeVer(sesion,"accion_editarenvio")
+                    ?<button onClick={ev=>{ev.stopPropagation();setEditId(isEdit?null:e.id);}} style={{flexShrink:0,width:"36px",height:"36px",borderRadius:"7px",border:"1px solid "+(isEdit?"#6366f1":"#252d40"),background:isEdit?"#13102a":"#0f1420",color:isEdit?"#a78bfa":"#6b7280",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.85rem"}}>✏️</button>
+                    :<span style={{color:"#374151",fontSize:"0.65rem",minWidth:"20px",textAlign:"right",paddingTop:"3px"}}>{i+1}</span>
+                }
+                <div style={{flex:1,minWidth:0}} onClick={()=>{if(modoSel)toggleSel(e.id);}}>
                   <div style={{display:"flex",gap:"3px",flexWrap:"wrap",alignItems:"center",marginBottom:"3px"}}>
                     {origenBadge(e)}
                     <Bdg label={estC.label} bg={estC.bg} t={estC.t}/>
@@ -1549,7 +1565,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                     {e.retiro!==null&&<Bdg label="Retiro" bg="#1c1000" t="#f97316"/>}
                     {e.alertaDireccion&&<Bdg label="Sin CP/Dir" bg="#1c0a00" t="#fb923c"/>}
                     {!e.partido&&getEstado(e)!=="cancelado"&&<Bdg label="Sin partido" bg="#1c0a00" t="#fb923c"/>}
-                    {e.estadoLiq==="cancelado_liq"&&<Bdg label="Canc. liquidacion" bg="#1c0a0a" t="#f87171" style={{border:"1px solid #f87171"}}/>}
+                    {e.estadoLiq==="cancelado_liq"&&<Bdg label="Sin cargo" bg="#1c0a0a" t="#f87171" style={{border:"1px solid #f87171"}}/>}
                     {e.estadoLiq==="no_abonado"&&<Bdg label="No abonado" bg="#1c1400" t="#f59e0b" style={{border:"1px solid #f59e0b"}}/>}
                     {getPagoEstado(e)==="pendiente"&&<Bdg label="Pago pendiente" bg="#1c0a00" t="#fb923c" style={{border:"1px solid #fb923c"}}/>}
                     {getPagoEstado(e)==="cuenta_corriente"&&<Bdg label="Cta. Corriente" bg="#130d2a" t="#a78bfa"/>}
@@ -3137,15 +3153,15 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
   const conCobranza = envios.filter(e =>
     e.cobranza !== null && e.cobranza !== undefined && e.cobranza > 0 && getEstado(e) !== "cancelado"
   );
-  // Envios con cambio o retiro
+  // Envios con cambio, retiro, o devolución por cancelación tras despacho
   const conRetiro = envios.filter(e =>
-    (e.cambio !== null || e.retiro !== null) && getEstado(e) !== "cancelado"
+    ((e.cambio !== null || e.retiro !== null) && getEstado(e) !== "cancelado") ||
+    (e.devolucionPendiente && !e.devolucionCancelacionRecibida)
   );
 
   const lista = [...(seccion === "cobranzas" ? conCobranza : conRetiro)].filter(e => {
     if (filTrans !== "TODOS" && e.trans !== filTrans) return false;
-    const campo = seccion === "cobranzas" ? "cobranzaRecibida" : "retiroRecibido";
-    const recibido = !!e[campo];
+    const recibido = seccion === "cobranzas" ? !!e.cobranzaRecibida : (e.devolucionPendiente ? !!e.devolucionCancelacionRecibida : !!e.retiroRecibido);
     if (filEstado === "pendiente" && recibido) return false;
     if (filEstado === "recibido" && !recibido) return false;
     const fEnv = e.fecha || e.fechaVenta || "";
@@ -3203,7 +3219,13 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
 
   const marcarRetiro = (id, recibido) => {
     const a=mkAudit(sesion);
-    setEnvios(p => p.map(e => e.id === id ? { ...e, retiroRecibido: recibido, retiroFecha: recibido ? fechaHoy() : null, ...(recibido&&a?{retiroRecibidoPor:a}:{}) } : e));
+    const env=envios.find(e=>e.id===id);
+    if(env?.devolucionPendiente){
+      // Devolución por cancelación — usa campo propio
+      setEnvios(p => p.map(e => e.id === id ? { ...e, devolucionCancelacionRecibida: recibido, devolucionCancelacionFecha: recibido ? fechaHoy() : null } : e));
+    } else {
+      setEnvios(p => p.map(e => e.id === id ? { ...e, retiroRecibido: recibido, retiroFecha: recibido ? fechaHoy() : null, ...(recibido&&a?{retiroRecibidoPor:a}:{}) } : e));
+    }
   };
 
   const guardarNota = () => {
@@ -3340,8 +3362,8 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
       ) : (
         <div style={{ display: "grid", gap: "4px" }}>
           {lista.map((e, i) => {
-            const recibido = seccion === "cobranzas" ? !!e.cobranzaRecibida : !!e.retiroRecibido;
-            const fecha = seccion === "cobranzas" ? e.cobranzaFecha : e.retiroFecha;
+            const recibido = seccion === "cobranzas" ? !!e.cobranzaRecibida : (e.devolucionPendiente ? !!e.devolucionCancelacionRecibida : !!e.retiroRecibido);
+            const fecha = seccion === "cobranzas" ? e.cobranzaFecha : (e.devolucionPendiente ? e.devolucionCancelacionFecha : e.retiroFecha);
             const nota = seccion === "cobranzas" ? e.cobranzaNota : e.retiroNota;
             const lci = lc[e.trans];
             return (
@@ -3376,7 +3398,10 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
                   {seccion === "cobranzas" && e.cambio !== null && (
                     <div style={{ color: "#ec4899", fontSize: "0.72rem", marginTop: "2px" }}>Cambio: {e.cambio}</div>
                   )}
-                  {seccion === "retiros" && (
+                  {seccion === "retiros" && e.devolucionPendiente && (
+                    <div style={{ color: "#f87171", fontSize: "0.72rem", marginTop: "2px", fontWeight: 600 }}>⚠ Devolución por cancelación (despachado)</div>
+                  )}
+                  {seccion === "retiros" && !e.devolucionPendiente && (
                     <div style={{ marginTop: "3px" }}>
                       {e.cambio !== null && <div style={{ color: "#ec4899", fontSize: "0.72rem" }}>Cambio: {e.cambio}</div>}
                       {e.retiro !== null && <div style={{ color: "#f97316", fontSize: "0.72rem" }}>Retiro: {e.retiro}</div>}
@@ -3443,7 +3468,7 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
                 <span style={{fontSize:"0.62rem",color:"#4b5563",fontWeight:700,textTransform:"uppercase"}}>{confirmModal.tipo==="cobranza"?"Monto":"Retira"}</span>
                 {confirmModal.tipo==="cobranza"
                   ?<span style={{fontSize:"1.3rem",color:"#f59e0b",fontWeight:800}}>${Math.round(confirmModal.envio.cobranza||0).toLocaleString("es-AR")}</span>
-                  :<span style={{fontSize:"0.85rem",color:"#f97316",fontWeight:700,maxWidth:"200px",textAlign:"right"}}>{confirmModal.envio.retiro||confirmModal.envio.cambio||"—"}</span>
+                  :<span style={{fontSize:"0.85rem",color:"#f97316",fontWeight:700,maxWidth:"200px",textAlign:"right"}}>{confirmModal.envio.devolucionPendiente?"Devolución por cancelación":(confirmModal.envio.retiro||confirmModal.envio.cambio||"—")}</span>
                 }
               </div>
             </div>
@@ -6883,6 +6908,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
                           <div style={{flex:1,minWidth:0}}>
                             <div style={{display:"flex",gap:"4px",flexWrap:"wrap",marginBottom:"3px"}}>
                               {esTN&&<span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.8rem"}}>#{e.nroOrdenTN}</span>}
+                              {e.origen==="ML"&&e.nroSeguimiento&&<span style={{color:"#84cc16",fontFamily:"monospace",fontSize:"0.7rem"}}>{e.nroSeguimiento.slice(-10)}</span>}
                               {e.turno&&<Bdg label={e.turno} bg={TURNO_C[e.turno]?.bg||"#130d2a"} t={TURNO_C[e.turno]?.c||"#a78bfa"}/>}
                               {e.preparado&&<Bdg label={"✓ "+(e.bultos||1)+"b"+(e.armadorNombre?" · "+e.armadorNombre:"")} bg="#041f14" t="#10b981"/>}
                               {e.cobranza&&<Bdg label={"$"+Number(e.cobranza).toLocaleString("es-AR")} bg="#1c1500" t="#fbbf24"/>}
@@ -6949,7 +6975,10 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
                               {esArmada&&<Bdg label={"✓ armada"+(c.armadorNombre?" · "+c.armadorNombre:"")} bg="#1e1433" t="#a78bfa"/>}
                             </div>
                             <div style={{color:"#e5e7eb",fontSize:"0.85rem",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.destinatario||c.direccion||"—"}</div>
-                            <div style={{color:"#6b7280",fontSize:"0.72rem",marginTop:"1px",fontFamily:"monospace"}}>{c.nroSeguimiento}</div>
+                            <div style={{color:"#6b7280",fontSize:"0.72rem",marginTop:"1px",display:"flex",gap:"8px",flexWrap:"wrap"}}>
+                              <span style={{fontFamily:"monospace"}}>{c.nroSeguimiento}</span>
+                              {c.usuario&&<span style={{color:"#a78bfa",fontFamily:"sans-serif"}}>@{c.usuario}</span>}
+                            </div>
                           </div>
                           <button
                             onClick={()=>!esArmada&&abrirPanelArmador({...c,_isColecta:true})}
@@ -6980,7 +7009,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
 // ════════════════════════════════════════════════════════════════════
 // TAB CONSULTA ARMADO — búsqueda histórica de pedidos armados
 // ════════════════════════════════════════════════════════════════════
-function TabConsultaArmado(){
+function TabConsultaArmado({esAdmin=false}){
   const hoy=fechaHoy();
   const d3=new Date(hoy+"T00:00:00");d3.setDate(d3.getDate()-2);
   const defDesde=d3.toISOString().split("T")[0];
@@ -7005,6 +7034,17 @@ function TabConsultaArmado(){
   },[desde,hasta]);
 
   useEffect(()=>{cargar();},[cargar]);
+
+  const eliminarColecta=async(a)=>{
+    if(!window.confirm("¿Eliminar esta colecta del registro? Borrará tanto el armado como la colecta de Firestore."))return;
+    try{
+      await Promise.all([
+        deleteDoc(doc(db,"armados",a.id)),
+        a.envioId?deleteDoc(doc(db,"colectas",a.envioId)):Promise.resolve(),
+      ]);
+      setArmados(prev=>prev.filter(x=>x.id!==a.id));
+    }catch(err){alert("Error al eliminar: "+err.message);}
+  };
 
   const presets=[
     {l:"Hoy",fn:()=>{setDesde(hoy);setHasta(hoy);}},
@@ -7093,17 +7133,27 @@ function TabConsultaArmado(){
               </div>
               {/* Detalle expandido */}
               {expandido&&(
-                <div style={{padding:"0.5rem 0.9rem 0.7rem",background:"#080c17",borderTop:"1px solid #1a1f2e",display:"flex",gap:"1.5rem",flexWrap:"wrap",fontSize:"0.68rem",color:"#6b7280"}}>
-                  {a.nroSeguimiento&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Nro seguimiento</div><div style={{color:"#a78bfa",fontFamily:"monospace"}}>{a.nroSeguimiento}</div></div>}
-                  {a.nroOrdenTN&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Nro TN</div><div style={{color:"#7dd3fc"}}>#{a.nroOrdenTN}</div></div>}
-                  {a.nroVenta&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Nro venta</div><div style={{color:"#e5e7eb"}}>{a.nroVenta}</div></div>}
-                  {a.nroPackId&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Pack ID</div><div style={{color:"#e5e7eb"}}>{a.nroPackId}</div></div>}
-                  {a.usuario&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Usuario ML</div><div style={{color:"#e5e7eb"}}>{a.usuario}</div></div>}
-                  {a.destinatario&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Destinatario</div><div style={{color:"#e5e7eb"}}>{a.destinatario}</div></div>}
-                  {a.direccion&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Dirección</div><div style={{color:"#e5e7eb"}}>{a.direccion}</div></div>}
-                  <div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Armador</div><div style={{color:"#e5e7eb"}}>{a.armadorNombre||"—"}</div></div>
-                  {a.controladorNombre&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Controlador</div><div style={{color:"#6366f1"}}>{a.controladorNombre}</div></div>}
-                  <div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>TS completo</div><div style={{color:"#374151",fontFamily:"monospace"}}>{a.ts||"—"}</div></div>
+                <div style={{padding:"0.5rem 0.9rem 0.7rem",background:"#080c17",borderTop:"1px solid #1a1f2e"}}>
+                  <div style={{display:"flex",gap:"1.5rem",flexWrap:"wrap",fontSize:"0.68rem",color:"#6b7280"}}>
+                    {a.nroSeguimiento&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Nro seguimiento</div><div style={{color:"#a78bfa",fontFamily:"monospace"}}>{a.nroSeguimiento}</div></div>}
+                    {a.nroOrdenTN&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Nro TN</div><div style={{color:"#7dd3fc"}}>#{a.nroOrdenTN}</div></div>}
+                    {a.nroVenta&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Nro venta</div><div style={{color:"#e5e7eb"}}>{a.nroVenta}</div></div>}
+                    {a.nroPackId&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Pack ID</div><div style={{color:"#e5e7eb"}}>{a.nroPackId}</div></div>}
+                    {a.usuario&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Usuario ML</div><div style={{color:"#e5e7eb"}}>{a.usuario}</div></div>}
+                    {a.destinatario&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Destinatario</div><div style={{color:"#e5e7eb"}}>{a.destinatario}</div></div>}
+                    {a.direccion&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Dirección</div><div style={{color:"#e5e7eb"}}>{a.direccion}</div></div>}
+                    <div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Armador</div><div style={{color:"#e5e7eb"}}>{a.armadorNombre||"—"}</div></div>
+                    {a.controladorNombre&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Controlador</div><div style={{color:"#6366f1"}}>{a.controladorNombre}</div></div>}
+                    <div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>TS completo</div><div style={{color:"#374151",fontFamily:"monospace"}}>{a.ts||"—"}</div></div>
+                  </div>
+                  {esAdmin&&a.esColecta&&(
+                    <div style={{marginTop:"8px",borderTop:"1px solid #1a1f2e",paddingTop:"8px"}}>
+                      <button onClick={()=>eliminarColecta(a)}
+                        style={{padding:"4px 12px",borderRadius:"6px",background:"#1c0404",border:"1px solid #7f1d1d",color:"#f87171",cursor:"pointer",fontSize:"0.72rem",fontWeight:600}}>
+                        🗑 Eliminar colecta
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -7870,10 +7920,29 @@ function TabSalida({envios,setEnvios,lc,sesion}){
     if(logSel&&inputRef.current)inputRef.current.focus();
   },[logSel]);
 
+  // Re-enfocar input después de cada scan exitoso (sesionIds cambia)
+  useEffect(()=>{
+    if(logSel&&inputRef.current)inputRef.current.focus();
+  },[sesionIds]);
+
+  const esAdmin=sesion?.rol==="admin";
+  const [selSalida,setSelSalida]=useState(new Set());
+
   // La sesión solo se cierra manualmente con "Liberar" (sin timer de inactividad)
   const liberarLogistica=useCallback(()=>{
-    setLogSel(null);setTurnoSel(null);setSesionIds([]);setResultado(null);setQrInput("");
+    setLogSel(null);setTurnoSel(null);setSesionIds([]);setResultado(null);setQrInput("");setSelSalida(new Set());
   },[]);
+
+  // Despachar envíos seleccionados manualmente (sin escanear) — solo admin
+  const despacharSeleccionados=useCallback(()=>{
+    if(!selSalida.size)return;
+    const ts=new Date().toISOString();
+    const despachoPor=sesion?.nombre||sesion?.email||"";
+    setEnvios(pv=>pv.map(e=>selSalida.has(e.id)?{...e,despachado:true,despachoTs:ts,despachoLogistica:logSel,despachoPor}:e));
+    setSesionIds(prev=>[...[...selSalida].filter(id=>!prev.includes(id)),...prev]);
+    setSelSalida(new Set());
+    beepOK();
+  },[selSalida,logSel,sesion,setEnvios]);
 
   // ── Pedidos del día para la logística + turno seleccionados ───────
   // Los envíos sin turno asignado (legacy) no se excluyen para no trabar pedidos viejos.
@@ -8228,10 +8297,12 @@ function TabSalida({envios,setEnvios,lc,sesion}){
                 </div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontWeight:700,fontSize:"0.82rem",color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}</div>
-                  <div style={{color:muted,fontSize:"0.7rem"}}>
-                    {e.nroOrdenTN&&<span style={{marginRight:"6px"}}>#{e.nroOrdenTN}</span>}
-                    {e.nroSeguimiento&&<span style={{marginRight:"6px",fontFamily:"monospace"}}>{e.nroSeguimiento.slice(-8)}</span>}
-                    {e.bultos>1&&<span>{e.bultos} bultos</span>}
+                  <div style={{color:muted,fontSize:"0.7rem",display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center"}}>
+                    {e.nroOrdenTN&&<span>#{e.nroOrdenTN}</span>}
+                    {e.nroSeguimiento&&<span style={{fontFamily:"monospace"}}>{e.nroSeguimiento.slice(-8)}</span>}
+                    {(e.localidad||e.partido)&&<span>{e.localidad||e.partido}</span>}
+                    <span>{e.bultos||1} bulto{(e.bultos||1)===1?"":"s"}</span>
+                    {e.reprogramado&&<span style={{background:"#1c1500",color:"#fbbf24",border:"1px solid #78350f",padding:"0 5px",borderRadius:"4px",fontSize:"0.6rem",fontWeight:700}}>⟳ Reprog.</span>}
                   </div>
                 </div>
                 <button onClick={()=>desDespachar(e.id)}
@@ -8247,32 +8318,53 @@ function TabSalida({envios,setEnvios,lc,sesion}){
       {/* Resumen pedidos del día para esta logística */}
       {pedidosLog.length>0&&(
         <div style={{background:card,border:`1px solid ${brd}`,borderRadius:"14px",padding:"1.2rem"}}>
-          <div style={{fontWeight:700,fontSize:"0.82rem",color:muted,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"0.8rem"}}>
-            Pedidos del día — {logSel} · {fecha}
+          <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"0.8rem",flexWrap:"wrap"}}>
+            <div style={{fontWeight:700,fontSize:"0.82rem",color:muted,textTransform:"uppercase",letterSpacing:"0.05em"}}>
+              Pedidos del día — {logSel} · {fecha}
+            </div>
+            {esAdmin&&selSalida.size>0&&(
+              <button onClick={despacharSeleccionados}
+                style={{marginLeft:"auto",padding:"0.3rem 0.8rem",borderRadius:"8px",background:`linear-gradient(135deg,${logColor},${logColor}cc)`,border:"none",color:"#fff",fontWeight:700,fontSize:"0.75rem",cursor:"pointer"}}>
+                Despachar {selSalida.size} seleccionado{selSalida.size!==1?"s":""}
+              </button>
+            )}
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:"5px"}}>
             {pedidosLog.map(e=>{
               const enSesion=sesionIds.includes(e.id);
               const desp=e.despachado;
               const prep=e.preparado;
+              const selAdmin=esAdmin&&selSalida.has(e.id);
               let estadoColor=muted,estadoLabel="Sin preparar";
               if(desp){estadoColor=ok;estadoLabel="Despachado";}
               else if(prep){estadoColor="#f59e0b";estadoLabel="Preparado";}
               return(
                 <div key={e.id} style={{display:"flex",alignItems:"flex-start",gap:"8px",padding:"0.45rem 0.6rem",borderRadius:"7px",
-                  background:desp?"#041f14":prep?"#0d0f1a":"transparent",
-                  border:`1px solid ${desp?"#065f46":prep?"#1e293b":"transparent"}`,
+                  background:desp?"#041f14":selAdmin?"#0d0f2a":prep?"#0d0f1a":"transparent",
+                  border:`1px solid ${desp?"#065f46":selAdmin?"#6366f1":prep?"#1e293b":"transparent"}`,
                   opacity:desp?1:prep?1:0.5}}>
+                  {/* Checkbox admin para selección manual */}
+                  {esAdmin&&!desp&&(
+                    <div style={{paddingTop:"2px",flexShrink:0}}>
+                      <input type="checkbox" checked={selAdmin} onChange={()=>setSelSalida(prev=>{const n=new Set(prev);n.has(e.id)?n.delete(e.id):n.add(e.id);return n;})}
+                        style={{width:"15px",height:"15px",cursor:"pointer",accentColor:logColor}}/>
+                    </div>
+                  )}
                   <div style={{width:"8px",height:"8px",borderRadius:"50%",background:estadoColor,flexShrink:0,marginTop:"4px"}}/>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontWeight:600,fontSize:"0.78rem",color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}</div>
+                    <div style={{fontWeight:600,fontSize:"0.78rem",color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      {e.direccion}
+                      {e.reprogramado&&<span style={{background:"#1c1500",color:"#fbbf24",border:"1px solid #78350f",padding:"0 5px",borderRadius:"4px",fontSize:"0.6rem",fontWeight:700,marginLeft:"6px"}}>⟳ Reprog.</span>}
+                    </div>
                     <div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginTop:"1px"}}>
                       {e.nroOrdenTN&&<span style={{color:muted,fontSize:"0.67rem"}}>#{e.nroOrdenTN}</span>}
+                      {(e.localidad||e.partido)&&<span style={{color:muted,fontSize:"0.67rem"}}>{e.localidad||e.partido}</span>}
                       {e.armadorNombre&&<span style={{color:"#a78bfa",fontSize:"0.67rem",fontWeight:600}}>👤 {e.armadorNombre}{e.armadoTs?" · "+fmtHora(e.armadoTs):""}</span>}
                     </div>
                   </div>
-                  <div style={{display:"flex",alignItems:"center",gap:"5px",flexShrink:0}}>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"2px",flexShrink:0}}>
                     <div style={{fontSize:"0.68rem",fontWeight:700,color:estadoColor}}>{estadoLabel}</div>
+                    {desp&&e.despachoTs&&<div style={{fontSize:"0.6rem",color:"#4b5563"}}>{fmtHora(e.despachoTs)}{e.despachoPor&&" · "+e.despachoPor}</div>}
                     {desp&&enSesion&&<button onClick={()=>desDespachar(e.id)}
                       style={{padding:"0.2rem 0.45rem",borderRadius:"5px",background:"transparent",border:"1px solid #374151",color:muted,cursor:"pointer",fontSize:"0.63rem"}}>
                       ↩
@@ -8826,7 +8918,7 @@ export default function App(){
         {tab==="usuarios"   &&<TabUsuarios lc={lc} setLc={setLcPersist} configExpedicion={configExpedicion} setConfigExpedicion={setConfigExpedicion}/>}
         {tab==="expedicion" &&<VistaExpedicion envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} configExpedicion={configExpedicion} esAdmin={esAdmin}/>}
         {tab==="statsarmado"   &&<TabStatsArmado configExpedicion={configExpedicion} setConfigExpedicion={setConfigExpedicion} esAdmin={esAdmin}/>}
-        {tab==="consultaarmado"&&<TabConsultaArmado/>}
+        {tab==="consultaarmado"&&<TabConsultaArmado esAdmin={esAdmin}/>}
         {tab==="salida"        &&<TabSalida envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>}
       </div>
     </div>
