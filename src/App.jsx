@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import * as XLSXLib from "xlsx";
 import jsQR from "jsqr";
+import { jsPDF } from "jspdf";
 import { db } from "./firebase.js";
 import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, updateDoc, query, where, getDocs, addDoc, serverTimestamp, limit, writeBatch } from "firebase/firestore";
 
@@ -7971,10 +7972,15 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   const [subTab,setSubTab]=useState("despacho"); // "despacho" | "historial"
   const [histFecha,setHistFecha]=useState(hoy);
   const [histFilLog,setHistFilLog]=useState("TODOS");
+  const [logPreSel,setLogPreSel]=useState(null);       // logística elegida antes del turno
+  const [modalCierre,setModalCierre]=useState(false);  // modal de cierre de sesión
+  const [firmaData,setFirmaData]=useState(null);        // dataURL de la firma digital
+  const [guardandoCierre,setGuardandoCierre]=useState(false);
+  const firmaRef=useRef(null);                           // canvas de firma
 
-  // La sesión solo se cierra manualmente con "Liberar" (sin timer de inactividad)
+  // La sesión solo se cierra manualmente (sin timer de inactividad)
   const liberarLogistica=useCallback(()=>{
-    setLogSel(null);setTurnoSel(null);setSesionIds([]);setResultado(null);setQrInput("");setSelSalida(new Set());
+    setLogSel(null);setTurnoSel(null);setLogPreSel(null);setSesionIds([]);setResultado(null);setQrInput("");setSelSalida(new Set());setModalCierre(false);setFirmaData(null);
   },[]);
 
   // Despachar envíos seleccionados manualmente (sin escanear) — solo admin
@@ -8157,6 +8163,44 @@ function TabSalida({envios,setEnvios,lc,sesion}){
     };
   },[camara,procesarScan]);
 
+  // Canvas de firma digital — registra eventos cuando el modal de cierre está abierto
+  useEffect(()=>{
+    if(!modalCierre||!firmaRef.current)return;
+    const canvas=firmaRef.current;
+    const ctx=canvas.getContext("2d");
+    ctx.fillStyle="#0f1420";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.strokeStyle="#ffffff";
+    ctx.lineWidth=2.5;
+    ctx.lineCap="round";
+    ctx.lineJoin="round";
+    let drawing=false;
+    const getPos=(e)=>{
+      const rect=canvas.getBoundingClientRect();
+      const sx=canvas.width/rect.width,sy=canvas.height/rect.height;
+      const cx=e.touches?e.touches[0].clientX:e.clientX;
+      const cy=e.touches?e.touches[0].clientY:e.clientY;
+      return[(cx-rect.left)*sx,(cy-rect.top)*sy];
+    };
+    const start=(e)=>{e.preventDefault();drawing=true;const[x,y]=getPos(e);ctx.beginPath();ctx.moveTo(x,y);};
+    const move=(e)=>{
+      if(!drawing)return;e.preventDefault();
+      const[x,y]=getPos(e);ctx.lineTo(x,y);ctx.stroke();ctx.beginPath();ctx.moveTo(x,y);
+      setFirmaData(canvas.toDataURL("image/png"));
+    };
+    const end=()=>{drawing=false;};
+    canvas.addEventListener("mousedown",start);canvas.addEventListener("mousemove",move);
+    canvas.addEventListener("mouseup",end);canvas.addEventListener("mouseleave",end);
+    canvas.addEventListener("touchstart",start,{passive:false});canvas.addEventListener("touchmove",move,{passive:false});
+    canvas.addEventListener("touchend",end);
+    return()=>{
+      canvas.removeEventListener("mousedown",start);canvas.removeEventListener("mousemove",move);
+      canvas.removeEventListener("mouseup",end);canvas.removeEventListener("mouseleave",end);
+      canvas.removeEventListener("touchstart",start);canvas.removeEventListener("touchmove",move);
+      canvas.removeEventListener("touchend",end);
+    };
+  },[modalCierre]);
+
   const handleKey=e=>{if(e.key==="Enter"){procesarScan(qrInput);}};
 
   // ── Des-despachar (undo) ──────────────────────────────────────────
@@ -8267,51 +8311,34 @@ function TabSalida({envios,setEnvios,lc,sesion}){
     );
   }
 
-  // ── Vista selector de logística ───────────────────────────────────
-  if(!logSel){
+  // ── Vista selector de logística (Paso 1) ────────────────────────
+  if(!logSel&&!logPreSel){
     return(
       <div style={{maxWidth:"600px",margin:"0 auto",padding:"1rem 0"}}>
         <div style={{background:card,border:`1px solid ${brd}`,borderRadius:"14px",padding:"1.5rem"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"0.3rem"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"0.3rem"}}>
             <div style={{fontWeight:800,fontSize:"1.1rem"}}>🚚 Salida</div>
             {puedeHistorial&&<button onClick={()=>setSubTab("historial")} style={{...S.btnSm(false),padding:"4px 12px",fontSize:"0.75rem",color:"#6b7280"}}>📋 Historial</button>}
           </div>
-          <div style={{color:muted,fontSize:"0.8rem",marginBottom:"1.5rem"}}>Seleccioná turno y logística para iniciar la sesión de despacho</div>
+          <div style={{color:muted,fontSize:"0.8rem",marginBottom:"1.5rem"}}>Seleccioná la logística para iniciar la sesión de despacho</div>
           {/* Selector de fecha */}
           <div style={{marginBottom:"1.2rem"}}>
             <label style={{display:"block",color:muted,fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Fecha</label>
             <input type="date" value={fecha} onChange={e=>setFecha(e.target.value)}
               style={{background:"#12172a",border:`1px solid ${brd}`,borderRadius:"8px",color:"#fff",padding:"0.45rem 0.7rem",fontSize:"0.85rem",width:"auto"}}/>
           </div>
-          {/* Selector de turno — obligatorio antes de elegir logística */}
-          <div style={{marginBottom:"1.2rem"}}>
-            <label style={{display:"block",color:muted,fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Turno</label>
-            <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
-              {TURNOS.map(t=>{
-                const tc=TURNO_C[t]||{c:"#8b5cf6",bg:"#1a1f2e"};
-                const sel=turnoSel===t;
-                return(
-                  <button key={t} onClick={()=>setTurnoSel(sel?null:t)}
-                    style={{padding:"0.5rem 1rem",borderRadius:"8px",fontWeight:700,fontSize:"0.85rem",cursor:"pointer",
-                      background:sel?tc.bg:"#12172a",color:sel?tc.c:muted,border:`2px solid ${sel?tc.c:brd}`}}>
-                    {t}
-                  </button>
-                );
-              })}
-            </div>
-            {!turnoSel&&<div style={{color:"#fbbf24",fontSize:"0.7rem",marginTop:"6px"}}>⚠ Elegí el turno antes de seleccionar la logística</div>}
-          </div>
-          <div style={{display:"flex",flexDirection:"column",gap:"10px",opacity:turnoSel?1:0.4,pointerEvents:turnoSel?"auto":"none"}}>
+          {/* Logísticas — paso 1 */}
+          <label style={{display:"block",color:muted,fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",marginBottom:"8px"}}>Logística</label>
+          <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
             {logActivas.map(l=>{
               const lci=lc[l]||{};
-              const pedL=envios.filter(e=>{const f=e.fecha||e.fechaVenta||"";return f===fecha&&e.trans===l&&getEstado(e)==="asignado"&&e.estado!=="cancelado"&&(!turnoSel||!e.turno||e.turno===turnoSel);});
+              const pedL=envios.filter(e=>{const f=e.fecha||e.fechaVenta||"";return f===fecha&&e.trans===l&&getEstado(e)==="asignado"&&e.estado!=="cancelado";});
               const prepL=pedL.filter(e=>e.preparado).length;
               const despL=pedL.filter(e=>e.despachado).length;
               return(
-                <button key={l} onClick={()=>{if(!turnoSel)return;setLogSel(l);setSesionIds([]);setResultado(null);}} disabled={!turnoSel}
+                <button key={l} onClick={()=>setLogPreSel(l)}
                   style={{display:"flex",alignItems:"center",gap:"14px",padding:"1rem 1.2rem",borderRadius:"12px",
-                    background:"#12172a",border:`2px solid ${lci.color||brd}22`,cursor:turnoSel?"pointer":"not-allowed",textAlign:"left",
-                    transition:"border-color 0.15s"}}>
+                    background:"#12172a",border:`2px solid ${lci.color||brd}22`,cursor:"pointer",textAlign:"left",transition:"border-color 0.15s"}}>
                   <div style={{width:"12px",height:"12px",borderRadius:"50%",background:lci.color||"#6b7280",flexShrink:0}}/>
                   <div style={{flex:1}}>
                     <div style={{fontWeight:800,fontSize:"1rem",color:lci.color||"#fff"}}>{l}</div>
@@ -8326,12 +8353,41 @@ function TabSalida({envios,setEnvios,lc,sesion}){
               );
             })}
           </div>
-          {resultado&&(
-            <div style={{marginTop:"1rem",padding:"0.65rem 0.9rem",borderRadius:"8px",fontWeight:600,fontSize:"0.85rem",
-              background:resultado.ok?"#041f14":"#1c0505",border:`1px solid ${resultado.ok?ok:err}`,color:resultado.ok?"#34d399":"#fca5a5"}}>
-              {resultado.msg}
-            </div>
-          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Vista selector de turno (Paso 2) ────────────────────────────
+  if(!logSel&&logPreSel){
+    const lciPre=lc[logPreSel]||{};
+    const pedPre=envios.filter(e=>{const f=e.fecha||e.fechaVenta||"";return f===fecha&&e.trans===logPreSel&&getEstado(e)==="asignado"&&e.estado!=="cancelado";});
+    return(
+      <div style={{maxWidth:"600px",margin:"0 auto",padding:"1rem 0"}}>
+        <div style={{background:card,border:`1px solid ${brd}`,borderRadius:"14px",padding:"1.5rem"}}>
+          <button onClick={()=>setLogPreSel(null)} style={{...S.btnSm(false),padding:"4px 12px",fontSize:"0.75rem",marginBottom:"1.2rem"}}>← Volver</button>
+          {/* Logística elegida */}
+          <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"1.5rem",padding:"0.75rem 1rem",background:"#12172a",borderRadius:"10px",border:`1px solid ${lciPre.color||brd}44`}}>
+            <div style={{width:"10px",height:"10px",borderRadius:"50%",background:lciPre.color||"#6b7280",flexShrink:0}}/>
+            <div style={{fontWeight:700,color:lciPre.color||"#fff",flex:1}}>{logPreSel}</div>
+            {lciPre.nombreFormal&&<div style={{color:muted,fontSize:"0.75rem"}}>{lciPre.nombreFormal}</div>}
+            <div style={{color:muted,fontSize:"0.78rem"}}>{pedPre.length} pedidos</div>
+          </div>
+          <label style={{display:"block",color:muted,fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",marginBottom:"10px"}}>Turno</label>
+          <div style={{display:"flex",gap:"10px",flexWrap:"wrap"}}>
+            {TURNOS.map(t=>{
+              const tc=TURNO_C[t]||{c:"#8b5cf6",bg:"#1a1f2e"};
+              const pedT=pedPre.filter(e=>!e.turno||e.turno===t);
+              return(
+                <button key={t} onClick={()=>{setLogSel(logPreSel);setTurnoSel(t);setSesionIds([]);setResultado(null);}}
+                  style={{flex:"1 1 120px",display:"flex",flexDirection:"column",alignItems:"center",gap:"8px",padding:"1.2rem 1rem",borderRadius:"12px",
+                    background:tc.bg+"44",color:tc.c,border:`2px solid ${tc.c}`,cursor:"pointer",fontWeight:800,fontSize:"1.1rem"}}>
+                  {t}
+                  <span style={{color:muted,fontSize:"0.7rem",fontWeight:400}}>{pedT.length} pedidos</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     );
@@ -8345,6 +8401,158 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   // Pedidos de esta sesión que ya fueron despachados
   const enviosMap=new Map(envios.map(e=>[e.id,e]));
   const despSesion=sesionIds.map(id=>enviosMap.get(id)).filter(Boolean);
+
+  // Generar PDF con jsPDF y guardar sesión en Firestore
+  const generarYCerrar=async(conPDF)=>{
+    if(guardandoCierre)return;
+    setGuardandoCierre(true);
+    try{
+      const totalFlex=despSesion.filter(e=>(e.origen||"")==="ML").length;
+      const totalNoFlex=despSesion.length-totalFlex;
+      const totalBultos=despSesion.reduce((s,e)=>s+(e.bultos||1),0);
+      const operador=sesion?.nombre||sesion?.email||"";
+      if(conPDF){
+        const doc=new jsPDF();
+        const W=doc.internal.pageSize.getWidth();
+        // Título
+        doc.setFillColor(15,20,32);doc.rect(0,0,W,30,"F");
+        doc.setTextColor(255,255,255);doc.setFontSize(16);doc.setFont("helvetica","bold");
+        doc.text("CONSTANCIA DE SALIDA",W/2,18,{align:"center"});
+        doc.setTextColor(0,0,0);
+        // Info
+        let y=40;
+        doc.setFontSize(10);doc.setFont("helvetica","normal");
+        doc.text(`Logística: ${logSel}`,20,y);doc.text(`Fecha: ${fecha}`,110,y);y+=7;
+        doc.text(`Turno: ${turnoSel}`,20,y);doc.text(`Operador: ${operador}`,110,y);y+=7;
+        doc.text(`Generado: ${new Date().toLocaleString("es-AR")}`,20,y);y+=12;
+        // Resumen
+        doc.setFillColor(240,244,255);doc.roundedRect(18,y,W-36,22,3,3,"F");
+        doc.setFont("helvetica","bold");doc.setFontSize(9);
+        const resItems=[
+          {label:"Total pedidos",val:despSesion.length},
+          {label:"FLEX",val:totalFlex},
+          {label:"NO FLEX",val:totalNoFlex},
+          {label:"Total bultos",val:totalBultos},
+        ];
+        const colW=(W-36)/4;
+        resItems.forEach((item,i)=>{
+          const cx=20+i*colW+colW/2;
+          doc.setFontSize(18);doc.setTextColor(30,80,200);doc.text(String(item.val),cx,y+13,{align:"center"});
+          doc.setFontSize(7.5);doc.setTextColor(100,100,100);doc.text(item.label,cx,y+19,{align:"center"});
+        });
+        y+=30;doc.setTextColor(0,0,0);
+        // Tabla envíos
+        doc.setFont("helvetica","bold");doc.setFontSize(10);doc.text("DETALLE DE ENVÍOS",20,y);y+=6;
+        doc.setFillColor(30,40,70);doc.rect(20,y,W-40,7,"F");
+        doc.setTextColor(255,255,255);doc.setFontSize(7.5);
+        doc.text("#",22,y+5);doc.text("Dirección",30,y+5);doc.text("N° Orden",120,y+5);
+        doc.text("Bultos",152,y+5);doc.text("Tipo",168,y+5);y+=7;
+        doc.setTextColor(0,0,0);doc.setFont("helvetica","normal");
+        despSesion.forEach((e,i)=>{
+          if(y>270){doc.addPage();y=20;}
+          if(i%2===0){doc.setFillColor(248,249,252);doc.rect(20,y,W-40,6.5,"F");}
+          doc.setFontSize(7.5);
+          doc.text(String(i+1),22,y+4.5);
+          const dir=(e.direccion||"");
+          doc.text(dir.length>42?dir.slice(0,39)+"…":dir,30,y+4.5);
+          doc.text(e.nroOrdenTN?"#"+e.nroOrdenTN:"-",120,y+4.5);
+          doc.text(String(e.bultos||1),154,y+4.5);
+          const tipo=(e.origen||"")==="ML"?"FLEX":"NO FLEX";
+          doc.text(tipo,168,y+4.5);
+          y+=6.5;
+        });
+        // Firma
+        y+=10;if(y>240){doc.addPage();y=20;}
+        doc.setFont("helvetica","bold");doc.setFontSize(10);doc.text("FIRMA DEL TRANSPORTISTA",20,y);y+=8;
+        if(firmaData){
+          doc.addImage(firmaData,"PNG",20,y,80,36);y+=40;
+        }else{
+          doc.setDrawColor(180,180,180);doc.rect(20,y,80,36);y+=40;
+        }
+        doc.setDrawColor(0,0,0);doc.line(20,y+4,100,y+4);
+        doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(100,100,100);
+        doc.text("Firma y aclaración",60,y+9,{align:"center"});
+        doc.save(`salida_${logSel}_${turnoSel}_${fecha}.pdf`);
+      }
+      await addDoc(collection(db,"sesionesSalida"),{
+        fecha,logistica:logSel,turno:turnoSel,operador,
+        creadoEn:new Date().toISOString(),
+        totalPedidos:despSesion.length,totalFlex,totalNoFlex,totalBultos,
+        firmaDataUrl:conPDF&&firmaData?firmaData:null,
+        enviosIds:sesionIds,
+        enviosDetalle:despSesion.map(e=>({
+          id:e.id,direccion:e.direccion,bultos:e.bultos||1,
+          origen:e.origen||"",nroOrdenTN:e.nroOrdenTN||null,
+          nroSeguimiento:e.nroSeguimiento||null,despachoTs:e.despachoTs||null,
+        })),
+      });
+    }catch(err){console.error("Error cierre sesión:",err);}
+    finally{setGuardandoCierre(false);}
+    liberarLogistica();
+  };
+
+  // ── Modal de cierre de sesión ─────────────────────────────────────
+  if(modalCierre){
+    const totalFlex=despSesion.filter(e=>(e.origen||"")==="ML").length;
+    const totalNoFlex=despSesion.length-totalFlex;
+    const totalBultos=despSesion.reduce((s,e)=>s+(e.bultos||1),0);
+    return(
+      <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem",overflowY:"auto"}}>
+        <div style={{background:"#0f1420",border:"1px solid #1a1f2e",borderRadius:"18px",padding:"1.5rem",width:"100%",maxWidth:"480px",maxHeight:"90vh",overflowY:"auto"}}>
+          {/* Header */}
+          <div style={{fontWeight:900,fontSize:"1.1rem",marginBottom:"0.3rem"}}>Cerrar sesión de despacho</div>
+          <div style={{color:"#6b7280",fontSize:"0.8rem",marginBottom:"1.2rem"}}>{logSel} · Turno {turnoSel} · {fecha}</div>
+          {/* Resumen */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:"8px",marginBottom:"1.2rem"}}>
+            {[
+              {label:"Pedidos",val:despSesion.length,color:logColor},
+              {label:"FLEX",val:totalFlex,color:"#34d399"},
+              {label:"NO FLEX",val:totalNoFlex,color:"#f59e0b"},
+              {label:"Bultos",val:totalBultos,color:"#a78bfa"},
+            ].map(({label,val,color})=>(
+              <div key={label} style={{background:"#12172a",border:"1px solid #1a1f2e",borderRadius:"10px",padding:"0.7rem 0.5rem",textAlign:"center"}}>
+                <div style={{fontSize:"1.6rem",fontWeight:900,color}}>{val}</div>
+                <div style={{fontSize:"0.65rem",color:"#6b7280",marginTop:"2px"}}>{label}</div>
+              </div>
+            ))}
+          </div>
+          {/* Firma */}
+          <div style={{marginBottom:"1.2rem"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"6px"}}>
+              <label style={{color:"#6b7280",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Firma del transportista</label>
+              <button onClick={()=>{
+                if(firmaRef.current){
+                  const ctx=firmaRef.current.getContext("2d");
+                  ctx.fillStyle="#0f1420";ctx.fillRect(0,0,firmaRef.current.width,firmaRef.current.height);
+                }
+                setFirmaData(null);
+              }} style={{fontSize:"0.7rem",color:"#6b7280",background:"transparent",border:"1px solid #1a1f2e",borderRadius:"6px",padding:"2px 8px",cursor:"pointer"}}>
+                Limpiar
+              </button>
+            </div>
+            <canvas ref={firmaRef} width={440} height={120}
+              style={{width:"100%",height:"120px",borderRadius:"10px",border:"1px solid #1a1f2e",cursor:"crosshair",touchAction:"none",display:"block"}}/>
+            {!firmaData&&<div style={{color:"#4b5563",fontSize:"0.72rem",marginTop:"4px",textAlign:"center"}}>Firmá arriba con el dedo o el mouse</div>}
+          </div>
+          {/* Acciones */}
+          <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+            <button onClick={()=>generarYCerrar(true)} disabled={guardandoCierre}
+              style={{padding:"0.8rem",borderRadius:"10px",background:`linear-gradient(135deg,${logColor},${logColor}cc)`,border:"none",color:"#fff",fontWeight:700,fontSize:"0.9rem",cursor:"pointer",opacity:guardandoCierre?0.6:1}}>
+              {guardandoCierre?"Guardando…":"⬇ Descargar PDF y cerrar"}
+            </button>
+            <button onClick={()=>generarYCerrar(false)} disabled={guardandoCierre}
+              style={{padding:"0.65rem",borderRadius:"10px",background:"transparent",border:"1px solid #374151",color:"#9ca3af",fontWeight:600,fontSize:"0.82rem",cursor:"pointer",opacity:guardandoCierre?0.6:1}}>
+              Cerrar sin PDF
+            </button>
+            <button onClick={()=>setModalCierre(false)} disabled={guardandoCierre}
+              style={{padding:"0.5rem",borderRadius:"10px",background:"transparent",border:"none",color:"#4b5563",fontSize:"0.78rem",cursor:"pointer"}}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return(
     <div style={{maxWidth:"700px",margin:"0 auto",padding:"1rem 0"}}>
@@ -8362,10 +8570,18 @@ function TabSalida({envios,setEnvios,lc,sesion}){
           <div style={{fontWeight:800,fontSize:"1.2rem",color:logColor}}>{despachados.length}<span style={{color:muted,fontWeight:400,fontSize:"0.8rem"}}> / {totalLog}</span></div>
           <div style={{color:muted,fontSize:"0.68rem"}}>despachados · {pct}%</div>
         </div>
-        <button onClick={liberarLogistica}
-          style={{padding:"0.4rem 0.8rem",borderRadius:"8px",background:"transparent",border:`1px solid ${muted}`,color:muted,cursor:"pointer",fontSize:"0.72rem",fontWeight:600,flexShrink:0}}>
-          Liberar
-        </button>
+        <div style={{display:"flex",gap:"6px",flexShrink:0}}>
+          {sesionIds.length>0&&(
+            <button onClick={()=>setModalCierre(true)}
+              style={{padding:"0.4rem 0.8rem",borderRadius:"8px",background:`linear-gradient(135deg,${logColor},${logColor}cc)`,border:"none",color:"#fff",cursor:"pointer",fontSize:"0.72rem",fontWeight:700}}>
+              Cerrar sesión
+            </button>
+          )}
+          <button onClick={liberarLogistica}
+            style={{padding:"0.4rem 0.8rem",borderRadius:"8px",background:"transparent",border:`1px solid ${muted}`,color:muted,cursor:"pointer",fontSize:"0.72rem",fontWeight:600}}>
+            Liberar
+          </button>
+        </div>
       </div>
 
       {/* Barra de progreso */}
