@@ -475,7 +475,7 @@ const LOGISTICAS_INIT = {
   LOG_1:   {nombre:"LOG 1",  color:"#f97316",bg:"rgba(249,115,22,0.15)",activa:true,preciosBultos:[{b:1,p:0},{b:2,p:0},{b:3,p:0}]},
 };
 
-const TURNOS=["AM","MD","PM","Turbo"];
+const TURNOS=["AM","PM"];
 const ARM_COLORS=["#60a5fa","#34d399","#f472b6","#fb923c","#a78bfa","#fbbf24","#38bdf8","#f87171"];
 const TURNO_C={AM:{c:"#60a5fa",bg:"#0c1a2e"},MD:{c:"#a78bfa",bg:"#130d2a"},PM:{c:"#93c5fd",bg:"#0c1a2e"},Turbo:{c:"#f472b6",bg:"#1c0514"}};
 const ESTADO_C={sin_asignar:{t:"#f59e0b",bg:"#1c1400",label:"Sin asignar"},asignado:{t:"#34d399",bg:"#041f14",label:"Asignado"},cancelado:{t:"#f87171",bg:"#1c0a0a",label:"Cancelado"},no_cancelado:{t:"#e5e7eb",bg:"#1a1f2e",label:"Todos (sin cancelados)"}};
