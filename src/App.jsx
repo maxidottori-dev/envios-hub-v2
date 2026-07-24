@@ -8325,6 +8325,76 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   }
 
   // ── Vista historial de cierres ───────────────────────────────────
+  const generarPDFSesion=(s,lciS)=>{
+    const doc=new jsPDF();
+    const W=doc.internal.pageSize.getWidth();
+    const logNombre=lciS.nombreFormal?`${lciS.nombreFormal} (${s.logistica})`:s.logistica;
+    // Título
+    doc.setFillColor(15,20,32);doc.rect(0,0,W,30,"F");
+    doc.setTextColor(255,255,255);doc.setFontSize(16);doc.setFont("helvetica","bold");
+    doc.text("CONSTANCIA DE SALIDA",W/2,18,{align:"center"});
+    doc.setTextColor(0,0,0);
+    // Info
+    let y=40;
+    doc.setFontSize(10);doc.setFont("helvetica","normal");
+    doc.text(`Logística: ${logNombre}`,20,y);doc.text(`Fecha: ${s.fecha||""}`,110,y);y+=7;
+    doc.text(`Turno: ${s.turno||""}`,20,y);doc.text(`Operador: ${s.operador||""}`,110,y);y+=7;
+    const fechaGen=s.creadoEn?new Date(s.creadoEn).toLocaleString("es-AR"):"";
+    doc.text(`Generado: ${fechaGen}`,20,y);y+=12;
+    // Resumen
+    doc.setFillColor(240,244,255);doc.roundedRect(18,y,W-36,22,3,3,"F");
+    doc.setFont("helvetica","bold");doc.setFontSize(9);
+    const resItems=[
+      {label:"Total pedidos",val:s.totalPedidos||0},
+      {label:"FLEX",val:s.totalFlex||0},
+      {label:"NO FLEX",val:s.totalNoFlex||0},
+      {label:"Total bultos",val:s.totalBultos||0},
+    ];
+    const colW=(W-36)/4;
+    resItems.forEach((item,i)=>{
+      const cx=20+i*colW+colW/2;
+      doc.setFontSize(18);doc.setTextColor(30,80,200);doc.text(String(item.val),cx,y+13,{align:"center"});
+      doc.setFontSize(7.5);doc.setTextColor(100,100,100);doc.text(item.label,cx,y+19,{align:"center"});
+    });
+    y+=30;doc.setTextColor(0,0,0);
+    // Tabla envíos
+    const det=s.enviosDetalle||[];
+    if(det.length>0){
+      doc.setFont("helvetica","bold");doc.setFontSize(10);doc.text("DETALLE DE ENVÍOS",20,y);y+=6;
+      doc.setFillColor(30,40,70);doc.rect(20,y,W-40,7,"F");
+      doc.setTextColor(255,255,255);doc.setFontSize(7.5);
+      doc.text("#",22,y+5);doc.text("Dirección",30,y+5);doc.text("N° Orden",118,y+5);
+      doc.text("Bultos",150,y+5);doc.text("Tipo",162,y+5);doc.text("Estado",178,y+5);y+=7;
+      doc.setTextColor(0,0,0);doc.setFont("helvetica","normal");
+      det.forEach((e,i)=>{
+        if(y>270){doc.addPage();y=20;}
+        if(i%2===0){doc.setFillColor(248,249,252);doc.rect(20,y,W-40,6.5,"F");}
+        doc.setFontSize(7.5);
+        doc.text(String(i+1),22,y+4.5);
+        const dir=(e.direccion||"");
+        doc.text(dir.length>40?dir.slice(0,37)+"…":dir,30,y+4.5);
+        doc.text(e.nroOrdenTN?"#"+e.nroOrdenTN:"-",118,y+4.5);
+        doc.text(String(e.bultos||1),152,y+4.5);
+        const tipo=(e.origen||"")==="ML"?"FLEX":"NO FL.";
+        doc.text(tipo,162,y+4.5);
+        if(e.reprogramado){doc.setTextColor(180,120,0);doc.text("REPROG.",178,y+4.5);doc.setTextColor(0,0,0);}
+        y+=6.5;
+      });
+    }
+    // Firma
+    y+=10;if(y>240){doc.addPage();y=20;}
+    doc.setFont("helvetica","bold");doc.setFontSize(10);doc.text("FIRMA DEL TRANSPORTISTA",20,y);y+=8;
+    if(s.firmaDataUrl){
+      doc.addImage(s.firmaDataUrl,"PNG",20,y,80,36);y+=40;
+    }else{
+      doc.setDrawColor(180,180,180);doc.rect(20,y,80,36);y+=40;
+    }
+    doc.setDrawColor(0,0,0);doc.line(20,y+4,100,y+4);
+    doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(100,100,100);
+    doc.text("Firma y aclaración",60,y+9,{align:"center"});
+    doc.save(`salida_${s.logistica}_${s.turno||""}_${s.fecha||""}.pdf`);
+  };
+
   if(subTab==="sesiones"){
     return(
       <div style={{maxWidth:"600px",margin:"0 auto",padding:"1rem 0"}}>
@@ -8378,6 +8448,11 @@ function TabSalida({envios,setEnvios,lc,sesion}){
                 {/* Detalle expandido */}
                 {expanded&&(
                   <div style={{borderTop:"1px solid #1a1f2e",padding:"0.8rem 1rem"}}>
+                    {/* Botón descargar PDF */}
+                    <button onClick={()=>generarPDFSesion(s,lciS)}
+                      style={{width:"100%",padding:"0.6rem",borderRadius:"8px",background:"#12172a",border:"1px solid "+(lciS.color||"#1a1f2e"),color:lciS.color||"#9ca3af",fontWeight:700,fontSize:"0.8rem",cursor:"pointer",marginBottom:"0.8rem"}}>
+                      ⬇ Descargar PDF
+                    </button>
                     {/* Firma */}
                     {s.firmaDataUrl&&(
                       <div style={{marginBottom:"0.8rem"}}>
