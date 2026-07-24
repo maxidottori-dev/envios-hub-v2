@@ -1574,7 +1574,6 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                     {zi&&<Bdg label={zi.nombre} bg={zi.color+"22"} t={zi.color}/>}
                     {e.turno&&<Bdg label={e.turno} bg={TURNO_C[e.turno]?.bg||"#130d2a"} t={TURNO_C[e.turno]?.c||"#a78bfa"}/>}
                     {e.fecha&&<Bdg label={fmtCorta(e.fecha)} bg="#12172a" t="#6b7280"/>}
-                    <Bdg label={(e.bultos||1)+" bulto"+((e.bultos||1)===1?"":"s")} bg="#0c1a2e" t="#60a5fa"/>
                     {e.cobranza!==null&&<Bdg label={"$"+Number(e.cobranza).toLocaleString("es-AR")} bg="#1c1500" t="#fbbf24"/>}
                     {e.cambio!==null&&<Bdg label="Cambio" bg="#1c0514" t="#ec4899"/>}
                     {e.retiro!==null&&<Bdg label="Retiro" bg="#1c1000" t="#f97316"/>}
@@ -1586,8 +1585,6 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                     {getPagoEstado(e)==="cuenta_corriente"&&<Bdg label="Cta. Corriente" bg="#130d2a" t="#a78bfa"/>}
                     {facturaClientes[mkClienteKey(e.clienteNombre)]&&e.trans&&!e.nroFactura&&<Bdg label="FC ⚠" bg="#1c0d00" t="#fb923c" style={{border:"1px solid #c2410c",fontWeight:800}}/>}
                     {e.reprogramado&&<Bdg label="⟳ Reprog." bg="#1c1500" t="#fbbf24" style={{border:"1px solid #78350f",fontWeight:700}}/>}
-                    {e.preparado&&e.armadorNombre&&<span style={{color:"#10b981",fontSize:"0.68rem",fontWeight:700,display:"flex",alignItems:"center",gap:"2px"}}>📦 {e.armadorNombre}</span>}
-                    {e.despachado&&e.despachoTs&&<span style={{color:"#10b981",fontSize:"0.68rem",fontWeight:700,display:"flex",alignItems:"center",gap:"2px"}}>🚚 {fmtHora(e.despachoTs)}{e.despachoPor?" · "+e.despachoPor:""}</span>}
                   </div>
                   {/* Nro orden + Nombre en la misma linea, luego direccion */}
                   {esTN&&<div style={{display:"flex",gap:"8px",alignItems:"baseline",marginBottom:"1px",overflow:"hidden"}}>
@@ -1612,6 +1609,9 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                     {e.linkML&&<a href={e.linkML} target="_blank" rel="noreferrer" onClick={ev=>ev.stopPropagation()} title="Ver en ML" style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:"26px",height:"26px",borderRadius:"6px",background:"#0f1420",border:"1px solid #252d40",textDecoration:"none",flexShrink:0}}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>}
                     {!modoSel&&esAdmin&&<button onClick={ev=>{ev.stopPropagation();eliminar(e.id);}} style={{...S.btnSm(false),padding:"1px 6px",fontSize:"0.68rem",color:"#f87171"}}>x</button>}
                   </div>
+                  <span style={{color:"#60a5fa",fontSize:"0.68rem",fontWeight:700}}>{e.bultos||1} bulto{(e.bultos||1)===1?"":"s"}</span>
+                  {e.preparado&&e.armadorNombre&&<span style={{color:"#10b981",fontSize:"0.68rem",fontWeight:700}}>📦 {e.armadorNombre}</span>}
+                  {e.despachado&&e.despachoTs&&<span style={{color:"#10b981",fontSize:"0.68rem",fontWeight:700}}>🚚 {fmtHora(e.despachoTs)}{e.despachoPor?" · "+e.despachoPor:""}</span>}
                   {imp>0&&puedeVer(sesion,"accion_verimportes")&&<span style={{color:e.importeOverride>0?"#fbbf24":"#10b981",fontWeight:700,fontSize:"0.82rem"}}>{fmt(imp)}{e.importeOverride>0&&<span style={{fontSize:"0.62rem",opacity:.65,marginLeft:"2px"}}>*</span>}</span>}
                   {esTN&&e.importeOrden>0&&puedeVer(sesion,"accion_verimportes")&&<span style={{color:"#6b7280",fontSize:"0.7rem"}}>{fmt(e.importeOrden)}</span>}
                   {e.origen==="ML"&&ML_FINAL[e.partido]&&<span style={{color:"#64748b",fontSize:"0.68rem",marginTop:"1px"}}>ML {fmt(ML_FINAL[e.partido])}</span>}
@@ -7946,6 +7946,9 @@ function TabSalida({envios,setEnvios,lc,sesion}){
 
   const esAdmin=sesion?.rol==="admin";
   const [selSalida,setSelSalida]=useState(new Set());
+  const [subTab,setSubTab]=useState("despacho"); // "despacho" | "historial"
+  const [histFecha,setHistFecha]=useState(hoy);
+  const [histFilLog,setHistFilLog]=useState("TODOS");
 
   // La sesión solo se cierra manualmente con "Liberar" (sin timer de inactividad)
   const liberarLogistica=useCallback(()=>{
@@ -8160,12 +8163,88 @@ function TabSalida({envios,setEnvios,lc,sesion}){
     );
   }
 
+  // ── Historial de despacho ─────────────────────────────────────────
+  const puedeHistorial=puedeVer(sesion,"accion_verhistorialdespacho");
+
+  if(puedeHistorial&&subTab==="historial"){
+    const despachados=envios.filter(e=>e.despachado&&(histFecha==="todos"||(e.despachoTs||"").startsWith(histFecha)));
+    const filtrados=histFilLog==="TODOS"?despachados:despachados.filter(e=>e.despachoLogistica===histFilLog);
+    const ordenados=[...filtrados].sort((a,b)=>(b.despachoTs||"").localeCompare(a.despachoTs||""));
+    // Agrupar por logística+turno
+    const grupos={};
+    ordenados.forEach(e=>{
+      const k=(e.despachoLogistica||"Sin logística")+"|"+(e.turno||"Sin turno");
+      if(!grupos[k])grupos[k]={log:e.despachoLogistica||"Sin logística",turno:e.turno||"",envios:[]};
+      grupos[k].envios.push(e);
+    });
+    const gruposArr=Object.values(grupos);
+    return(
+      <div style={{maxWidth:"600px",margin:"0 auto",padding:"1rem 0"}}>
+        {/* Tab bar */}
+        <div style={{display:"flex",gap:"6px",marginBottom:"1rem"}}>
+          <button onClick={()=>setSubTab("despacho")} style={{...S.btnSm(false),padding:"6px 16px",fontSize:"0.82rem"}}>← Despacho</button>
+        </div>
+        {/* Filtros */}
+        <div style={{background:"#0f1420",border:"1px solid #1a1f2e",borderRadius:"12px",padding:"0.75rem 1rem",marginBottom:"0.75rem",display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}}>
+          <input type="date" value={histFecha} onChange={e=>setHistFecha(e.target.value)}
+            style={{background:"#12172a",border:"1px solid #1a1f2e",borderRadius:"7px",color:"#fff",padding:"4px 8px",fontSize:"0.8rem"}}/>
+          <button onClick={()=>setHistFecha(hoy)} style={S.btnSm(histFecha===hoy)}>Hoy</button>
+          <button onClick={()=>setHistFecha("todos")} style={S.btnSm(histFecha==="todos")}>Todos</button>
+          <span style={{color:"#252d40",fontSize:"0.7rem"}}>|</span>
+          {["TODOS",...logActivas].map(l=><button key={l} onClick={()=>setHistFilLog(l)} style={S.btnSm(histFilLog===l,l==="TODOS"?undefined:lc[l]?.color)}>{l}</button>)}
+          <span style={{color:"#6b7280",fontSize:"0.75rem",marginLeft:"auto"}}>{filtrados.length} envíos</span>
+        </div>
+        {/* Grupos */}
+        {gruposArr.length===0&&<div style={{color:"#4b5563",fontSize:"0.85rem",textAlign:"center",padding:"2rem"}}>Sin despachos para este filtro</div>}
+        {gruposArr.map((g,gi)=>{
+          const lci=lc[g.log]||{};
+          const totalBultos=g.envios.reduce((s,e)=>s+(e.bultos||1),0);
+          return(
+            <div key={gi} style={{background:"#0f1420",border:"1px solid #1a1f2e",borderRadius:"12px",marginBottom:"0.6rem",overflow:"hidden"}}>
+              {/* Header grupo */}
+              <div style={{padding:"0.5rem 0.9rem",background:"#080c14",borderBottom:"1px solid #1a1f2e",display:"flex",alignItems:"center",gap:"8px"}}>
+                <span style={{background:lci.bg||"#1a1f2e",color:lci.color||"#9ca3af",padding:"2px 8px",borderRadius:"5px",fontWeight:700,fontSize:"0.75rem"}}>{g.log}</span>
+                {g.turno&&<span style={{background:TURNO_C[g.turno]?.bg||"#130d2a",color:TURNO_C[g.turno]?.c||"#a78bfa",padding:"2px 8px",borderRadius:"5px",fontWeight:700,fontSize:"0.75rem",border:"1px solid "+(TURNO_C[g.turno]?.c||"#a78bfa")}}>{g.turno}</span>}
+                <span style={{color:"#6b7280",fontSize:"0.72rem",marginLeft:"auto"}}>{g.envios.length} env · {totalBultos} bulto{totalBultos===1?"":"s"}</span>
+              </div>
+              {/* Filas */}
+              {g.envios.map((e,ei)=>(
+                <div key={e.id} style={{padding:"0.55rem 0.9rem",borderBottom:ei<g.envios.length-1?"1px solid #12172a":"none",display:"flex",alignItems:"flex-start",gap:"8px"}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",gap:"5px",alignItems:"center",marginBottom:"2px",flexWrap:"wrap"}}>
+                      {e.nroOrdenTN&&<span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.75rem"}}>#{e.nroOrdenTN}</span>}
+                      {e.nroSeguimiento&&<span style={{color:"#84cc16",fontFamily:"monospace",fontSize:"0.68rem"}}>{e.nroSeguimiento.slice(-8)}</span>}
+                      {e.reprogramado&&<span style={{background:"#1c1500",color:"#fbbf24",border:"1px solid #78350f",padding:"0 5px",borderRadius:"4px",fontSize:"0.6rem",fontWeight:700}}>⟳ Reprog.</span>}
+                    </div>
+                    <div style={{color:"#e5e7eb",fontSize:"0.8rem",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}</div>
+                    <div style={{color:"#6b7280",fontSize:"0.7rem",marginTop:"2px",display:"flex",gap:"6px",flexWrap:"wrap"}}>
+                      {(e.localidad||e.partido)&&<span>{e.localidad||e.partido}</span>}
+                      <span>{e.bultos||1} bulto{(e.bultos||1)===1?"":"s"}</span>
+                      {e.armadorNombre&&<span>📦 {e.armadorNombre}</span>}
+                    </div>
+                  </div>
+                  <div style={{textAlign:"right",flexShrink:0}}>
+                    {e.despachoTs&&<div style={{color:"#10b981",fontSize:"0.72rem",fontWeight:700}}>{fmtHora(e.despachoTs)}</div>}
+                    {e.despachoPor&&<div style={{color:"#4b5563",fontSize:"0.65rem"}}>{e.despachoPor}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   // ── Vista selector de logística ───────────────────────────────────
   if(!logSel){
     return(
       <div style={{maxWidth:"600px",margin:"0 auto",padding:"1rem 0"}}>
         <div style={{background:card,border:`1px solid ${brd}`,borderRadius:"14px",padding:"1.5rem"}}>
-          <div style={{fontWeight:800,fontSize:"1.1rem",marginBottom:"0.3rem"}}>🚚 Salida</div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"0.3rem"}}>
+            <div style={{fontWeight:800,fontSize:"1.1rem"}}>🚚 Salida</div>
+            {puedeHistorial&&<button onClick={()=>setSubTab("historial")} style={{...S.btnSm(false),padding:"4px 12px",fontSize:"0.75rem",color:"#6b7280"}}>📋 Historial</button>}
+          </div>
           <div style={{color:muted,fontSize:"0.8rem",marginBottom:"1.5rem"}}>Seleccioná turno y logística para iniciar la sesión de despacho</div>
           {/* Selector de fecha */}
           <div style={{marginBottom:"1.2rem"}}>
