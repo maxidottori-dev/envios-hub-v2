@@ -8083,7 +8083,9 @@ function TabSalida({envios,setEnvios,lc,sesion}){
     if(inputRef.current)inputRef.current.focus();
   },[envios,logSel,turnoSel,fecha,sesionIds,sesion,lc,setEnvios]);
 
-  // Escaneo QR via cámara — usa BarcodeDetector nativo si está disponible (Chrome/Android);
+  // Escaneo QR via cámara — modo continuo: la cámara queda abierta entre scans.
+  // Cooldown de 2s para evitar re-procesar el mismo código seguido.
+  // Usa BarcodeDetector nativo si está disponible (Chrome/Android);
   // si no existe (Safari/iPhone) decodifica con jsQR leyendo los frames del video por canvas.
   useEffect(()=>{
     if(!camara)return;
@@ -8099,6 +8101,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         if(!canvasRef.current)canvasRef.current=document.createElement("canvas");
         const canvas=canvasRef.current;
         const ctx=canvas.getContext("2d",{willReadFrequently:true});
+        let lastVal=null;let lastValTs=0;
         const scan=async()=>{
           if(!activo||!videoRef.current||videoRef.current.readyState<2){rafId=requestAnimationFrame(scan);return;}
           try{
@@ -8117,11 +8120,17 @@ function TabSalida({envios,setEnvios,lc,sesion}){
               }
             }
             if(val){
+              const now=Date.now();
+              if(lastVal===val&&(now-lastValTs)<2000){rafId=requestAnimationFrame(scan);return;}
+              lastVal=val;lastValTs=now;
               setResultado({ok:"scanning",msg:"Escaneando..."});
               await new Promise(r=>setTimeout(r,800));
               if(!activo)return;
               procesarScan(val);
-              setCamara(false);return;
+              // Cámara continua — pausa breve antes del próximo scan
+              await new Promise(r=>setTimeout(r,1500));
+              if(activo)rafId=requestAnimationFrame(scan);
+              return;
             }
           }catch(e){}
           if(activo)rafId=requestAnimationFrame(scan);
