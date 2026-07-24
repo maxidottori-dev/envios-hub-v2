@@ -1280,7 +1280,15 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
   const porTrans=logActivas.map(l =>({l,n:activos.filter(e=>e.trans===l).length,v:activos.filter(e=>e.trans===l).reduce((s,e)=>s+getImp(e),0)})).filter(x =>x.n>0);
   const filtrarPorLogistica=(l)=>setFilTrans(filTrans===l?"TODOS":l);
   const toggleSel=id=>setSeleccionados(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
-  const saveEnvio=updated=>{setEnvios(p=>p.map(e=>e.id===updated.id?{...updated,estado:getEstado(updated)}:e));setEditId(null);};
+  const saveEnvio=updated=>{
+    const est=getEstado(updated);
+    // Guardia defensiva: si sale despachado+cancelado sin devolucionPendiente, marcarlo.
+    // Cubre el caso en que handleEstado no fue llamado (bundle viejo, envío ya cancelado antes, etc.)
+    const devPend=(updated.despachado&&est==="cancelado"&&!updated.devolucionPendiente)
+      ?{devolucionPendiente:true,estadoLiq:updated.estadoLiq||"cancelado_liq"}:{};
+    setEnvios(p=>p.map(e=>e.id===updated.id?{...updated,...devPend,estado:est}:e));
+    setEditId(null);
+  };
   const saveMultipleEnvios=updates=>{setEnvios(p=>p.map(e=>{const u=updates.find(x=>x.id===e.id);return u?{...u,estado:getEstado(u)}:e;}));};
   const [accionMasiva,setAccionMasiva]=useState(null); // {tipo:"fecha"|"turno", valor:""}
   const aplicarAccionMasiva=()=>{
