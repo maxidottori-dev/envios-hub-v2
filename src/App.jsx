@@ -1019,6 +1019,17 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
         </div>
       )}
 
+      {/* Banner reprogramado */}
+      {envio.reprogramado&&(
+        <div style={{background:"#1c1500",border:"1px solid #78350f",borderRadius:"10px",padding:"0.5rem 1rem",marginBottom:"0.75rem",display:"flex",alignItems:"center",gap:"0.6rem"}}>
+          <span style={{fontSize:"1.1rem"}}>⟳</span>
+          <div style={{flex:1}}>
+            <div style={{color:"#fbbf24",fontWeight:700,fontSize:"0.85rem"}}>Envío reprogramado</div>
+            <div style={{color:"#9ca3af",fontSize:"0.72rem",marginTop:"2px"}}>Este envío fue despachado y luego se modificó su fecha, turno o logística.</div>
+          </div>
+        </div>
+      )}
+
       {/* Banner confirmado/abonado */}
       {confirmado&&(
         <div style={{background:envio.estadoPago==="abonado"?"#041f14":"#0f0b2a",border:"1px solid "+(envio.estadoPago==="abonado"?"#065f46":"#4c1d95"),borderRadius:"8px",padding:"0.5rem 1rem",marginBottom:"0.65rem",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"0.5rem"}}>
@@ -1222,6 +1233,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
   const [filTurno,setFilTurno]=useState("TODOS");
   const [filOrigen,setFilOrigen]=useState("TODOS");
   const [filTipoEntrega,setFilTipoEntrega]=useState("TODOS");
+  const [soloReprog,setSoloReprog]=useState(false);
   const [busqueda,setBusqueda]=useState("");
   const [editId,setEditId]=useState(null);
   const [seleccionados,setSeleccionados]=useState(new Set());
@@ -1257,6 +1269,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
       if(filTipoEntrega==="SIN_TIPO"){if(e.tipoEntrega)return false;}
       else if(e.tipoEntrega!==filTipoEntrega)return false;
     }
+    if(soloReprog&&!e.reprogramado)return false;
     if(busqueda){const srch=norm(busqueda);return norm(e.direccion).includes(srch)||e.id.includes(srch)||norm(e.partido).includes(srch)||(e.nroSeguimiento||"").includes(srch)||norm(e.clienteNombre).includes(srch)||(e.nroOrdenTN||"").includes(srch);}
     return true;
   });
@@ -1374,7 +1387,8 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
               {[{k:"TODOS",l:"Todos",c:"#6366f1"},{k:"COMERCIAL",l:"COM",c:"#38bdf8"},{k:"RESIDENCIAL",l:"RES",c:"#86efac"},{k:"SIN_TIPO",l:"Sin tipo",c:"#6b7280"}].map(x =><button key={x.k} onClick={()=>setFilTipoEntrega(x.k)} style={S.btnSm(filTipoEntrega===x.k,x.c)}>{x.l}</button>)}
             </div>
           </>}
-          <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="🔍 Buscar..." style={{...S.input,width:"190px",marginLeft:"auto"}}/>
+          <button onClick={()=>setSoloReprog(!soloReprog)} style={{...S.btnSm(soloReprog,"#fbbf24"),marginLeft:mostrarResumenFlex?"0":"auto"}}>⟳ Reprog.</button>
+          <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="🔍 Buscar..." style={{...S.input,width:"190px",marginLeft:mostrarResumenFlex?"auto":"0"}}/>
           <button onClick={()=>{
             const tmap2=buildTarifaMap(zc);
             const filas=filtradosOrdenados.map((e,i)=>({
@@ -1570,6 +1584,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                     {getPagoEstado(e)==="pendiente"&&<Bdg label="Pago pendiente" bg="#1c0a00" t="#fb923c" style={{border:"1px solid #fb923c"}}/>}
                     {getPagoEstado(e)==="cuenta_corriente"&&<Bdg label="Cta. Corriente" bg="#130d2a" t="#a78bfa"/>}
                     {facturaClientes[mkClienteKey(e.clienteNombre)]&&e.trans&&!e.nroFactura&&<Bdg label="FC ⚠" bg="#1c0d00" t="#fb923c" style={{border:"1px solid #c2410c",fontWeight:800}}/>}
+                    {e.reprogramado&&<Bdg label="⟳ Reprog." bg="#1c1500" t="#fbbf24" style={{border:"1px solid #78350f",fontWeight:700}}/>}
                   </div>
                   {/* Nro orden + Nombre en la misma linea, luego direccion */}
                   {esTN&&<div style={{display:"flex",gap:"8px",alignItems:"baseline",marginBottom:"1px",overflow:"hidden"}}>
@@ -6912,6 +6927,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
                               {e.turno&&<Bdg label={e.turno} bg={TURNO_C[e.turno]?.bg||"#130d2a"} t={TURNO_C[e.turno]?.c||"#a78bfa"}/>}
                               {e.preparado&&<Bdg label={"✓ "+(e.bultos||1)+"b"+(e.armadorNombre?" · "+e.armadorNombre:"")} bg="#041f14" t="#10b981"/>}
                               {e.cobranza&&<Bdg label={"$"+Number(e.cobranza).toLocaleString("es-AR")} bg="#1c1500" t="#fbbf24"/>}
+                              {e.reprogramado&&<Bdg label="⟳ Reprog." bg="#1c1500" t="#fbbf24" style={{border:"1px solid #78350f"}}/>}
                             </div>
                             <div style={{color:"#e5e7eb",fontSize:"0.85rem",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}</div>
                             <div style={{color:"#6b7280",fontSize:"0.72rem",marginTop:"1px"}}>{e.localidad?e.localidad+" · ":""}{e.partido}{e.cp?" · CP "+e.cp:""}</div>
