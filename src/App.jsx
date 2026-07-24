@@ -69,6 +69,7 @@ const FEATURES=[
   {key:"accion_imprimir",     grupo:"acciones", label:"Imprimir etiquetas", desc:"Imprimir etiquetas de envíos individuales con código QR y datos de entrega"},
   {key:"accion_abonar",       grupo:"acciones", label:"Abonar logística",   desc:"Registrar el pago de una liquidación completa o parcial a la logística"},
   {key:"accion_autorizarcc",  grupo:"acciones", label:"Autorizar Cta. Corriente", desc:"Autorizar que un pedido de Tienda Nube con pago pendiente de acreditación pase a Cuenta Corriente, para poder asignarlo a una logística sin esperar el pago"},
+  {key:"accion_verhistorialdespacho", grupo:"acciones", label:"Ver historial de despacho", desc:"Ver el registro histórico de envíos despachados, agrupado por fecha y logística"},
 ];
 
 // Devuelve true si la sesión puede usar esa feature
@@ -1573,7 +1574,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                     {zi&&<Bdg label={zi.nombre} bg={zi.color+"22"} t={zi.color}/>}
                     {e.turno&&<Bdg label={e.turno} bg={TURNO_C[e.turno]?.bg||"#130d2a"} t={TURNO_C[e.turno]?.c||"#a78bfa"}/>}
                     {e.fecha&&<Bdg label={fmtCorta(e.fecha)} bg="#12172a" t="#6b7280"/>}
-                    {(e.bultos||1)>1&&<Bdg label={e.bultos+" bultos"} bg="#0c1a2e" t="#60a5fa"/>}
+                    <Bdg label={(e.bultos||1)+" bulto"+((e.bultos||1)===1?"":"s")} bg="#0c1a2e" t="#60a5fa"/>
                     {e.cobranza!==null&&<Bdg label={"$"+Number(e.cobranza).toLocaleString("es-AR")} bg="#1c1500" t="#fbbf24"/>}
                     {e.cambio!==null&&<Bdg label="Cambio" bg="#1c0514" t="#ec4899"/>}
                     {e.retiro!==null&&<Bdg label="Retiro" bg="#1c1000" t="#f97316"/>}
@@ -1585,6 +1586,8 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                     {getPagoEstado(e)==="cuenta_corriente"&&<Bdg label="Cta. Corriente" bg="#130d2a" t="#a78bfa"/>}
                     {facturaClientes[mkClienteKey(e.clienteNombre)]&&e.trans&&!e.nroFactura&&<Bdg label="FC ⚠" bg="#1c0d00" t="#fb923c" style={{border:"1px solid #c2410c",fontWeight:800}}/>}
                     {e.reprogramado&&<Bdg label="⟳ Reprog." bg="#1c1500" t="#fbbf24" style={{border:"1px solid #78350f",fontWeight:700}}/>}
+                    {e.preparado&&e.armadorNombre&&<span style={{color:"#10b981",fontSize:"0.68rem",fontWeight:700,display:"flex",alignItems:"center",gap:"2px"}}>📦 {e.armadorNombre}</span>}
+                    {e.despachado&&e.despachoTs&&<span style={{color:"#10b981",fontSize:"0.68rem",fontWeight:700,display:"flex",alignItems:"center",gap:"2px"}}>🚚 {fmtHora(e.despachoTs)}{e.despachoPor?" · "+e.despachoPor:""}</span>}
                   </div>
                   {/* Nro orden + Nombre en la misma linea, luego direccion */}
                   {esTN&&<div style={{display:"flex",gap:"8px",alignItems:"baseline",marginBottom:"1px",overflow:"hidden"}}>
