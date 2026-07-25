@@ -8368,19 +8368,19 @@ function TabSalida({envios,setEnvios,lc,sesion}){
     const W=doc.internal.pageSize.getWidth();
     const logNombre=lciS.nombreFormal?`${lciS.nombreFormal} (${s.logistica})`:s.logistica;
     // Título
-    doc.setFillColor(15,20,32);doc.rect(0,0,W,30,"F");
+    doc.setFillColor(15,20,32);doc.rect(0,0,W,24,"F");
     doc.setTextColor(255,255,255);doc.setFontSize(16);doc.setFont("helvetica","bold");
-    doc.text("CONSTANCIA DE SALIDA",W/2,18,{align:"center"});
+    doc.text("CONSTANCIA DE SALIDA",W/2,15,{align:"center"});
     doc.setTextColor(0,0,0);
     // Info
-    let y=40;
+    let y=32;
     doc.setFontSize(10);doc.setFont("helvetica","normal");
-    doc.text(`Logística: ${logNombre}`,20,y);doc.text(`Fecha: ${s.fecha||""}`,110,y);y+=7;
-    doc.text(`Turno: ${s.turno||""}`,20,y);doc.text(`Operador: ${s.operador||""}`,110,y);y+=7;
+    doc.text(`Logística: ${logNombre}`,20,y);doc.text(`Fecha: ${s.fecha||""}`,110,y);y+=6;
+    doc.text(`Turno: ${s.turno||""}`,20,y);doc.text(`Operador: ${s.operador||""}`,110,y);y+=6;
     const fechaGen=s.creadoEn?new Date(s.creadoEn).toLocaleString("es-AR"):"";
-    doc.text(`Generado: ${fechaGen}`,20,y);y+=12;
+    doc.text(`Generado: ${fechaGen}`,20,y);y+=8;
     // Resumen
-    doc.setFillColor(240,244,255);doc.roundedRect(18,y,W-36,22,3,3,"F");
+    doc.setFillColor(240,244,255);doc.roundedRect(18,y,W-36,18,3,3,"F");
     doc.setFont("helvetica","bold");doc.setFontSize(9);
     const resItems=[
       {label:"Total pedidos",val:s.totalPedidos||0},
@@ -8391,36 +8391,39 @@ function TabSalida({envios,setEnvios,lc,sesion}){
     const colW=(W-36)/4;
     resItems.forEach((item,i)=>{
       const cx=20+i*colW+colW/2;
-      doc.setFontSize(18);doc.setTextColor(30,80,200);doc.text(String(item.val),cx,y+13,{align:"center"});
-      doc.setFontSize(7.5);doc.setTextColor(100,100,100);doc.text(item.label,cx,y+19,{align:"center"});
+      doc.setFontSize(16);doc.setTextColor(30,80,200);doc.text(String(item.val),cx,y+10,{align:"center"});
+      doc.setFontSize(7);doc.setTextColor(100,100,100);doc.text(item.label,cx,y+15.5,{align:"center"});
     });
-    y+=30;doc.setTextColor(0,0,0);
+    y+=24;doc.setTextColor(0,0,0);
     // Tabla envíos
     const det=s.enviosDetalle||[];
     if(det.length>0){
-      doc.setFont("helvetica","bold");doc.setFontSize(10);doc.text("DETALLE DE ENVÍOS",20,y);y+=6;
-      doc.setFillColor(30,40,70);doc.rect(20,y,W-40,7,"F");
-      doc.setTextColor(255,255,255);doc.setFontSize(7.5);
-      doc.text("#",22,y+5);doc.text("Dirección",30,y+5);doc.text("N° Orden",118,y+5);
-      doc.text("Bultos",150,y+5);doc.text("Tipo",162,y+5);doc.text("Estado",178,y+5);y+=7;
+      doc.setFont("helvetica","bold");doc.setFontSize(9.5);doc.text("DETALLE DE ENVÍOS",20,y);y+=5;
+      doc.setFillColor(30,40,70);doc.rect(20,y,W-40,6.5,"F");
+      doc.setTextColor(255,255,255);doc.setFontSize(7);
+      doc.text("#",22,y+4.5);doc.text("Dirección / Ciudad",30,y+4.5);
+      doc.text("N° Envío/Orden",128,y+4.5);doc.text("Blt",168,y+4.5);doc.text("Tipo",178,y+4.5);y+=6.5;
       doc.setTextColor(0,0,0);doc.setFont("helvetica","normal");
       det.forEach((e,i)=>{
-        if(y>270){doc.addPage();y=20;}
-        if(i%2===0){doc.setFillColor(248,249,252);doc.rect(20,y,W-40,6.5,"F");}
-        doc.setFontSize(7.5);
-        doc.text(String(i+1),22,y+4.5);
-        const dir=(e.direccion||"");
-        doc.text(dir.length>40?dir.slice(0,37)+"…":dir,30,y+4.5);
-        doc.text(e.nroOrdenTN?"#"+e.nroOrdenTN:"-",118,y+4.5);
-        doc.text(String(e.bultos||1),152,y+4.5);
+        if(y>272){doc.addPage();y=20;}
+        if(i%2===0){doc.setFillColor(248,249,252);doc.rect(20,y,W-40,5.5,"F");}
+        doc.setFontSize(7);
+        doc.text(String(i+1),22,y+3.8);
+        const dc=(e.direccion||"").split(/\s*\/\s*/)[0].trim();
+        const ciudad=e.ciudad||"";
+        const dp=ciudad?dc+" · "+ciudad:dc;
+        doc.text(dp.length>44?dp.slice(0,41)+"…":dp,30,y+3.8);
+        const nroPDF=e.nroSeguimiento||(e.nroOrdenTN?"#"+e.nroOrdenTN:"");
+        const nroPDFTxt=nroPDF.length>20?nroPDF.slice(-20):nroPDF;
+        doc.text(nroPDFTxt||"-",128,y+3.8);
+        doc.text(String(e.bultos||1),170,y+3.8);
         const tipo=(e.origen||"")==="ML"?"FLEX":"NO FL.";
-        doc.text(tipo,162,y+4.5);
-        if(e.reprogramado){doc.setTextColor(180,120,0);doc.text("REPROG.",178,y+4.5);doc.setTextColor(0,0,0);}
-        y+=6.5;
+        doc.text(tipo,178,y+3.8);
+        y+=5.5;
       });
     }
-    // Firma
-    y+=10;if(y>240){doc.addPage();y=20;}
+    // Firma — intentar que quede en la misma hoja
+    y+=4;if(y>252){doc.addPage();y=20;}
     doc.setFont("helvetica","bold");doc.setFontSize(10);doc.text("FIRMA DEL TRANSPORTISTA",20,y);y+=8;
     if(s.firmaDataUrl){
       doc.addImage(s.firmaDataUrl,"PNG",20,y,80,36);y+=40;
@@ -8654,6 +8657,11 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   const enviosMap=new Map(envios.map(e=>[e.id,e]));
   const despSesion=sesionIds.map(id=>enviosMap.get(id)).filter(Boolean);
 
+  // Helpers para PDF y UI: dirección sin referencia, nro de envío unificado
+  const dirCorta=(dir)=>(dir||"").split(/\s*\/\s*/)[0].trim();
+  const nroRef=(e)=>e.nroSeguimiento?e.nroSeguimiento.slice(-10):(e.nroOrdenTN?"#"+e.nroOrdenTN:"");
+  const nroRefPDF=(e)=>e.nroSeguimiento||(e.nroOrdenTN?"#"+e.nroOrdenTN:"");
+
   // Generar PDF con jsPDF y guardar sesión en Firestore
   // Usa el lote completo del día (pedidosLog) en lugar de solo los IDs de esta sesión.
   // Fallback: si pedidosLog.despachados está vacío (flags perdidos al reiniciar browser),
@@ -8674,25 +8682,25 @@ function TabSalida({envios,setEnvios,lc,sesion}){
       const totalFlex=despachados_cierre.filter(e=>(e.origen||"")==="ML").length;
       const totalNoFlex=despachados_cierre.length-totalFlex;
       const totalBultos=despachados.reduce((s,e)=>s+(e.bultos||1),0);
-      const operador=sesion?.nombre||sesion?.email||"";
+      const operador=sesion?.nombre||sesion?.usuario||sesion?.email||"";
       const firmanteNombre=firmante.trim();
       if(conPDF){
         const doc=new jsPDF();
         const W=doc.internal.pageSize.getWidth();
         // Título
-        doc.setFillColor(15,20,32);doc.rect(0,0,W,30,"F");
+        doc.setFillColor(15,20,32);doc.rect(0,0,W,24,"F");
         doc.setTextColor(255,255,255);doc.setFontSize(16);doc.setFont("helvetica","bold");
-        doc.text("CONSTANCIA DE SALIDA",W/2,18,{align:"center"});
+        doc.text("CONSTANCIA DE SALIDA",W/2,15,{align:"center"});
         doc.setTextColor(0,0,0);
         // Info
-        let y=40;
+        let y=32;
         doc.setFontSize(10);doc.setFont("helvetica","normal");
         const logNombre=lci.nombreFormal?`${lci.nombreFormal} (${logSel})`:logSel;
-        doc.text(`Logística: ${logNombre}`,20,y);doc.text(`Fecha: ${fecha}`,110,y);y+=7;
-        doc.text(`Turno: ${turnoSel}`,20,y);doc.text(`Operador: ${operador}`,110,y);y+=7;
-        doc.text(`Generado: ${new Date().toLocaleString("es-AR")}`,20,y);y+=12;
+        doc.text(`Logística: ${logNombre}`,20,y);doc.text(`Fecha: ${fecha}`,110,y);y+=6;
+        doc.text(`Turno: ${turnoSel}`,20,y);doc.text(`Operador: ${operador}`,110,y);y+=6;
+        doc.text(`Generado: ${new Date().toLocaleString("es-AR")}`,20,y);y+=8;
         // Resumen
-        doc.setFillColor(240,244,255);doc.roundedRect(18,y,W-36,22,3,3,"F");
+        doc.setFillColor(240,244,255);doc.roundedRect(18,y,W-36,18,3,3,"F");
         doc.setFont("helvetica","bold");doc.setFontSize(9);
         const resItems=[
           {label:"Despachados",val:despachados_cierre.length},
@@ -8703,56 +8711,62 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         const colW=(W-36)/4;
         resItems.forEach((item,i)=>{
           const cx=20+i*colW+colW/2;
-          doc.setFontSize(18);doc.setTextColor(30,80,200);doc.text(String(item.val),cx,y+13,{align:"center"});
-          doc.setFontSize(7.5);doc.setTextColor(100,100,100);doc.text(item.label,cx,y+19,{align:"center"});
+          doc.setFontSize(16);doc.setTextColor(30,80,200);doc.text(String(item.val),cx,y+10,{align:"center"});
+          doc.setFontSize(7);doc.setTextColor(100,100,100);doc.text(item.label,cx,y+15.5,{align:"center"});
         });
-        y+=30;doc.setTextColor(0,0,0);
+        y+=24;doc.setTextColor(0,0,0);
         // Tabla envíos despachados
         if(despachados_cierre.length>0){
-          doc.setFont("helvetica","bold");doc.setFontSize(10);doc.text("DETALLE DE ENVÍOS DESPACHADOS",20,y);y+=6;
-          doc.setFillColor(30,40,70);doc.rect(20,y,W-40,7,"F");
-          doc.setTextColor(255,255,255);doc.setFontSize(7.5);
-          doc.text("#",22,y+5);doc.text("Dirección",30,y+5);doc.text("N° Orden",118,y+5);
-          doc.text("Bultos",150,y+5);doc.text("Tipo",162,y+5);doc.text("Estado",178,y+5);y+=7;
+          doc.setFont("helvetica","bold");doc.setFontSize(9.5);doc.text("DETALLE DE ENVÍOS",20,y);y+=5;
+          doc.setFillColor(30,40,70);doc.rect(20,y,W-40,6.5,"F");
+          doc.setTextColor(255,255,255);doc.setFontSize(7);
+          doc.text("#",22,y+4.5);doc.text("Dirección / Ciudad",30,y+4.5);
+          doc.text("N° Envío/Orden",128,y+4.5);doc.text("Blt",168,y+4.5);doc.text("Tipo",178,y+4.5);y+=6.5;
           doc.setTextColor(0,0,0);doc.setFont("helvetica","normal");
           despachados_cierre.forEach((e,i)=>{
-            if(y>270){doc.addPage();y=20;}
-            if(i%2===0){doc.setFillColor(248,249,252);doc.rect(20,y,W-40,6.5,"F");}
-            doc.setFontSize(7.5);
-            doc.text(String(i+1),22,y+4.5);
-            const dir=(e.direccion||"");
-            doc.text(dir.length>40?dir.slice(0,37)+"…":dir,30,y+4.5);
-            doc.text(e.nroOrdenTN?"#"+e.nroOrdenTN:"-",118,y+4.5);
-            doc.text(String(e.bultos||1),152,y+4.5);
+            if(y>272){doc.addPage();y=20;}
+            if(i%2===0){doc.setFillColor(248,249,252);doc.rect(20,y,W-40,5.5,"F");}
+            doc.setFontSize(7);
+            doc.text(String(i+1),22,y+3.8);
+            const dc=dirCorta(e.direccion);
+            const ciudad=e.ciudad||e.localidad||"";
+            const dp=ciudad?dc+" · "+ciudad:dc;
+            doc.text(dp.length>44?dp.slice(0,41)+"…":dp,30,y+3.8);
+            const nroPDF=nroRefPDF(e);
+            const nroPDFTxt=nroPDF.length>20?nroPDF.slice(-20):nroPDF;
+            doc.text(nroPDFTxt||"-",128,y+3.8);
+            doc.text(String(e.bultos||1),170,y+3.8);
             const tipo=(e.origen||"")==="ML"?"FLEX":"NO FL.";
-            doc.text(tipo,162,y+4.5);
-            if(e.reprogramado){doc.setTextColor(180,120,0);doc.text("REPROG.",178,y+4.5);doc.setTextColor(0,0,0);}
-            y+=6.5;
+            doc.text(tipo,178,y+3.8);
+            y+=5.5;
           });
         }
         // Tabla pendientes (no despachados)
         if(lotePend.length>0){
-          y+=6;if(y>260){doc.addPage();y=20;}
-          doc.setFont("helvetica","bold");doc.setFontSize(10);doc.setTextColor(180,80,0);doc.text("ENVÍOS NO DESPACHADOS",20,y);y+=6;
-          doc.setFillColor(120,53,15);doc.rect(20,y,W-40,7,"F");
-          doc.setTextColor(255,255,255);doc.setFontSize(7.5);
-          doc.text("#",22,y+5);doc.text("Dirección",30,y+5);doc.text("N° Orden",118,y+5);doc.text("Motivo",148,y+5);y+=7;
+          y+=5;if(y>262){doc.addPage();y=20;}
+          doc.setFont("helvetica","bold");doc.setFontSize(9.5);doc.setTextColor(180,80,0);doc.text("ENVÍOS NO DESPACHADOS",20,y);y+=5;
+          doc.setFillColor(120,53,15);doc.rect(20,y,W-40,6.5,"F");
+          doc.setTextColor(255,255,255);doc.setFontSize(7);
+          doc.text("#",22,y+4.5);doc.text("Dirección / Ciudad",30,y+4.5);doc.text("N° Envío/Orden",128,y+4.5);doc.text("Motivo",162,y+4.5);y+=6.5;
           doc.setTextColor(0,0,0);doc.setFont("helvetica","normal");
           lotePend.forEach((e,i)=>{
-            if(y>270){doc.addPage();y=20;}
-            if(i%2===0){doc.setFillColor(255,248,240);doc.rect(20,y,W-40,6.5,"F");}
-            doc.setFontSize(7.5);
-            doc.text(String(i+1),22,y+4.5);
-            const dir=(e.direccion||"");
-            doc.text(dir.length>35?dir.slice(0,32)+"…":dir,30,y+4.5);
-            doc.text(e.nroOrdenTN?"#"+e.nroOrdenTN:"-",118,y+4.5);
-            const nota=(notasPendientes[e.id]||"").slice(0,35);
-            if(nota){doc.setTextColor(120,60,0);doc.text(nota,148,y+4.5);doc.setTextColor(0,0,0);}
-            y+=6.5;
+            if(y>272){doc.addPage();y=20;}
+            if(i%2===0){doc.setFillColor(255,248,240);doc.rect(20,y,W-40,5.5,"F");}
+            doc.setFontSize(7);
+            doc.text(String(i+1),22,y+3.8);
+            const dc=dirCorta(e.direccion);
+            const ciudad=e.ciudad||e.localidad||"";
+            const dp=ciudad?dc+" · "+ciudad:dc;
+            doc.text(dp.length>38?dp.slice(0,35)+"…":dp,30,y+3.8);
+            const nroPDF=nroRefPDF(e);
+            doc.text((nroPDF.length>15?nroPDF.slice(-15):nroPDF)||"-",128,y+3.8);
+            const nota=(notasPendientes[e.id]||"").slice(0,28);
+            if(nota){doc.setTextColor(120,60,0);doc.text(nota,162,y+3.8);doc.setTextColor(0,0,0);}
+            y+=5.5;
           });
         }
-        // Firma
-        y+=10;if(y>240){doc.addPage();y=20;}
+        // Firma — intentar que quede en la misma hoja
+        y+=4;if(y>252){doc.addPage();y=20;}
         doc.setFont("helvetica","bold");doc.setFontSize(10);doc.setTextColor(0,0,0);doc.text("FIRMA DEL TRANSPORTISTA",20,y);y+=8;
         if(firmaData){
           doc.addImage(firmaData,"PNG",20,y,80,36);y+=40;
@@ -8777,7 +8791,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         firmaDataUrl:conPDF&&firmaData?firmaData:null,
         enviosIds:despachados_cierre.map(e=>e.id),
         enviosDetalle:despachados_cierre.map(e=>({
-          id:e.id,direccion:e.direccion,bultos:e.bultos||1,
+          id:e.id,direccion:e.direccion,ciudad:e.ciudad||e.localidad||"",bultos:e.bultos||1,
           origen:e.origen||"",nroOrdenTN:e.nroOrdenTN||null,
           nroSeguimiento:e.nroSeguimiento||null,despachoTs:e.despachoTs||null,
           reprogramado:e.reprogramado||false,
@@ -8982,12 +8996,11 @@ function TabSalida({envios,setEnvios,lc,sesion}){
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:"5px",flexWrap:"wrap",marginBottom:"1px"}}>
                     {e.reprogramado&&<span style={{background:"#1c1500",color:"#fbbf24",border:"1px solid #78350f",padding:"1px 5px",borderRadius:"4px",fontSize:"0.6rem",fontWeight:700,flexShrink:0}}>⟳ Reprog.</span>}
-                    <span style={{fontWeight:700,fontSize:"0.82rem",color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}</span>
+                    <span style={{fontWeight:700,fontSize:"0.82rem",color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dirCorta(e.direccion)}</span>
                   </div>
                   <div style={{color:muted,fontSize:"0.7rem",display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center"}}>
-                    {e.nroOrdenTN&&<span>#{e.nroOrdenTN}</span>}
-                    {e.nroSeguimiento&&<span style={{fontFamily:"monospace"}}>{e.nroSeguimiento.slice(-8)}</span>}
-                    {(e.localidad||e.partido)&&<span>{e.localidad||e.partido}</span>}
+                    {(e.localidad||e.ciudad||e.partido)&&<span>{e.localidad||e.ciudad||e.partido}</span>}
+                    {nroRef(e)&&<span style={{fontFamily:"monospace"}}>{nroRef(e)}</span>}
                     <span>{e.bultos||1} bulto{(e.bultos||1)===1?"":"s"}</span>
                   </div>
                 </div>
@@ -9040,11 +9053,11 @@ function TabSalida({envios,setEnvios,lc,sesion}){
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{display:"flex",alignItems:"center",gap:"5px",flexWrap:"wrap"}}>
                       {e.reprogramado&&<span style={{background:"#1c1500",color:"#fbbf24",border:"1px solid #78350f",padding:"1px 5px",borderRadius:"4px",fontSize:"0.6rem",fontWeight:700,flexShrink:0}}>⟳ Reprog.</span>}
-                      <span style={{fontWeight:600,fontSize:"0.78rem",color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}</span>
+                      <span style={{fontWeight:600,fontSize:"0.78rem",color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dirCorta(e.direccion)}</span>
                     </div>
                     <div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginTop:"1px"}}>
-                      {e.nroOrdenTN&&<span style={{color:muted,fontSize:"0.67rem"}}>#{e.nroOrdenTN}</span>}
-                      {(e.localidad||e.partido)&&<span style={{color:muted,fontSize:"0.67rem"}}>{e.localidad||e.partido}</span>}
+                      {(e.localidad||e.ciudad||e.partido)&&<span style={{color:muted,fontSize:"0.67rem"}}>{e.localidad||e.ciudad||e.partido}</span>}
+                      {nroRef(e)&&<span style={{color:muted,fontSize:"0.67rem",fontFamily:"monospace"}}>{nroRef(e)}</span>}
                       {e.armadorNombre&&<span style={{color:"#a78bfa",fontSize:"0.67rem",fontWeight:600}}>👤 {e.armadorNombre}{e.armadoTs?" · "+fmtHora(e.armadoTs):""}</span>}
                     </div>
                   </div>
