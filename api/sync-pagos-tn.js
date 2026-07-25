@@ -4,7 +4,7 @@ const TN_TOKEN   = process.env.TN_ACCESS_TOKEN;
 const TN_STOREID = process.env.TN_STORE_ID;
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== "POST" && req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
   try {
     // 1. Inicializar Firebase
