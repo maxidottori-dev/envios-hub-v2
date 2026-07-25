@@ -1799,6 +1799,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
       const loteCell=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"—";
       const tipoCell=e.tipoEntrega?`<span style="background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":"#dcfce7"};color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":"#15803d"};border-radius:3px;padding:0 4px;font-size:${fs-2}px;font-weight:700;">${e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</span>`:"—";
       const origenBadge=esFlex?`<span style="background:#1a3008;color:#84cc16;border-radius:3px;padding:0 4px;font-size:${fs-3}px;font-weight:700;">FLEX</span>`:`<span style="background:#0c1a40;color:#38bdf8;border-radius:3px;padding:0 4px;font-size:${fs-3}px;font-weight:700;">TN</span>`;
+      const reprogBadge=e.reprogramado?`<span style="background:#1c1500;color:#d97706;border:1px solid #78350f;border-radius:3px;padding:0 4px;font-size:${fs-3}px;font-weight:700;margin-right:4px;white-space:nowrap;">&#x21BB; Reprog.</span>`:"";
 
       if(esSimple){
         return`<tr style="background:${i%2===0?"#fff":"#f9f9f9"};border-bottom:0.5px solid #e5e7eb;">
@@ -1808,7 +1809,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
           <td style="padding:3px 4px;text-align:center;width:35px;">${tipoCell}</td>
           <td style="padding:3px 4px;text-align:center;width:25px;font-weight:${(e.bultos||1)>1?700:400};">${e.bultos||1}</td>
           <td style="padding:3px 4px;text-align:center;width:18px;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td>
-          <td style="padding:3px 4px;font-weight:600;">${dirCorta}</td>
+          <td style="padding:3px 4px;font-weight:600;">${reprogBadge}${dirCorta}</td>
           <td style="padding:3px 4px;color:#555;">${(e.localidad&&!/referencia/i.test(e.localidad))?e.localidad:""}</td>
           <td style="padding:3px 4px;color:#555;">${e.partido||""}</td>
           <td style="padding:3px 4px;white-space:nowrap;font-size:${fs-1}px;">${zml}</td>
@@ -1825,7 +1826,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
           ${e.tipoEntrega?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;font-size:${fs-2}px;font-weight:700;color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":"#15803d"};background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":"#dcfce7"};">${e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</td>`:`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;color:#aaa;">—</td>`}
           ${td(28,"text-align:center;font-weight:"+(((e.bultos||1)>1)?700:400)+";",e.bultos||1)}
           <td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:18px;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td>
-          ${td("","font-weight:500;",dir+refExtra)}
+          ${td("","font-weight:500;",reprogBadge+dir+refExtra)}
           ${td("","white-space:nowrap;font-size:"+(fs-1)+"px;",zml)}
           ${td(32,"text-align:center;",e.turno||"—")}
           ${td(42,"text-align:center;",e.fecha?fmtCorta(e.fecha):"—")}
@@ -1893,6 +1894,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
               return{"#":i+1,
                 Lote:lote,
                 Tipo:e.tipoEntrega==="COMERCIAL"?"COM":e.tipoEntrega==="RESIDENCIAL"?"RES":"",
+                Reprogramado:e.reprogramado?"SI":"",
                 Direccion:[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · "),
                 Referencia:e.referencia||"",
                 NroEnvio:esFlex?(e.nroSeguimiento||""):"",
@@ -2000,6 +2002,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
                     :<span style={{color:"#374151"}}>—</span>}
                 </td>
                 <td style={{...tdSt,whiteSpace:"normal",lineHeight:1.3}}>
+                  {e.reprogramado&&<span style={{background:"#1c1500",color:"#fbbf24",border:"1px solid #78350f",padding:"1px 5px",borderRadius:"4px",fontSize:"0.65rem",fontWeight:700,marginRight:"5px",whiteSpace:"nowrap"}}>⟳ Reprog.</span>}
                   {dir}{e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20))?<span style={{color:"#6b7280",fontSize:"0.72rem"}}> — {e.referencia}</span>:null}
                 </td>
                 <td style={{...tdSt,fontFamily:"monospace",fontSize:"0.72rem",color:esFlex?"#9ca3af":"#7dd3fc"}}>{nroRef}</td>
@@ -8828,13 +8831,15 @@ function TabSalida({envios,setEnvios,lc,sesion}){
                   {despSesion.length-i}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontWeight:700,fontSize:"0.82rem",color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:"5px",flexWrap:"wrap",marginBottom:"1px"}}>
+                    {e.reprogramado&&<span style={{background:"#1c1500",color:"#fbbf24",border:"1px solid #78350f",padding:"1px 5px",borderRadius:"4px",fontSize:"0.6rem",fontWeight:700,flexShrink:0}}>⟳ Reprog.</span>}
+                    <span style={{fontWeight:700,fontSize:"0.82rem",color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}</span>
+                  </div>
                   <div style={{color:muted,fontSize:"0.7rem",display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center"}}>
                     {e.nroOrdenTN&&<span>#{e.nroOrdenTN}</span>}
                     {e.nroSeguimiento&&<span style={{fontFamily:"monospace"}}>{e.nroSeguimiento.slice(-8)}</span>}
                     {(e.localidad||e.partido)&&<span>{e.localidad||e.partido}</span>}
                     <span>{e.bultos||1} bulto{(e.bultos||1)===1?"":"s"}</span>
-                    {e.reprogramado&&<span style={{background:"#1c1500",color:"#fbbf24",border:"1px solid #78350f",padding:"0 5px",borderRadius:"4px",fontSize:"0.6rem",fontWeight:700}}>⟳ Reprog.</span>}
                   </div>
                 </div>
                 <button onClick={()=>desDespachar(e.id)}
@@ -8884,9 +8889,9 @@ function TabSalida({envios,setEnvios,lc,sesion}){
                   )}
                   <div style={{width:"8px",height:"8px",borderRadius:"50%",background:estadoColor,flexShrink:0,marginTop:"4px"}}/>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontWeight:600,fontSize:"0.78rem",color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                      {e.direccion}
-                      {e.reprogramado&&<span style={{background:"#1c1500",color:"#fbbf24",border:"1px solid #78350f",padding:"0 5px",borderRadius:"4px",fontSize:"0.6rem",fontWeight:700,marginLeft:"6px"}}>⟳ Reprog.</span>}
+                    <div style={{display:"flex",alignItems:"center",gap:"5px",flexWrap:"wrap"}}>
+                      {e.reprogramado&&<span style={{background:"#1c1500",color:"#fbbf24",border:"1px solid #78350f",padding:"1px 5px",borderRadius:"4px",fontSize:"0.6rem",fontWeight:700,flexShrink:0}}>⟳ Reprog.</span>}
+                      <span style={{fontWeight:600,fontSize:"0.78rem",color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}</span>
                     </div>
                     <div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginTop:"1px"}}>
                       {e.nroOrdenTN&&<span style={{color:muted,fontSize:"0.67rem"}}>#{e.nroOrdenTN}</span>}
