@@ -7970,6 +7970,36 @@ function TabSalida({envios,setEnvios,lc,sesion}){
     if(logSel&&inputRef.current)inputRef.current.focus();
   },[sesionIds]);
 
+  // Cargar firmante y sesión guardada desde localStorage (solo al montar)
+  useEffect(()=>{
+    const f=localStorage.getItem("salida_firmante_ultimo");
+    if(f)setFirmante(f);
+    const s=localStorage.getItem("salida_sesion_activa");
+    if(s){try{setSesionGuardadaOffer(JSON.parse(s));}catch(e){}}
+  },[]);
+
+  // Persistir sesión activa en localStorage cada vez que cambian los IDs escaneados
+  useEffect(()=>{
+    if(logSel&&turnoSel&&sesionIds.length>0){
+      localStorage.setItem("salida_sesion_activa",JSON.stringify({logSel,turnoSel,fecha,sesionIds}));
+    }
+  },[logSel,turnoSel,fecha,sesionIds]);
+
+  // Back button trap: evita que el botón "atrás" salga de la app mientras hay sesión activa
+  useEffect(()=>{
+    if(!logSel)return;
+    window.history.pushState({salida:true},"","");
+    const handler=()=>{
+      window.history.pushState({salida:true},"","");
+      if(sesionIds.length>0){
+        setResultado({ok:false,msg:"⚠ Sesión activa — usá Liberar para salir"});
+        setTimeout(()=>setResultado(null),3500);
+      }
+    };
+    window.addEventListener("popstate",handler);
+    return()=>window.removeEventListener("popstate",handler);
+  },[logSel,sesionIds.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const esAdmin=sesion?.rol==="admin";
   const [selSalida,setSelSalida]=useState(new Set());
   const [subTab,setSubTab]=useState("despacho"); // "despacho" | "historial"
@@ -7983,10 +8013,14 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   const [sesiones,setSesiones]=useState([]);             // historial de cierres
   const [sesionesLoading,setSesionesLoading]=useState(false);
   const [sesionExpandida,setSesionExpandida]=useState(null); // id expandido en historial
+  const [firmante,setFirmante]=useState("");                 // nombre/apellido del firmante
+  const [notasPendientes,setNotasPendientes]=useState({});  // {[envioId]: nota} para los no despachados
+  const [sesionGuardadaOffer,setSesionGuardadaOffer]=useState(null); // sesión persistida en localStorage
 
   // La sesión solo se cierra manualmente (sin timer de inactividad)
   const liberarLogistica=useCallback(()=>{
-    setLogSel(null);setTurnoSel(null);setLogPreSel(null);setSesionIds([]);setResultado(null);setQrInput("");setSelSalida(new Set());setModalCierre(false);setFirmaData(null);
+    localStorage.removeItem("salida_sesion_activa");
+    setLogSel(null);setTurnoSel(null);setLogPreSel(null);setSesionIds([]);setResultado(null);setQrInput("");setSelSalida(new Set());setModalCierre(false);setFirmaData(null);setNotasPendientes({});
   },[]);
 
   // Despachar envíos seleccionados manualmente (sin escanear) — solo admin
@@ -8012,6 +8046,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
 
   const totalLog=pedidosLog.length;
   const despachados=pedidosLog.filter(e=>e.despachado);
+  const lotePend=pedidosLog.filter(e=>!e.despachado);
   const pct=totalLog>0?Math.round(despachados.length/totalLog*100):0;
 
   // ── Procesar scan ─────────────────────────────────────────────────
@@ -8394,7 +8429,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
     }
     doc.setDrawColor(0,0,0);doc.line(20,y+4,100,y+4);
     doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(100,100,100);
-    doc.text("Firma y aclaración",60,y+9,{align:"center"});
+    doc.text(s.firmante||"Firma y aclaración",60,y+9,{align:"center"});
     doc.save(`salida_${s.logistica}_${s.turno||""}_${s.fecha||""}.pdf`);
   };
 
@@ -8560,6 +8595,30 @@ function TabSalida({envios,setEnvios,lc,sesion}){
             {lciPre.nombreFormal&&<div style={{color:muted,fontSize:"0.75rem"}}>{lciPre.nombreFormal}</div>}
             <div style={{color:muted,fontSize:"0.78rem"}}>{pedPre.length} pedidos</div>
           </div>
+          {/* Oferta de continuar sesión anterior si existe en localStorage para esta logística y fecha */}
+          {sesionGuardadaOffer?.logSel===logPreSel&&sesionGuardadaOffer?.fecha===fecha&&(
+            <div style={{marginBottom:"1.4rem",padding:"1rem",background:"#041f14",border:"1px solid #065f46",borderRadius:"12px"}}>
+              <div style={{color:"#34d399",fontWeight:700,fontSize:"0.85rem",marginBottom:"4px"}}>
+                📱 Sesión guardada · {sesionGuardadaOffer.sesionIds?.length??0} despachado{(sesionGuardadaOffer.sesionIds?.length??0)!==1?"s":""}
+              </div>
+              <div style={{color:"#6b7280",fontSize:"0.75rem",marginBottom:"10px"}}>
+                Turno {sesionGuardadaOffer.turnoSel} · {sesionGuardadaOffer.fecha}
+              </div>
+              <button onClick={()=>{
+                setLogSel(sesionGuardadaOffer.logSel);
+                setTurnoSel(sesionGuardadaOffer.turnoSel);
+                setSesionIds(sesionGuardadaOffer.sesionIds||[]);
+                setFecha(sesionGuardadaOffer.fecha);
+                setSesionGuardadaOffer(null);
+              }} style={{width:"100%",padding:"0.65rem",borderRadius:"8px",background:"#166534",border:"none",color:"#fff",fontWeight:700,fontSize:"0.85rem",cursor:"pointer",marginBottom:"6px"}}>
+                ▶ Continuar sesión anterior
+              </button>
+              <button onClick={()=>{localStorage.removeItem("salida_sesion_activa");setSesionGuardadaOffer(null);}}
+                style={{width:"100%",padding:"0.35rem",background:"transparent",border:"none",color:"#6b7280",fontSize:"0.72rem",cursor:"pointer"}}>
+                Descartar y empezar nueva
+              </button>
+            </div>
+          )}
           <label style={{display:"block",color:muted,fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",marginBottom:"10px"}}>Turno</label>
           <div style={{display:"flex",gap:"10px",flexWrap:"wrap"}}>
             {TURNOS.map(t=>{
@@ -8590,14 +8649,16 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   const despSesion=sesionIds.map(id=>enviosMap.get(id)).filter(Boolean);
 
   // Generar PDF con jsPDF y guardar sesión en Firestore
+  // Usa el lote completo del día (pedidosLog) en lugar de solo los IDs de esta sesión
   const generarYCerrar=async(conPDF)=>{
     if(guardandoCierre)return;
     setGuardandoCierre(true);
     try{
-      const totalFlex=despSesion.filter(e=>(e.origen||"")==="ML").length;
-      const totalNoFlex=despSesion.length-totalFlex;
-      const totalBultos=despSesion.reduce((s,e)=>s+(e.bultos||1),0);
+      const totalFlex=despachados.filter(e=>(e.origen||"")==="ML").length;
+      const totalNoFlex=despachados.length-totalFlex;
+      const totalBultos=despachados.reduce((s,e)=>s+(e.bultos||1),0);
       const operador=sesion?.nombre||sesion?.email||"";
+      const firmanteNombre=firmante.trim();
       if(conPDF){
         const doc=new jsPDF();
         const W=doc.internal.pageSize.getWidth();
@@ -8617,7 +8678,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         doc.setFillColor(240,244,255);doc.roundedRect(18,y,W-36,22,3,3,"F");
         doc.setFont("helvetica","bold");doc.setFontSize(9);
         const resItems=[
-          {label:"Total pedidos",val:despSesion.length},
+          {label:"Despachados",val:despachados.length},
           {label:"FLEX",val:totalFlex},
           {label:"NO FLEX",val:totalNoFlex},
           {label:"Total bultos",val:totalBultos},
@@ -8629,30 +8690,53 @@ function TabSalida({envios,setEnvios,lc,sesion}){
           doc.setFontSize(7.5);doc.setTextColor(100,100,100);doc.text(item.label,cx,y+19,{align:"center"});
         });
         y+=30;doc.setTextColor(0,0,0);
-        // Tabla envíos
-        doc.setFont("helvetica","bold");doc.setFontSize(10);doc.text("DETALLE DE ENVÍOS",20,y);y+=6;
-        doc.setFillColor(30,40,70);doc.rect(20,y,W-40,7,"F");
-        doc.setTextColor(255,255,255);doc.setFontSize(7.5);
-        doc.text("#",22,y+5);doc.text("Dirección",30,y+5);doc.text("N° Orden",118,y+5);
-        doc.text("Bultos",150,y+5);doc.text("Tipo",162,y+5);doc.text("Estado",178,y+5);y+=7;
-        doc.setTextColor(0,0,0);doc.setFont("helvetica","normal");
-        despSesion.forEach((e,i)=>{
-          if(y>270){doc.addPage();y=20;}
-          if(i%2===0){doc.setFillColor(248,249,252);doc.rect(20,y,W-40,6.5,"F");}
-          doc.setFontSize(7.5);
-          doc.text(String(i+1),22,y+4.5);
-          const dir=(e.direccion||"");
-          doc.text(dir.length>40?dir.slice(0,37)+"…":dir,30,y+4.5);
-          doc.text(e.nroOrdenTN?"#"+e.nroOrdenTN:"-",118,y+4.5);
-          doc.text(String(e.bultos||1),152,y+4.5);
-          const tipo=(e.origen||"")==="ML"?"FLEX":"NO FL.";
-          doc.text(tipo,162,y+4.5);
-          if(e.reprogramado){doc.setTextColor(180,120,0);doc.text("REPROG.",178,y+4.5);doc.setTextColor(0,0,0);}
-          y+=6.5;
-        });
+        // Tabla envíos despachados
+        if(despachados.length>0){
+          doc.setFont("helvetica","bold");doc.setFontSize(10);doc.text("DETALLE DE ENVÍOS DESPACHADOS",20,y);y+=6;
+          doc.setFillColor(30,40,70);doc.rect(20,y,W-40,7,"F");
+          doc.setTextColor(255,255,255);doc.setFontSize(7.5);
+          doc.text("#",22,y+5);doc.text("Dirección",30,y+5);doc.text("N° Orden",118,y+5);
+          doc.text("Bultos",150,y+5);doc.text("Tipo",162,y+5);doc.text("Estado",178,y+5);y+=7;
+          doc.setTextColor(0,0,0);doc.setFont("helvetica","normal");
+          despachados.forEach((e,i)=>{
+            if(y>270){doc.addPage();y=20;}
+            if(i%2===0){doc.setFillColor(248,249,252);doc.rect(20,y,W-40,6.5,"F");}
+            doc.setFontSize(7.5);
+            doc.text(String(i+1),22,y+4.5);
+            const dir=(e.direccion||"");
+            doc.text(dir.length>40?dir.slice(0,37)+"…":dir,30,y+4.5);
+            doc.text(e.nroOrdenTN?"#"+e.nroOrdenTN:"-",118,y+4.5);
+            doc.text(String(e.bultos||1),152,y+4.5);
+            const tipo=(e.origen||"")==="ML"?"FLEX":"NO FL.";
+            doc.text(tipo,162,y+4.5);
+            if(e.reprogramado){doc.setTextColor(180,120,0);doc.text("REPROG.",178,y+4.5);doc.setTextColor(0,0,0);}
+            y+=6.5;
+          });
+        }
+        // Tabla pendientes (no despachados)
+        if(lotePend.length>0){
+          y+=6;if(y>260){doc.addPage();y=20;}
+          doc.setFont("helvetica","bold");doc.setFontSize(10);doc.setTextColor(180,80,0);doc.text("ENVÍOS NO DESPACHADOS",20,y);y+=6;
+          doc.setFillColor(120,53,15);doc.rect(20,y,W-40,7,"F");
+          doc.setTextColor(255,255,255);doc.setFontSize(7.5);
+          doc.text("#",22,y+5);doc.text("Dirección",30,y+5);doc.text("N° Orden",118,y+5);doc.text("Motivo",148,y+5);y+=7;
+          doc.setTextColor(0,0,0);doc.setFont("helvetica","normal");
+          lotePend.forEach((e,i)=>{
+            if(y>270){doc.addPage();y=20;}
+            if(i%2===0){doc.setFillColor(255,248,240);doc.rect(20,y,W-40,6.5,"F");}
+            doc.setFontSize(7.5);
+            doc.text(String(i+1),22,y+4.5);
+            const dir=(e.direccion||"");
+            doc.text(dir.length>35?dir.slice(0,32)+"…":dir,30,y+4.5);
+            doc.text(e.nroOrdenTN?"#"+e.nroOrdenTN:"-",118,y+4.5);
+            const nota=(notasPendientes[e.id]||"").slice(0,35);
+            if(nota){doc.setTextColor(120,60,0);doc.text(nota,148,y+4.5);doc.setTextColor(0,0,0);}
+            y+=6.5;
+          });
+        }
         // Firma
         y+=10;if(y>240){doc.addPage();y=20;}
-        doc.setFont("helvetica","bold");doc.setFontSize(10);doc.text("FIRMA DEL TRANSPORTISTA",20,y);y+=8;
+        doc.setFont("helvetica","bold");doc.setFontSize(10);doc.setTextColor(0,0,0);doc.text("FIRMA DEL TRANSPORTISTA",20,y);y+=8;
         if(firmaData){
           doc.addImage(firmaData,"PNG",20,y,80,36);y+=40;
         }else{
@@ -8660,20 +8744,31 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         }
         doc.setDrawColor(0,0,0);doc.line(20,y+4,100,y+4);
         doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(100,100,100);
-        doc.text("Firma y aclaración",60,y+9,{align:"center"});
+        const lineaFirma=firmanteNombre||"Firma y aclaración";
+        doc.text(lineaFirma,60,y+9,{align:"center"});
         doc.save(`salida_${logSel}_${turnoSel}_${fecha}.pdf`);
       }
+      // Guardar firmante para autocompletar en próximas sesiones
+      if(firmanteNombre)localStorage.setItem("salida_firmante_ultimo",firmanteNombre);
+      // Limpiar sesión activa del localStorage
+      localStorage.removeItem("salida_sesion_activa");
       await addDoc(collection(db,"sesionesSalida"),{
-        fecha,logistica:logSel,turno:turnoSel,operador,
+        fecha,logistica:logSel,turno:turnoSel,operador,firmante:firmanteNombre||null,
         creadoEn:new Date().toISOString(),
-        totalPedidos:despSesion.length,totalFlex,totalNoFlex,totalBultos,
+        totalPedidos:despachados.length,totalFlex,totalNoFlex,totalBultos,
+        totalPendientes:lotePend.length,
         firmaDataUrl:conPDF&&firmaData?firmaData:null,
-        enviosIds:sesionIds,
-        enviosDetalle:despSesion.map(e=>({
+        enviosIds:despachados.map(e=>e.id),
+        enviosDetalle:despachados.map(e=>({
           id:e.id,direccion:e.direccion,bultos:e.bultos||1,
           origen:e.origen||"",nroOrdenTN:e.nroOrdenTN||null,
           nroSeguimiento:e.nroSeguimiento||null,despachoTs:e.despachoTs||null,
           reprogramado:e.reprogramado||false,
+        })),
+        pendientesDetalle:lotePend.map(e=>({
+          id:e.id,direccion:e.direccion,bultos:e.bultos||1,
+          nroOrdenTN:e.nroOrdenTN||null,
+          nota:notasPendientes[e.id]||null,
         })),
       });
     }catch(err){console.error("Error cierre sesión:",err);}
@@ -8683,19 +8778,19 @@ function TabSalida({envios,setEnvios,lc,sesion}){
 
   // ── Modal de cierre de sesión ─────────────────────────────────────
   if(modalCierre){
-    const totalFlex=despSesion.filter(e=>(e.origen||"")==="ML").length;
-    const totalNoFlex=despSesion.length-totalFlex;
-    const totalBultos=despSesion.reduce((s,e)=>s+(e.bultos||1),0);
+    const totalFlex=despachados.filter(e=>(e.origen||"")==="ML").length;
+    const totalNoFlex=despachados.length-totalFlex;
+    const totalBultos=despachados.reduce((s,e)=>s+(e.bultos||1),0);
     return(
       <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem",overflowY:"auto"}}>
         <div style={{background:"#0f1420",border:"1px solid #1a1f2e",borderRadius:"18px",padding:"1.5rem",width:"100%",maxWidth:"480px",maxHeight:"90vh",overflowY:"auto"}}>
           {/* Header */}
           <div style={{fontWeight:900,fontSize:"1.1rem",marginBottom:"0.3rem"}}>Cerrar sesión de despacho</div>
           <div style={{color:"#6b7280",fontSize:"0.8rem",marginBottom:"1.2rem"}}>{lci.nombreFormal||logSel}{lci.nombreFormal?` (${logSel})`:""} · Turno {turnoSel} · {fecha}</div>
-          {/* Resumen */}
+          {/* Resumen — lote completo del día */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:"8px",marginBottom:"1.2rem"}}>
             {[
-              {label:"Pedidos",val:despSesion.length,color:logColor},
+              {label:"Despachados",val:despachados.length,color:logColor},
               {label:"FLEX",val:totalFlex,color:"#34d399"},
               {label:"NO FLEX",val:totalNoFlex,color:"#f59e0b"},
               {label:"Bultos",val:totalBultos,color:"#a78bfa"},
@@ -8706,8 +8801,31 @@ function TabSalida({envios,setEnvios,lc,sesion}){
               </div>
             ))}
           </div>
+          {/* Pendientes (no despachados) con campo de nota */}
+          {lotePend.length>0&&(
+            <div style={{marginBottom:"1.2rem",padding:"0.9rem",background:"#1c0f04",border:"1px solid #78350f",borderRadius:"10px"}}>
+              <div style={{color:"#f59e0b",fontWeight:700,fontSize:"0.78rem",marginBottom:"8px",textTransform:"uppercase",letterSpacing:"0.04em"}}>
+                ⚠ {lotePend.length} sin despachar — justificación
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
+                {lotePend.map(e=>(
+                  <div key={e.id} style={{background:"#120a02",borderRadius:"8px",padding:"0.5rem 0.7rem"}}>
+                    <div style={{fontSize:"0.75rem",color:"#fbbf24",fontWeight:600,marginBottom:"4px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      {e.nroOrdenTN?"#"+e.nroOrdenTN+" — ":""}{e.direccion}
+                    </div>
+                    <input
+                      value={notasPendientes[e.id]||""}
+                      onChange={ev=>setNotasPendientes(prev=>({...prev,[e.id]:ev.target.value}))}
+                      placeholder="Motivo (ej: ausente, dirección incorrecta…)"
+                      style={{width:"100%",background:"#0a0602",border:"1px solid #78350f",borderRadius:"6px",color:"#fff",padding:"0.35rem 0.55rem",fontSize:"0.75rem",outline:"none",boxSizing:"border-box"}}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {/* Firma */}
-          <div style={{marginBottom:"1.2rem"}}>
+          <div style={{marginBottom:"0.8rem"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"6px"}}>
               <label style={{color:"#6b7280",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Firma del transportista</label>
               <button onClick={()=>{
@@ -8723,6 +8841,20 @@ function TabSalida({envios,setEnvios,lc,sesion}){
             <canvas ref={firmaRef} width={440} height={180}
               style={{width:"100%",height:"180px",borderRadius:"10px",border:"1px solid #1a1f2e",cursor:"crosshair",touchAction:"none",display:"block"}}/>
             {!firmaData&&<div style={{color:"#4b5563",fontSize:"0.72rem",marginTop:"4px",textAlign:"center"}}>Firmá arriba con el dedo o el mouse</div>}
+          </div>
+          {/* Firmante (nombre y apellido) */}
+          <div style={{marginBottom:"1.2rem"}}>
+            <label style={{display:"block",color:"#6b7280",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",marginBottom:"5px"}}>Nombre y apellido del firmante</label>
+            <input
+              value={firmante}
+              onChange={e=>setFirmante(e.target.value)}
+              placeholder="Ej: Juan García"
+              list="firmante-sugerencias"
+              style={{width:"100%",background:"#12172a",border:"1px solid #1a1f2e",borderRadius:"8px",color:"#fff",padding:"0.5rem 0.75rem",fontSize:"0.85rem",outline:"none",boxSizing:"border-box"}}
+            />
+            <datalist id="firmante-sugerencias">
+              {firmante&&<option value={firmante}/>}
+            </datalist>
           </div>
           {/* Acciones */}
           <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
