@@ -3926,7 +3926,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
                 <span style={{color:"#34d399"}}>✓ {syncPagos.actualizados} actualizados</span>
                 <span>· {syncPagos.pendientes} pendientes ·</span>
                 <span style={{color:syncPagos.errores>0?"#f87171":"#6b7280"}}>{syncPagos.errores} errores</span>
-                <span style={{color:"#4b5563"}}>({syncPagos.totalCC??0} CC + {syncPagos.totalEfectivo??0} efectivo)</span>
+                <span style={{color:"#4b5563"}}>({syncPagos.totalCC??0} CC + {syncPagos.totalEfectivo??0} efectivo + {syncPagos.totalPendientes??0} transf.)</span>
                 <button onClick={()=>setSyncDetalleOpen(p=>!p)} style={{...S.btnSm(syncDetalleOpen,"#6366f1"),padding:"1px 8px",fontSize:"0.68rem"}}>
                   {syncDetalleOpen?"Ocultar detalle":"Ver detalle"}
                 </button>
