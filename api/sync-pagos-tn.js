@@ -15,6 +15,11 @@ export default async function handler(req, res) {
       .where("origen", "==", "Tienda Nube")
       .get();
 
+    // Fecha de corte: solo revisar pedidos de los últimos 60 días
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 60);
+    const cutoffStr = cutoff.toISOString().split("T")[0];
+
     // 3a. CC: pagoEstado === "cuenta_corriente" O esCC === true (manual CC override)
     const docsCC = snap.docs.filter(d => {
       const data = d.data();
@@ -27,9 +32,20 @@ export default async function handler(req, res) {
       return data.cobranza > 0 && data.pagoEstado !== "pagado";
     });
 
-    // Unificar (un pedido puede caer en ambos grupos — dedup por id)
+    // 3c. Pendientes genéricos (transferencias y otros): pagoEstado pendiente/ausente,
+    //     sin cobranza, sin CC, de los últimos 60 días
+    const docsPendientes = snap.docs.filter(d => {
+      const data = d.data();
+      if (data.pagoEstado === "pagado" || data.pagoEstado === "cuenta_corriente") return false;
+      if (data.esCC === true) return false;
+      if (data.cobranza > 0) return false; // ya cubierto por docsEfectivo
+      const fecha = data.fechaVenta || data.fecha || "";
+      return fecha >= cutoffStr;
+    });
+
+    // Unificar (un pedido puede caer en varios grupos — dedup por id)
     const mapaUniq = new Map();
-    [...docsCC, ...docsEfectivo].forEach(d => mapaUniq.set(d.id, d));
+    [...docsCC, ...docsEfectivo, ...docsPendientes].forEach(d => mapaUniq.set(d.id, d));
     const todos = [...mapaUniq.values()];
 
     let actualizados = 0, pendientes = 0, errores = 0;
@@ -76,6 +92,7 @@ export default async function handler(req, res) {
       ok: true,
       totalCC: docsCC.length,
       totalEfectivo: docsEfectivo.length,
+      totalPendientes: docsPendientes.length,
       total: todos.length,
       actualizados,
       pendientes,
