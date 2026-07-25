@@ -8605,10 +8605,16 @@ function TabSalida({envios,setEnvios,lc,sesion}){
                 Turno {sesionGuardadaOffer.turnoSel} · {sesionGuardadaOffer.fecha}
               </div>
               <button onClick={()=>{
+                const ids=sesionGuardadaOffer.sesionIds||[];
                 setLogSel(sesionGuardadaOffer.logSel);
                 setTurnoSel(sesionGuardadaOffer.turnoSel);
-                setSesionIds(sesionGuardadaOffer.sesionIds||[]);
+                setSesionIds(ids);
                 setFecha(sesionGuardadaOffer.fecha);
+                // Re-aplicar flags despachado en estado local porque al reabrir el browser
+                // los envíos se cargan desde Firestore sin esos flags (solo estaban en memoria).
+                if(ids.length>0){
+                  setEnvios(pv=>pv.map(e=>ids.includes(e.id)?{...e,despachado:true}:e));
+                }
                 setSesionGuardadaOffer(null);
               }} style={{width:"100%",padding:"0.65rem",borderRadius:"8px",background:"#166534",border:"none",color:"#fff",fontWeight:700,fontSize:"0.85rem",cursor:"pointer",marginBottom:"6px"}}>
                 ▶ Continuar sesión anterior
@@ -8649,13 +8655,24 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   const despSesion=sesionIds.map(id=>enviosMap.get(id)).filter(Boolean);
 
   // Generar PDF con jsPDF y guardar sesión en Firestore
-  // Usa el lote completo del día (pedidosLog) en lugar de solo los IDs de esta sesión
+  // Usa el lote completo del día (pedidosLog) en lugar de solo los IDs de esta sesión.
+  // Fallback: si pedidosLog.despachados está vacío (flags perdidos al reiniciar browser),
+  // usa sesionIds para reconstruir la lista.
   const generarYCerrar=async(conPDF)=>{
     if(guardandoCierre)return;
     setGuardandoCierre(true);
     try{
-      const totalFlex=despachados.filter(e=>(e.origen||"")==="ML").length;
-      const totalNoFlex=despachados.length-totalFlex;
+      // Si los flags despachado no llegaron a re-aplicarse (race condition al restaurar sesión),
+      // combinamos los de pedidosLog con los de sesionIds como fallback.
+      const idsSet=new Set(sesionIds);
+      const despachados_cierre=despachados.length>0
+        ? despachados
+        : sesionIds.map(id=>enviosMap.get(id)).filter(Boolean);
+      // Asegurar que sesionIds también estén incluidos aunque falte el flag
+      const idsYaIncluidos=new Set(despachados_cierre.map(e=>e.id));
+      sesionIds.forEach(id=>{if(!idsYaIncluidos.has(id)){const e=enviosMap.get(id);if(e)despachados_cierre.push(e);}});
+      const totalFlex=despachados_cierre.filter(e=>(e.origen||"")==="ML").length;
+      const totalNoFlex=despachados_cierre.length-totalFlex;
       const totalBultos=despachados.reduce((s,e)=>s+(e.bultos||1),0);
       const operador=sesion?.nombre||sesion?.email||"";
       const firmanteNombre=firmante.trim();
@@ -8678,7 +8695,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         doc.setFillColor(240,244,255);doc.roundedRect(18,y,W-36,22,3,3,"F");
         doc.setFont("helvetica","bold");doc.setFontSize(9);
         const resItems=[
-          {label:"Despachados",val:despachados.length},
+          {label:"Despachados",val:despachados_cierre.length},
           {label:"FLEX",val:totalFlex},
           {label:"NO FLEX",val:totalNoFlex},
           {label:"Total bultos",val:totalBultos},
@@ -8691,14 +8708,14 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         });
         y+=30;doc.setTextColor(0,0,0);
         // Tabla envíos despachados
-        if(despachados.length>0){
+        if(despachados_cierre.length>0){
           doc.setFont("helvetica","bold");doc.setFontSize(10);doc.text("DETALLE DE ENVÍOS DESPACHADOS",20,y);y+=6;
           doc.setFillColor(30,40,70);doc.rect(20,y,W-40,7,"F");
           doc.setTextColor(255,255,255);doc.setFontSize(7.5);
           doc.text("#",22,y+5);doc.text("Dirección",30,y+5);doc.text("N° Orden",118,y+5);
           doc.text("Bultos",150,y+5);doc.text("Tipo",162,y+5);doc.text("Estado",178,y+5);y+=7;
           doc.setTextColor(0,0,0);doc.setFont("helvetica","normal");
-          despachados.forEach((e,i)=>{
+          despachados_cierre.forEach((e,i)=>{
             if(y>270){doc.addPage();y=20;}
             if(i%2===0){doc.setFillColor(248,249,252);doc.rect(20,y,W-40,6.5,"F");}
             doc.setFontSize(7.5);
@@ -8755,11 +8772,11 @@ function TabSalida({envios,setEnvios,lc,sesion}){
       await addDoc(collection(db,"sesionesSalida"),{
         fecha,logistica:logSel,turno:turnoSel,operador,firmante:firmanteNombre||null,
         creadoEn:new Date().toISOString(),
-        totalPedidos:despachados.length,totalFlex,totalNoFlex,totalBultos,
+        totalPedidos:despachados_cierre.length,totalFlex,totalNoFlex,totalBultos,
         totalPendientes:lotePend.length,
         firmaDataUrl:conPDF&&firmaData?firmaData:null,
-        enviosIds:despachados.map(e=>e.id),
-        enviosDetalle:despachados.map(e=>({
+        enviosIds:despachados_cierre.map(e=>e.id),
+        enviosDetalle:despachados_cierre.map(e=>({
           id:e.id,direccion:e.direccion,bultos:e.bultos||1,
           origen:e.origen||"",nroOrdenTN:e.nroOrdenTN||null,
           nroSeguimiento:e.nroSeguimiento||null,despachoTs:e.despachoTs||null,
