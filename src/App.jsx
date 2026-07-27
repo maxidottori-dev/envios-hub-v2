@@ -214,15 +214,28 @@ const parsearEtiquetasColectaPDF=async(file)=>{
     const txt=tc.items.map(x=>x.str).join("\n");
     if(/\bFLEX\b/.test(txt))continue; // etiqueta de Flex real (palabra FLEX a la izq. de la fecha), no es Colecta
     const idxDesp=txt.indexOf("Despachar:");
-    if(idxDesp<0)continue; // no es una etiqueta individual (ej. página "Identificación/Productos" = lista de empaque resumen)
-    // Nro de envío: el número impreso debajo del código de barras (el que realmente
-    // escanea el armador), NO el "Pack ID" ni el "Venta". En la etiqueta aparece como dos grupos
-    // de dígitos justo después de "Despachar: ..." (ej. "473609" + "22937" = 47360922937).
-    // Confirmado decodificando el código de barras (Code128) y el QR de varias etiquetas reales:
-    // ambos codifican exactamente esta concatenación. SIEMPRE está presente, es el dato principal.
-    const winDesp=txt.slice(idxDesp,idxDesp+200);
-    const mBarra=winDesp.match(/(\d{4,6})\D+(\d{4,6})/);
-    const nroSeguimiento=mBarra?(mBarra[1]+mBarra[2]):"";
+    const idxValida=txt.indexOf("Etiqueta válida para envíos");
+    if(idxDesp<0&&idxValida<0)continue; // no es etiqueta individual (ej. página resumen "Identificación/Productos")
+    // Nro de envío: el número impreso debajo del código de barras.
+    // Formato A ("Despachar:"): dos grupos de 4-6 dígitos justo después del label (ej. "473609"+"22937").
+    // Formato B ("Etiqueta válida para envíos"): número único de 8-15 dígitos en línea propia
+    //   inmediatamente después de esa frase; en PDF.js puede llegar partido en dos items por cambio
+    //   de fuente bold, por eso se intenta primero el número único y luego el par de chunks.
+    let nroSeguimiento="";
+    if(idxDesp>=0){
+      const winDesp=txt.slice(idxDesp,idxDesp+200);
+      const mBarra=winDesp.match(/(\d{4,6})\D+(\d{4,6})/);
+      nroSeguimiento=mBarra?(mBarra[1]+mBarra[2]):"";
+    } else {
+      // Formato B: buscar número del código de barras después de "Etiqueta válida para envíos"
+      const winValida=txt.slice(idxValida,idxValida+150);
+      const mSingle=winValida.match(/\n(\d{8,15})\n/);        // número único
+      if(mSingle){nroSeguimiento=mSingle[1];}
+      else{
+        const mDouble=winValida.match(/\n(\d{4,6})\n(\d{4,6})/); // partido en dos por bold
+        if(mDouble)nroSeguimiento=mDouble[1]+mDouble[2];
+      }
+    }
     if(!nroSeguimiento){
       const packIdM0=txt.match(/Pack ID:\s*(\d{3,6})\s*(\d{6,})/);
       noProcesadas.push({pagina:i,packId:packIdM0?(packIdM0[1]+packIdM0[2]):""});
