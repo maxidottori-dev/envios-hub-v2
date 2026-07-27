@@ -8045,8 +8045,11 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   },[envios,logSel,turnoSel,fecha]);
 
   const totalLog=pedidosLog.length;
-  const despachados=pedidosLog.filter(e=>e.despachado);
-  const lotePend=pedidosLog.filter(e=>!e.despachado);
+  // Usar sesionIds como fuente autoritativa — no depende del flag e.despachado
+  // que puede perderse si el browser cierra antes de que React persista el estado.
+  const sesionSet=new Set(sesionIds);
+  const despachados=sesionIds.map(id=>enviosMap.get(id)).filter(Boolean);
+  const lotePend=pedidosLog.filter(e=>!sesionSet.has(e.id));
   const pct=totalLog>0?Math.round(despachados.length/totalLog*100):0;
 
   // ── Procesar scan ─────────────────────────────────────────────────
@@ -8662,26 +8665,17 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   const nroRef=(e)=>e.nroSeguimiento?e.nroSeguimiento.slice(-10):(e.nroOrdenTN?"#"+e.nroOrdenTN:"");
   const nroRefPDF=(e)=>e.nroSeguimiento||(e.nroOrdenTN?"#"+e.nroOrdenTN:"");
 
-  // Generar PDF con jsPDF y guardar sesión en Firestore
-  // Usa el lote completo del día (pedidosLog) en lugar de solo los IDs de esta sesión.
-  // Fallback: si pedidosLog.despachados está vacío (flags perdidos al reiniciar browser),
-  // usa sesionIds para reconstruir la lista.
+  // Generar PDF con jsPDF y guardar sesión en Firestore.
+  // sesionIds es la fuente autoritativa: no depende del flag e.despachado
+  // que puede perderse si el browser cierra antes de persistir el estado.
   const generarYCerrar=async(conPDF)=>{
     if(guardandoCierre)return;
     setGuardandoCierre(true);
     try{
-      // Si los flags despachado no llegaron a re-aplicarse (race condition al restaurar sesión),
-      // combinamos los de pedidosLog con los de sesionIds como fallback.
-      const idsSet=new Set(sesionIds);
-      const despachados_cierre=despachados.length>0
-        ? despachados
-        : sesionIds.map(id=>enviosMap.get(id)).filter(Boolean);
-      // Asegurar que sesionIds también estén incluidos aunque falte el flag
-      const idsYaIncluidos=new Set(despachados_cierre.map(e=>e.id));
-      sesionIds.forEach(id=>{if(!idsYaIncluidos.has(id)){const e=enviosMap.get(id);if(e)despachados_cierre.push(e);}});
+      const despachados_cierre=sesionIds.map(id=>enviosMap.get(id)).filter(Boolean);
       const totalFlex=despachados_cierre.filter(e=>(e.origen||"")==="ML").length;
       const totalNoFlex=despachados_cierre.length-totalFlex;
-      const totalBultos=despachados.reduce((s,e)=>s+(e.bultos||1),0);
+      const totalBultos=despachados_cierre.reduce((s,e)=>s+(e.bultos||1),0);
       const operador=sesion?.nombre||sesion?.usuario||sesion?.email||"";
       const firmanteNombre=firmante.trim();
       if(conPDF){
@@ -9058,6 +9052,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
                     <div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginTop:"1px"}}>
                       {(e.localidad||e.ciudad||e.partido)&&<span style={{color:muted,fontSize:"0.67rem"}}>{e.localidad||e.ciudad||e.partido}</span>}
                       {nroRef(e)&&<span style={{color:muted,fontSize:"0.67rem",fontFamily:"monospace"}}>{nroRef(e)}</span>}
+                      <span style={{color:muted,fontSize:"0.67rem"}}>📦 {e.bultos||1} blt</span>
                       {e.armadorNombre&&<span style={{color:"#a78bfa",fontSize:"0.67rem",fontWeight:600}}>👤 {e.armadorNombre}{e.armadoTs?" · "+fmtHora(e.armadoTs):""}</span>}
                     </div>
                   </div>
