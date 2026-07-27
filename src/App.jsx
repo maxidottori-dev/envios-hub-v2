@@ -8045,6 +8045,9 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   },[envios,logSel,turnoSel,fecha]);
 
   const totalLog=pedidosLog.length;
+  // enviosMap debe estar aquí (antes de despachados) — usarlo antes de la definición
+  // causa ReferenceError cuando sesionIds no está vacío (temporal dead zone de const).
+  const enviosMap=new Map(envios.map(e=>[e.id,e]));
   // Usar sesionIds como fuente autoritativa — no depende del flag e.despachado
   // que puede perderse si el browser cierra antes de que React persista el estado.
   const sesionSet=new Set(sesionIds);
@@ -8656,10 +8659,6 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   const logColor=lci.color||"#6366f1";
   const logBg=lci.bg||"#12172a";
 
-  // Pedidos de esta sesión que ya fueron despachados
-  const enviosMap=new Map(envios.map(e=>[e.id,e]));
-  const despSesion=sesionIds.map(id=>enviosMap.get(id)).filter(Boolean);
-
   // Helpers para PDF y UI: dirección sin referencia, nro de envío unificado
   const dirCorta=(dir)=>(dir||"").split(/\s*\/\s*/)[0].trim();
   const nroRef=(e)=>e.nroSeguimiento?e.nroSeguimiento.slice(-10):(e.nroOrdenTN?"#"+e.nroOrdenTN:"");
@@ -8976,16 +8975,16 @@ function TabSalida({envios,setEnvios,lc,sesion}){
       </div>
 
       {/* Lista de la sesión */}
-      {despSesion.length>0&&(
+      {despachados.length>0&&(
         <div style={{background:card,border:`1px solid ${brd}`,borderRadius:"14px",padding:"1.2rem",marginBottom:"1rem"}}>
           <div style={{fontWeight:700,fontSize:"0.82rem",color:muted,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"0.8rem"}}>
-            Esta sesión · {despSesion.length} despachado{despSesion.length!==1?"s":""}
+            Esta sesión · {despachados.length} despachado{despachados.length!==1?"s":""}
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
-            {despSesion.map((e,i)=>(
+            {despachados.map((e,i)=>(
               <div key={e.id} style={{display:"flex",alignItems:"center",gap:"10px",padding:"0.55rem 0.7rem",borderRadius:"8px",background:"#041f14",border:"1px solid #065f46"}}>
                 <div style={{width:"20px",height:"20px",borderRadius:"50%",background:ok,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.7rem",fontWeight:900,color:"#fff",flexShrink:0}}>
-                  {despSesion.length-i}
+                  {despachados.length-i}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:"5px",flexWrap:"wrap",marginBottom:"1px"}}>
