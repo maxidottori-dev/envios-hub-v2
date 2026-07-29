@@ -7966,6 +7966,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   const [qrInput,setQrInput]=useState("");
   const [resultado,setResultado]=useState(null);    // {ok,msg,envio}
   const [overlayError,setOverlayError]=useState(null); // {msg} → overlay rojo de pantalla completa
+  const [confirmBultos,setConfirmBultos]=useState(null); // envio con >1 bulto pendiente de confirmación
   const [sesionIds,setSesionIds]=useState([]);       // IDs despachados en esta sesión (en orden)
   const [camara,setCamara]=useState(false);
   const soportaCamera=typeof window!=="undefined"&&"mediaDevices" in navigator&&!!navigator.mediaDevices?.getUserMedia;
@@ -7973,22 +7974,40 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   const videoRef=useRef(null);
   const canvasRef=useRef(null);
 
-  // Enfocar input cuando hay logística seleccionada
+  // Backup de sesión activa en Firestore (debounced 3s) para resiliencia ante crash de localStorage
   useEffect(()=>{
-    if(logSel&&inputRef.current)inputRef.current.focus();
-  },[logSel]);
+    if(!logSel||!turnoSel.length||!sesionIds.length)return;
+    const t=setTimeout(()=>{
+      const docId="activa_"+(sesion?.id||"anon");
+      setDoc(doc(db,"sesionesSalidaActiva",docId),{
+        logSel,turnoSel,fecha,sesionIds,updatedAt:new Date().toISOString(),operador:sesion?.nombre||sesion?.email||""
+      }).catch(()=>{});
+    },3000);
+    return()=>clearTimeout(t);
+  },[sesionIds,logSel,turnoSel,fecha,sesion]);
 
-  // Re-enfocar input después de cada scan exitoso (sesionIds cambia)
-  useEffect(()=>{
-    if(logSel&&inputRef.current)inputRef.current.focus();
-  },[sesionIds]);
-
-  // Cargar firmante y sesión guardada desde localStorage (solo al montar)
+  // Cargar firmante y sesión guardada desde localStorage; si no hay, intentar Firestore como fallback
   useEffect(()=>{
     const f=localStorage.getItem("salida_firmante_ultimo");
     if(f)setFirmante(f);
     const s=localStorage.getItem("salida_sesion_activa");
-    if(s){try{setSesionGuardadaOffer(JSON.parse(s));}catch(e){}}
+    if(s){
+      try{setSesionGuardadaOffer(JSON.parse(s));}catch(e){}
+    } else {
+      // Fallback: buscar sesión activa en Firestore
+      const docId="activa_"+(sesion?.id||"anon");
+      getDoc(doc(db,"sesionesSalidaActiva",docId)).then(snap=>{
+        if(snap.exists()){
+          const d=snap.data();
+          // Solo ofrecer recuperar si tiene datos recientes (menos de 24hs)
+          const age=Date.now()-new Date(d.updatedAt||0).getTime();
+          if(age<86400000&&d.sesionIds?.length>0){
+            setSesionGuardadaOffer(d);
+          }
+        }
+      }).catch(()=>{});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
   // Persistir sesión activa en localStorage cada vez que cambian los IDs escaneados
@@ -8160,15 +8179,23 @@ function TabSalida({envios,setEnvios,lc,sesion}){
       return;
     }
 
-    // ✅ Despachar
+    // Multi-bulto: pedir confirmación antes de despachar
+    if((best.bultos||1)>1){
+      beepOK();
+      setConfirmBultos(best);
+      setQrInput("");
+      return;
+    }
+
+    // ✅ Despachar (1 bulto)
     const ts=new Date().toISOString();
     const despachoPor=sesion?.nombre||sesion?.email||"";
     setEnvios(pv=>pv.map(e=>e.id===best.id?{...e,despachado:true,despachoTs:ts,despachoLogistica:logSel,despachoPor}:e));
     setSesionIds(prev=>[best.id,...prev]);
     beepOK();
+    setQrInput("");
     setResultado({ok:true,envio:best,msg:"✓ Despachado: "+(best.nroOrdenTN?"#"+best.nroOrdenTN+" — ":"")+best.direccion});
     setTimeout(()=>setResultado(null),5000);
-    if(inputRef.current)inputRef.current.focus();
   },[envios,logSel,turnoSel,fecha,sesionIds,sesion,lc,setEnvios]);
 
   // Escaneo QR via cámara — modo continuo: la cámara queda abierta entre scans.
@@ -8302,7 +8329,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   if(overlayError){
     const lci=lc[overlayError.trans]||{};
     return(
-      <div onClick={()=>{setOverlayError(null);if(inputRef.current)inputRef.current.focus();}}
+      <div onClick={()=>setOverlayError(null)}
         style={{position:"fixed",inset:0,zIndex:9999,background:"#200000",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",padding:"2rem"}}>
         <div style={{fontSize:"5rem",marginBottom:"1rem"}}>⛔</div>
         <div style={{fontSize:"2rem",fontWeight:900,color:"#ff4444",textAlign:"center",marginBottom:"0.5rem",letterSpacing:"0.05em"}}>{overlayError.titulo||"ERROR"}</div>
@@ -8317,9 +8344,10 @@ function TabSalida({envios,setEnvios,lc,sesion}){
           </div>
         </div>
         <div style={{color:"#9ca3af",fontSize:"0.85rem"}}>Tocá en cualquier lugar para cerrar</div>
-        {/* Input oculto para seguir escaneando */}
+        {/* Input oculto para lectores de código de barras físicos */}
         <input ref={inputRef} value={qrInput} onChange={e=>setQrInput(e.target.value)} onKeyDown={handleKey}
-          style={{position:"absolute",opacity:0,pointerEvents:"none",width:1,height:1}}/>
+          style={{position:"absolute",opacity:0,pointerEvents:"none",width:1,height:1}}
+          readOnly={false}/>
       </div>
     );
   }
@@ -8826,8 +8854,9 @@ function TabSalida({envios,setEnvios,lc,sesion}){
       }
       // Guardar firmante para autocompletar en próximas sesiones
       if(firmanteNombre)localStorage.setItem("salida_firmante_ultimo",firmanteNombre);
-      // Limpiar sesión activa del localStorage
+      // Limpiar sesión activa del localStorage y Firestore
       localStorage.removeItem("salida_sesion_activa");
+      deleteDoc(doc(db,"sesionesSalidaActiva","activa_"+(sesion?.id||"anon"))).catch(()=>{});
       await addDoc(collection(db,"sesionesSalida"),{
         fecha,logistica:logSel,turno:turnoSel,operador,firmante:firmanteNombre||null,
         creadoEn:new Date().toISOString(),
@@ -8994,12 +9023,18 @@ function TabSalida({envios,setEnvios,lc,sesion}){
 
       {/* Input de escaneo */}
       <div style={{background:card,border:`1px solid ${brd}`,borderRadius:"14px",padding:"1.2rem",marginBottom:"1rem"}}>
-        <label style={{display:"block",color:muted,fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",marginBottom:"6px"}}>Escanear / ingresar código</label>
+        <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}>
+          <label style={{color:muted,fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",flex:1}}>Escanear código</label>
+          <button onClick={()=>{inputRef.current?.focus();}}
+            title="Escribir código manualmente"
+            style={{padding:"3px 10px",borderRadius:"6px",background:"#12172a",border:`1px solid ${brd}`,color:muted,fontSize:"0.72rem",cursor:"pointer"}}>
+            ✏️ Escribir
+          </button>
+        </div>
         <div style={{display:"flex",gap:"8px"}}>
           <input ref={inputRef} value={qrInput} onChange={e=>setQrInput(e.target.value)} onKeyDown={handleKey}
             placeholder="Código de barras, nro de orden TN o seguimiento…"
-            style={{flex:1,background:"#12172a",border:`1px solid ${logColor}66`,borderRadius:"10px",color:"#fff",padding:"0.7rem 0.9rem",fontSize:"0.9rem",outline:"none"}}
-            autoFocus/>
+            style={{flex:1,background:"#12172a",border:`1px solid ${logColor}66`,borderRadius:"10px",color:"#fff",padding:"0.7rem 0.9rem",fontSize:"0.9rem",outline:"none"}}/>
           <button onClick={()=>procesarScan(qrInput)}
             style={{padding:"0.7rem 1.2rem",borderRadius:"10px",background:`linear-gradient(135deg,${logColor},${logColor}cc)`,border:"none",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:"0.85rem",flexShrink:0}}>
             OK
@@ -9029,11 +9064,128 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         )}
       </div>
 
-      {/* Lista de la sesión */}
+      {/* Overlay de confirmación multi-bulto */}
+      {confirmBultos&&(
+        <div style={{position:"fixed",inset:0,zIndex:9998,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",padding:"1.5rem"}}>
+          <div style={{background:"#0f1420",border:"2px solid #f59e0b",borderRadius:"18px",padding:"1.8rem",width:"100%",maxWidth:"400px",textAlign:"center"}}>
+            <div style={{fontSize:"2.5rem",marginBottom:"0.5rem"}}>📦</div>
+            <div style={{fontWeight:900,fontSize:"1.3rem",color:"#f59e0b",marginBottom:"0.4rem"}}>
+              {confirmBultos.bultos} bultos
+            </div>
+            <div style={{fontWeight:700,fontSize:"0.95rem",color:"#fff",marginBottom:"0.25rem"}}>
+              {confirmBultos.nroOrdenTN?"#"+confirmBultos.nroOrdenTN+" — ":""}{confirmBultos.direccion}
+            </div>
+            {(confirmBultos.localidad||confirmBultos.ciudad)&&(
+              <div style={{color:"#6b7280",fontSize:"0.8rem",marginBottom:"1.2rem"}}>{confirmBultos.localidad||confirmBultos.ciudad}</div>
+            )}
+            <div style={{color:"#fbbf24",fontSize:"1rem",fontWeight:600,marginBottom:"1.5rem"}}>
+              ¿Están los {confirmBultos.bultos} bultos?
+            </div>
+            <div style={{display:"flex",gap:"10px"}}>
+              <button onClick={()=>{
+                const ts=new Date().toISOString();
+                const despachoPor=sesion?.nombre||sesion?.email||"";
+                setEnvios(pv=>pv.map(e=>e.id===confirmBultos.id?{...e,despachado:true,despachoTs:ts,despachoLogistica:logSel,despachoPor}:e));
+                setSesionIds(prev=>[confirmBultos.id,...prev]);
+                beepOK();
+                setResultado({ok:true,envio:confirmBultos,msg:`✓ ${confirmBultos.bultos} bultos despachados: ${confirmBultos.nroOrdenTN?"#"+confirmBultos.nroOrdenTN+" — ":""}${confirmBultos.direccion}`});
+                setTimeout(()=>setResultado(null),5000);
+                setConfirmBultos(null);
+              }} style={{flex:1,padding:"0.9rem",borderRadius:"10px",background:"linear-gradient(135deg,#16a34a,#15803d)",border:"none",color:"#fff",fontWeight:800,fontSize:"1rem",cursor:"pointer"}}>
+                ✓ Sí, están todos
+              </button>
+              <button onClick={()=>{beepError();setConfirmBultos(null);}}
+                style={{flex:1,padding:"0.9rem",borderRadius:"10px",background:"#1c0505",border:"1px solid #7f1d1d",color:"#fca5a5",fontWeight:700,fontSize:"0.9rem",cursor:"pointer"}}>
+                ✗ Faltan bultos
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Alerta: pedidos preparados sin logística asignada */}
+      {(()=>{
+        const sinAsignarPrep=envios.filter(e=>{
+          const f=e.fecha||e.fechaVenta||"";
+          return f===fecha&&!e.trans&&e.preparado&&e.estado!=="cancelado";
+        });
+        if(!sinAsignarPrep.length)return null;
+        return(
+          <div style={{background:"#1c1000",border:"1px solid #92400e",borderRadius:"10px",padding:"0.75rem 1rem",marginBottom:"0.75rem",display:"flex",alignItems:"flex-start",gap:"10px"}}>
+            <span style={{fontSize:"1.1rem",flexShrink:0}}>⚠️</span>
+            <div>
+              <div style={{color:"#fbbf24",fontWeight:700,fontSize:"0.82rem"}}>
+                {sinAsignarPrep.length} pedido{sinAsignarPrep.length!==1?"s":""} preparado{sinAsignarPrep.length!==1?"s":""} sin logística asignada
+              </div>
+              <div style={{color:"#d97706",fontSize:"0.72rem",marginTop:"2px"}}>
+                {sinAsignarPrep.map(e=>nroRef(e)||dirCorta(e.direccion)).join(", ")}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* PENDIENTES DE ESCANEAR */}
+      <div style={{background:card,border:`1px solid ${brd}`,borderRadius:"14px",padding:"1.2rem",marginBottom:"0.75rem"}}>
+        <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"0.8rem",flexWrap:"wrap"}}>
+          <div style={{fontWeight:700,fontSize:"0.82rem",color:muted,textTransform:"uppercase",letterSpacing:"0.05em",flex:1}}>
+            Pendientes · {lotePend.length}
+          </div>
+          {esAdmin&&selSalida.size>0&&(
+            <button onClick={despacharSeleccionados}
+              style={{padding:"0.3rem 0.8rem",borderRadius:"8px",background:`linear-gradient(135deg,${logColor},${logColor}cc)`,border:"none",color:"#fff",fontWeight:700,fontSize:"0.75rem",cursor:"pointer"}}>
+              Despachar {selSalida.size} seleccionado{selSalida.size!==1?"s":""}
+            </button>
+          )}
+        </div>
+        {lotePend.length===0
+          ? <div style={{textAlign:"center",color:ok,fontSize:"0.82rem",padding:"0.5rem"}}>✓ Todos despachados</div>
+          : <div style={{display:"flex",flexDirection:"column",gap:"5px"}}>
+              {lotePend.map(e=>{
+                const prep=e.preparado;
+                const selAdmin=esAdmin&&selSalida.has(e.id);
+                return(
+                  <div key={e.id} style={{display:"flex",alignItems:"flex-start",gap:"8px",padding:"0.45rem 0.6rem",borderRadius:"7px",
+                    background:selAdmin?"#0d0f2a":prep?"#0d0f1a":"transparent",
+                    border:`1px solid ${selAdmin?"#6366f1":prep?"#1e293b":"transparent"}`,
+                    opacity:prep?1:0.5}}>
+                    {esAdmin&&(
+                      <div style={{paddingTop:"2px",flexShrink:0}}>
+                        <input type="checkbox" checked={selAdmin} onChange={()=>setSelSalida(prev=>{const n=new Set(prev);n.has(e.id)?n.delete(e.id):n.add(e.id);return n;})}
+                          style={{width:"15px",height:"15px",cursor:"pointer",accentColor:logColor}}/>
+                      </div>
+                    )}
+                    <div style={{width:"8px",height:"8px",borderRadius:"50%",background:prep?"#f59e0b":muted,flexShrink:0,marginTop:"4px"}}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:"5px",flexWrap:"wrap"}}>
+                        {e.reprogramado&&<span style={{background:"#1c1500",color:"#fbbf24",border:"1px solid #78350f",padding:"1px 5px",borderRadius:"4px",fontSize:"0.6rem",fontWeight:700,flexShrink:0}}>⟳ Reprog.</span>}
+                        <span style={{fontWeight:600,fontSize:"0.78rem",color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dirCorta(e.direccion)}</span>
+                      </div>
+                      <div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginTop:"1px"}}>
+                        {(e.localidad||e.ciudad||e.partido)&&<span style={{color:muted,fontSize:"0.67rem"}}>{e.localidad||e.ciudad||e.partido}</span>}
+                        {nroRef(e)&&<span style={{color:muted,fontSize:"0.67rem",fontFamily:"monospace"}}>{nroRef(e)}</span>}
+                        {prep
+                          ?<span style={{color:muted,fontSize:"0.67rem"}}>📦 {e.bultos||1} blt</span>
+                          :<span style={{color:"#f59e0b",fontSize:"0.67rem",fontWeight:700}}>⚠ NO PREPARADO</span>
+                        }
+                        {e.armadorNombre&&<span style={{color:"#a78bfa",fontSize:"0.67rem",fontWeight:600}}>👤 {e.armadorNombre}</span>}
+                      </div>
+                    </div>
+                    <div style={{fontSize:"0.68rem",fontWeight:700,color:prep?"#f59e0b":muted,flexShrink:0}}>
+                      {prep?"Preparado":"Sin preparar"}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+        }
+      </div>
+
+      {/* ESCANEADOS EN ESTA SESIÓN */}
       {despachados.length>0&&(
-        <div style={{background:card,border:`1px solid ${brd}`,borderRadius:"14px",padding:"1.2rem",marginBottom:"1rem"}}>
-          <div style={{fontWeight:700,fontSize:"0.82rem",color:muted,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"0.8rem"}}>
-            Esta sesión · {despachados.length} despachado{despachados.length!==1?"s":""}
+        <div style={{background:card,border:`1px solid #065f46`,borderRadius:"14px",padding:"1.2rem"}}>
+          <div style={{fontWeight:700,fontSize:"0.82rem",color:ok,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"0.8rem"}}>
+            ✓ Escaneados · {despachados.length}
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
             {despachados.map((e,i)=>(
@@ -9060,97 +9212,6 @@ function TabSalida({envios,setEnvios,lc,sesion}){
             ))}
           </div>
         </div>
-      )}
-
-      {/* Alerta: pedidos preparados sin logística asignada */}
-      {(()=>{
-        const sinAsignarPrep=envios.filter(e=>{
-          const f=e.fecha||e.fechaVenta||"";
-          return f===fecha&&!e.trans&&e.preparado&&e.estado!=="cancelado";
-        });
-        if(!sinAsignarPrep.length)return null;
-        return(
-          <div style={{background:"#1c1000",border:"1px solid #92400e",borderRadius:"10px",padding:"0.75rem 1rem",display:"flex",alignItems:"flex-start",gap:"10px"}}>
-            <span style={{fontSize:"1.1rem",flexShrink:0}}>⚠️</span>
-            <div>
-              <div style={{color:"#fbbf24",fontWeight:700,fontSize:"0.82rem"}}>
-                {sinAsignarPrep.length} pedido{sinAsignarPrep.length!==1?"s":""} preparado{sinAsignarPrep.length!==1?"s":""} sin logística asignada
-              </div>
-              <div style={{color:"#d97706",fontSize:"0.72rem",marginTop:"2px"}}>
-                {sinAsignarPrep.map(e=>nroRef(e)||dirCorta(e.direccion)).join(", ")}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Resumen pedidos del día para esta logística */}
-      {pedidosLog.length>0&&(
-        <div style={{background:card,border:`1px solid ${brd}`,borderRadius:"14px",padding:"1.2rem"}}>
-          <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"0.8rem",flexWrap:"wrap"}}>
-            <div style={{fontWeight:700,fontSize:"0.82rem",color:muted,textTransform:"uppercase",letterSpacing:"0.05em"}}>
-              Pedidos del día — {logSel} · {fecha}
-            </div>
-            {esAdmin&&selSalida.size>0&&(
-              <button onClick={despacharSeleccionados}
-                style={{marginLeft:"auto",padding:"0.3rem 0.8rem",borderRadius:"8px",background:`linear-gradient(135deg,${logColor},${logColor}cc)`,border:"none",color:"#fff",fontWeight:700,fontSize:"0.75rem",cursor:"pointer"}}>
-                Despachar {selSalida.size} seleccionado{selSalida.size!==1?"s":""}
-              </button>
-            )}
-          </div>
-          <div style={{display:"flex",flexDirection:"column",gap:"5px"}}>
-            {pedidosLog.map(e=>{
-              const enSesion=sesionIds.includes(e.id);
-              const desp=e.despachado;
-              const prep=e.preparado;
-              const selAdmin=esAdmin&&selSalida.has(e.id);
-              let estadoColor=muted,estadoLabel="Sin preparar";
-              if(desp){estadoColor=ok;estadoLabel="Despachado";}
-              else if(prep){estadoColor="#f59e0b";estadoLabel="Preparado";}
-              return(
-                <div key={e.id} style={{display:"flex",alignItems:"flex-start",gap:"8px",padding:"0.45rem 0.6rem",borderRadius:"7px",
-                  background:desp?"#041f14":selAdmin?"#0d0f2a":prep?"#0d0f1a":"transparent",
-                  border:`1px solid ${desp?"#065f46":selAdmin?"#6366f1":prep?"#1e293b":"transparent"}`,
-                  opacity:desp?1:prep?1:0.5}}>
-                  {/* Checkbox admin para selección manual */}
-                  {esAdmin&&!desp&&(
-                    <div style={{paddingTop:"2px",flexShrink:0}}>
-                      <input type="checkbox" checked={selAdmin} onChange={()=>setSelSalida(prev=>{const n=new Set(prev);n.has(e.id)?n.delete(e.id):n.add(e.id);return n;})}
-                        style={{width:"15px",height:"15px",cursor:"pointer",accentColor:logColor}}/>
-                    </div>
-                  )}
-                  <div style={{width:"8px",height:"8px",borderRadius:"50%",background:estadoColor,flexShrink:0,marginTop:"4px"}}/>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:"flex",alignItems:"center",gap:"5px",flexWrap:"wrap"}}>
-                      {e.reprogramado&&<span style={{background:"#1c1500",color:"#fbbf24",border:"1px solid #78350f",padding:"1px 5px",borderRadius:"4px",fontSize:"0.6rem",fontWeight:700,flexShrink:0}}>⟳ Reprog.</span>}
-                      <span style={{fontWeight:600,fontSize:"0.78rem",color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dirCorta(e.direccion)}</span>
-                    </div>
-                    <div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginTop:"1px"}}>
-                      {(e.localidad||e.ciudad||e.partido)&&<span style={{color:muted,fontSize:"0.67rem"}}>{e.localidad||e.ciudad||e.partido}</span>}
-                      {nroRef(e)&&<span style={{color:muted,fontSize:"0.67rem",fontFamily:"monospace"}}>{nroRef(e)}</span>}
-                      {e.preparado
-                        ?<span style={{color:muted,fontSize:"0.67rem"}}>📦 {e.bultos||1} blt</span>
-                        :<span style={{color:"#f59e0b",fontSize:"0.67rem",fontWeight:700}}>⚠ NO PREPARADO</span>
-                      }
-                      {e.armadorNombre&&<span style={{color:"#a78bfa",fontSize:"0.67rem",fontWeight:600}}>👤 {e.armadorNombre}{e.armadoTs?" · "+fmtHora(e.armadoTs):""}</span>}
-                    </div>
-                  </div>
-                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"2px",flexShrink:0}}>
-                    <div style={{fontSize:"0.68rem",fontWeight:700,color:estadoColor}}>{estadoLabel}</div>
-                    {desp&&e.despachoTs&&<div style={{fontSize:"0.6rem",color:"#4b5563"}}>{fmtHora(e.despachoTs)}{e.despachoPor&&" · "+e.despachoPor}</div>}
-                    {desp&&enSesion&&<button onClick={()=>desDespachar(e.id)}
-                      style={{padding:"0.2rem 0.45rem",borderRadius:"5px",background:"transparent",border:"1px solid #374151",color:muted,cursor:"pointer",fontSize:"0.63rem"}}>
-                      ↩
-                    </button>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-      {pedidosLog.length===0&&(
-        <div style={{textAlign:"center",color:muted,fontSize:"0.82rem",padding:"2rem"}}>No hay pedidos asignados a {logSel} para {fecha}</div>
       )}
     </div>
   );
