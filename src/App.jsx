@@ -7962,7 +7962,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   // ── Estado ────────────────────────────────────────────────────────
   const [fecha,setFecha]=useState(hoy);
   const [logSel,setLogSel]=useState(null);          // logística "bloqueada" para la sesión
-  const [turnoSel,setTurnoSel]=useState(null);       // turno "bloqueado" para la sesión
+  const [turnoSel,setTurnoSel]=useState([]);          // turnos "bloqueados" para la sesión (array, multi-turno)
   const [qrInput,setQrInput]=useState("");
   const [resultado,setResultado]=useState(null);    // {ok,msg,envio}
   const [overlayError,setOverlayError]=useState(null); // {msg} → overlay rojo de pantalla completa
@@ -7993,7 +7993,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
 
   // Persistir sesión activa en localStorage cada vez que cambian los IDs escaneados
   useEffect(()=>{
-    if(logSel&&turnoSel&&sesionIds.length>0){
+    if(logSel&&turnoSel.length>0&&sesionIds.length>0){
       localStorage.setItem("salida_sesion_activa",JSON.stringify({logSel,turnoSel,fecha,sesionIds}));
     }
   },[logSel,turnoSel,fecha,sesionIds]);
@@ -8033,7 +8033,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   // La sesión solo se cierra manualmente (sin timer de inactividad)
   const liberarLogistica=useCallback(()=>{
     localStorage.removeItem("salida_sesion_activa");
-    setLogSel(null);setTurnoSel(null);setLogPreSel(null);setSesionIds([]);setResultado(null);setQrInput("");setSelSalida(new Set());setModalCierre(false);setFirmaData(null);setNotasPendientes({});
+    setLogSel(null);setTurnoSel([]);setLogPreSel(null);setSesionIds([]);setResultado(null);setQrInput("");setSelSalida(new Set());setModalCierre(false);setFirmaData(null);setNotasPendientes({});
   },[]);
 
   // Despachar envíos seleccionados manualmente (sin escanear) — solo admin
@@ -8050,10 +8050,10 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   // ── Pedidos del día para la logística + turno seleccionados ───────
   // Los envíos sin turno asignado (legacy) no se excluyen para no trabar pedidos viejos.
   const pedidosLog=useMemo(()=>{
-    if(!logSel||!turnoSel)return[];
+    if(!logSel||!turnoSel.length)return[];
     return envios.filter(e=>{
       const f=e.fecha||e.fechaVenta||"";
-      return f===fecha&&e.trans===logSel&&getEstado(e)==="asignado"&&e.estado!=="cancelado"&&(!e.turno||e.turno===turnoSel);
+      return f===fecha&&e.trans===logSel&&getEstado(e)==="asignado"&&e.estado!=="cancelado"&&(!e.turno||turnoSel.includes(e.turno));
     });
   },[envios,logSel,turnoSel,fecha]);
 
@@ -8073,13 +8073,13 @@ function TabSalida({envios,setEnvios,lc,sesion}){
     const srch=raw.trim();
     if(!srch)return;
     setQrInput("");
-    if(!logSel||!turnoSel){beepError();return;}
+    if(!logSel||!turnoSel.length){beepError();return;}
 
     const nums=srch.replace(/\D/g,"");
-    // Buscar en TODOS los envíos del día (sin filtro por logística/turno) para detectar el error específico
+    // Buscar en TODOS los envíos del día no cancelados (incluye sin_asignar) para dar errores específicos
     const candidatos=envios.filter(e=>{
       const f=e.fecha||e.fechaVenta||"";
-      return f===fecha&&getEstado(e)==="asignado"&&e.estado!=="cancelado";
+      return f===fecha&&e.estado!=="cancelado"&&getEstado(e)!=="cancelado";
     });
 
     let best=null,bestScore=0;
@@ -8092,6 +8092,20 @@ function TabSalida({envios,setEnvios,lc,sesion}){
       beepError();
       setResultado({ok:false,msg:"Pedido no encontrado: "+srch});
       setTimeout(()=>setResultado(null),4000);
+      if(inputRef.current)inputRef.current.focus();
+      return;
+    }
+
+    // Sin asignar → overlay rojo bloqueante específico
+    if(!best.trans){
+      beepError();
+      setOverlayError({
+        titulo:"SIN ASIGNAR",
+        detalle:"Este pedido no tiene logística asignada. Asignalo primero en el panel de despacho.",
+        envio:best,
+        trans:"",
+        color:"#f59e0b",
+      });
       if(inputRef.current)inputRef.current.focus();
       return;
     }
@@ -8113,12 +8127,12 @@ function TabSalida({envios,setEnvios,lc,sesion}){
 
     // Turno incorrecto (logística correcta, pero otro turno) → overlay rojo bloqueante.
     // Los pedidos sin turno asignado (legacy) no se bloquean.
-    if(best.turno&&best.turno!==turnoSel){
+    if(best.turno&&!turnoSel.includes(best.turno)){
       beepError();
       const turnoC=TURNO_C[best.turno]||{};
       setOverlayError({
         titulo:"TURNO INCORRECTO",
-        detalle:`Este pedido es de turno ${best.turno}, no de ${turnoSel}.`,
+        detalle:`Este pedido es de turno ${best.turno}, no de ${turnoSel.join("/")}.`,
         envio:best,
         trans:best.trans,
         turno:best.turno,
@@ -8272,6 +8286,18 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   // ── Colores UI ────────────────────────────────────────────────────
   const bg="#0a0e1a",card="#0f1420",brd="#1a1f2e",muted="#6b7280",ok="#10b981",err="#ef4444";
 
+  // Cargar historial de cierres de sesión desde Firestore
+  // IMPORTANTE: este useEffect debe estar ANTES de cualquier return condicional
+  // para respetar el orden de hooks (Rules of Hooks).
+  useEffect(()=>{
+    if(subTab!=="sesiones")return;
+    setSesionesLoading(true);
+    getDocs(query(collection(db,"sesionesSalida"),orderBy("creadoEn","desc"),limit(60)))
+      .then(snap=>setSesiones(snap.docs.map(d=>({id:d.id,...d.data()}))))
+      .catch(err=>console.error("Error cargando sesiones:",err))
+      .finally(()=>setSesionesLoading(false));
+  },[subTab]);
+
   // ── Overlay de error logística ────────────────────────────────────
   if(overlayError){
     const lci=lc[overlayError.trans]||{};
@@ -8297,16 +8323,6 @@ function TabSalida({envios,setEnvios,lc,sesion}){
       </div>
     );
   }
-
-  // Cargar historial de cierres de sesión desde Firestore
-  useEffect(()=>{
-    if(subTab!=="sesiones")return;
-    setSesionesLoading(true);
-    getDocs(query(collection(db,"sesionesSalida"),orderBy("creadoEn","desc"),limit(60)))
-      .then(snap=>setSesiones(snap.docs.map(d=>({id:d.id,...d.data()}))))
-      .catch(err=>console.error("Error cargando sesiones:",err))
-      .finally(()=>setSesionesLoading(false));
-  },[subTab]);
 
   // ── Historial de despacho ─────────────────────────────────────────
   const puedeHistorial=puedeVer(sesion,"accion_verhistorialdespacho");
@@ -8395,7 +8411,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
     let y=32;
     doc.setFontSize(10);doc.setFont("helvetica","normal");
     doc.text(`Logística: ${logNombre}`,20,y);doc.text(`Fecha: ${s.fecha||""}`,110,y);y+=6;
-    doc.text(`Turno: ${s.turno||""}`,20,y);doc.text(`Operador: ${s.operador||""}`,110,y);y+=6;
+    doc.text(`Turno: ${Array.isArray(s.turno)?s.turno.join(" + "):(s.turno||"")}`,20,y);doc.text(`Operador: ${s.operador||""}`,110,y);y+=6;
     const fechaGen=s.creadoEn?new Date(s.creadoEn).toLocaleString("es-AR"):"";
     doc.text(`Generado: ${fechaGen}`,20,y);y+=8;
     // Resumen
@@ -8480,7 +8496,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}}>
                       <span style={{fontWeight:700,color:lciS.color||"#fff",fontSize:"0.88rem"}}>{lciS.nombreFormal||s.logistica}</span>
-                      {s.turno&&<span style={{background:TURNO_C[s.turno]?.bg||"#1a1f2e",color:TURNO_C[s.turno]?.c||"#8b5cf6",padding:"1px 7px",borderRadius:"5px",fontWeight:700,fontSize:"0.65rem",border:"1px solid "+(TURNO_C[s.turno]?.c||"#8b5cf6")}}>{s.turno}</span>}
+                      {(Array.isArray(s.turno)?s.turno:[s.turno]).filter(Boolean).map(t=>{const tc=TURNO_C[t]||{c:"#8b5cf6",bg:"#1a1f2e"};return(<span key={t} style={{background:tc.bg,color:tc.c,padding:"1px 7px",borderRadius:"5px",fontWeight:700,fontSize:"0.65rem",border:`1px solid ${tc.c}`,marginRight:"3px"}}>{t}</span>);})}
                       {s.firmaDataUrl&&<span style={{background:"#041f14",color:"#34d399",padding:"1px 7px",borderRadius:"5px",fontSize:"0.62rem",fontWeight:700,border:"1px solid #065f46"}}>✓ Firmado</span>}
                     </div>
                     <div style={{color:"#6b7280",fontSize:"0.7rem",marginTop:"2px"}}>{fechaHora}{s.operador&&" · "+s.operador}</div>
@@ -8554,6 +8570,43 @@ function TabSalida({envios,setEnvios,lc,sesion}){
 
   // ── Vista selector de logística (Paso 1) ────────────────────────
   if(!logSel&&!logPreSel){
+    // Lock: si hay una sesión guardada, mostrar solo la oferta de continuar/descartar
+    if(sesionGuardadaOffer){
+      return(
+        <div style={{maxWidth:"600px",margin:"0 auto",padding:"1rem 0"}}>
+          <div style={{background:card,border:"1px solid #065f46",borderRadius:"14px",padding:"1.5rem"}}>
+            <div style={{fontWeight:800,fontSize:"1.1rem",marginBottom:"0.5rem"}}>🚚 Salida</div>
+            <div style={{padding:"1rem",background:"#041f14",border:"1px solid #065f46",borderRadius:"12px"}}>
+              <div style={{color:"#34d399",fontWeight:700,fontSize:"0.95rem",marginBottom:"4px"}}>
+                📱 Sesión en curso — {sesionGuardadaOffer.sesionIds?.length??0} despachado{(sesionGuardadaOffer.sesionIds?.length??0)!==1?"s":""}
+              </div>
+              <div style={{color:"#6b7280",fontSize:"0.78rem",marginBottom:"12px"}}>
+                {sesionGuardadaOffer.logSel} · Turno {Array.isArray(sesionGuardadaOffer.turnoSel)?sesionGuardadaOffer.turnoSel.join(" · "):sesionGuardadaOffer.turnoSel} · {sesionGuardadaOffer.fecha}
+              </div>
+              <div style={{color:"#fbbf24",fontSize:"0.75rem",marginBottom:"12px"}}>
+                ⚠ Hay una sesión activa. Para iniciar una nueva, primero cerrá o descartá esta.
+              </div>
+              <button onClick={()=>{
+                const ids=sesionGuardadaOffer.sesionIds||[];
+                const t=sesionGuardadaOffer.turnoSel;
+                setLogSel(sesionGuardadaOffer.logSel);
+                setTurnoSel(Array.isArray(t)?t:t?[t]:[]);
+                setSesionIds(ids);
+                setFecha(sesionGuardadaOffer.fecha);
+                if(ids.length>0){setEnvios(pv=>pv.map(e=>ids.includes(e.id)?{...e,despachado:true}:e));}
+                setSesionGuardadaOffer(null);
+              }} style={{width:"100%",padding:"0.65rem",borderRadius:"8px",background:"#166534",border:"none",color:"#fff",fontWeight:700,fontSize:"0.85rem",cursor:"pointer",marginBottom:"6px"}}>
+                ▶ Continuar sesión
+              </button>
+              <button onClick={()=>{localStorage.removeItem("salida_sesion_activa");setSesionGuardadaOffer(null);}}
+                style={{width:"100%",padding:"0.35rem",background:"transparent",border:"none",color:"#6b7280",fontSize:"0.72rem",cursor:"pointer"}}>
+                Descartar y empezar nueva
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
     return(
       <div style={{maxWidth:"600px",margin:"0 auto",padding:"1rem 0"}}>
         <div style={{background:card,border:`1px solid ${brd}`,borderRadius:"14px",padding:"1.5rem"}}>
@@ -8606,10 +8659,11 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   if(!logSel&&logPreSel){
     const lciPre=lc[logPreSel]||{};
     const pedPre=envios.filter(e=>{const f=e.fecha||e.fechaVenta||"";return f===fecha&&e.trans===logPreSel&&getEstado(e)==="asignado"&&e.estado!=="cancelado";});
+    const toggleTurno=(t)=>setTurnoSel(prev=>prev.includes(t)?prev.filter(x=>x!==t):[...prev,t]);
     return(
       <div style={{maxWidth:"600px",margin:"0 auto",padding:"1rem 0"}}>
         <div style={{background:card,border:`1px solid ${brd}`,borderRadius:"14px",padding:"1.5rem"}}>
-          <button onClick={()=>setLogPreSel(null)} style={{...S.btnSm(false),padding:"4px 12px",fontSize:"0.75rem",marginBottom:"1.2rem"}}>← Volver</button>
+          <button onClick={()=>{setLogPreSel(null);setTurnoSel([]);}} style={{...S.btnSm(false),padding:"4px 12px",fontSize:"0.75rem",marginBottom:"1.2rem"}}>← Volver</button>
           {/* Logística elegida */}
           <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"1.5rem",padding:"0.75rem 1rem",background:"#12172a",borderRadius:"10px",border:`1px solid ${lciPre.color||brd}44`}}>
             <div style={{width:"10px",height:"10px",borderRadius:"50%",background:lciPre.color||"#6b7280",flexShrink:0}}/>
@@ -8617,51 +8671,36 @@ function TabSalida({envios,setEnvios,lc,sesion}){
             {lciPre.nombreFormal&&<div style={{color:muted,fontSize:"0.75rem"}}>{lciPre.nombreFormal}</div>}
             <div style={{color:muted,fontSize:"0.78rem"}}>{pedPre.length} pedidos</div>
           </div>
-          {/* Oferta de continuar sesión anterior si existe en localStorage para esta logística y fecha */}
-          {sesionGuardadaOffer?.logSel===logPreSel&&sesionGuardadaOffer?.fecha===fecha&&(
-            <div style={{marginBottom:"1.4rem",padding:"1rem",background:"#041f14",border:"1px solid #065f46",borderRadius:"12px"}}>
-              <div style={{color:"#34d399",fontWeight:700,fontSize:"0.85rem",marginBottom:"4px"}}>
-                📱 Sesión guardada · {sesionGuardadaOffer.sesionIds?.length??0} despachado{(sesionGuardadaOffer.sesionIds?.length??0)!==1?"s":""}
-              </div>
-              <div style={{color:"#6b7280",fontSize:"0.75rem",marginBottom:"10px"}}>
-                Turno {sesionGuardadaOffer.turnoSel} · {sesionGuardadaOffer.fecha}
-              </div>
-              <button onClick={()=>{
-                const ids=sesionGuardadaOffer.sesionIds||[];
-                setLogSel(sesionGuardadaOffer.logSel);
-                setTurnoSel(sesionGuardadaOffer.turnoSel);
-                setSesionIds(ids);
-                setFecha(sesionGuardadaOffer.fecha);
-                // Re-aplicar flags despachado en estado local porque al reabrir el browser
-                // los envíos se cargan desde Firestore sin esos flags (solo estaban en memoria).
-                if(ids.length>0){
-                  setEnvios(pv=>pv.map(e=>ids.includes(e.id)?{...e,despachado:true}:e));
-                }
-                setSesionGuardadaOffer(null);
-              }} style={{width:"100%",padding:"0.65rem",borderRadius:"8px",background:"#166534",border:"none",color:"#fff",fontWeight:700,fontSize:"0.85rem",cursor:"pointer",marginBottom:"6px"}}>
-                ▶ Continuar sesión anterior
-              </button>
-              <button onClick={()=>{localStorage.removeItem("salida_sesion_activa");setSesionGuardadaOffer(null);}}
-                style={{width:"100%",padding:"0.35rem",background:"transparent",border:"none",color:"#6b7280",fontSize:"0.72rem",cursor:"pointer"}}>
-                Descartar y empezar nueva
-              </button>
-            </div>
-          )}
-          <label style={{display:"block",color:muted,fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",marginBottom:"10px"}}>Turno</label>
-          <div style={{display:"flex",gap:"10px",flexWrap:"wrap"}}>
+          {/* Selector multi-turno: toggle buttons */}
+          <label style={{display:"block",color:muted,fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",marginBottom:"10px"}}>
+            Turno/s — seleccioná todos los que aplican
+          </label>
+          <div style={{display:"flex",gap:"10px",flexWrap:"wrap",marginBottom:"1.2rem"}}>
             {TURNOS.map(t=>{
               const tc=TURNO_C[t]||{c:"#8b5cf6",bg:"#1a1f2e"};
+              const sel=turnoSel.includes(t);
               const pedT=pedPre.filter(e=>!e.turno||e.turno===t);
               return(
-                <button key={t} onClick={()=>{setLogSel(logPreSel);setTurnoSel(t);setSesionIds([]);setResultado(null);}}
+                <button key={t} onClick={()=>toggleTurno(t)}
                   style={{flex:"1 1 120px",display:"flex",flexDirection:"column",alignItems:"center",gap:"8px",padding:"1.2rem 1rem",borderRadius:"12px",
-                    background:tc.bg+"44",color:tc.c,border:`2px solid ${tc.c}`,cursor:"pointer",fontWeight:800,fontSize:"1.1rem"}}>
-                  {t}
+                    background:sel?tc.bg+"88":tc.bg+"22",color:tc.c,
+                    border:`2px solid ${sel?tc.c:tc.c+"44"}`,cursor:"pointer",fontWeight:800,fontSize:"1.1rem",
+                    boxShadow:sel?`0 0 0 2px ${tc.c}44`:"none",transition:"all 0.15s"}}>
+                  {sel?"✓ ":""}{t}
                   <span style={{color:muted,fontSize:"0.7rem",fontWeight:400}}>{pedT.length} pedidos</span>
                 </button>
               );
             })}
           </div>
+          <button
+            disabled={turnoSel.length===0}
+            onClick={()=>{setLogSel(logPreSel);setSesionIds([]);setResultado(null);}}
+            style={{width:"100%",padding:"0.75rem",borderRadius:"10px",
+              background:turnoSel.length>0?"linear-gradient(135deg,#6366f1,#4f46e5)":"#1a1f2e",
+              border:"none",color:turnoSel.length>0?"#fff":"#374151",
+              fontWeight:700,fontSize:"0.95rem",cursor:turnoSel.length>0?"pointer":"not-allowed",transition:"all 0.15s"}}>
+            {turnoSel.length===0?"Seleccioná al menos un turno":`Iniciar sesión · ${turnoSel.join(" + ")}`}
+          </button>
         </div>
       </div>
     );
@@ -8703,7 +8742,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         doc.setFontSize(10);doc.setFont("helvetica","normal");
         const logNombre=lci.nombreFormal?`${lci.nombreFormal} (${logSel})`:logSel;
         doc.text(`Logística: ${logNombre}`,20,y);doc.text(`Fecha: ${fecha}`,110,y);y+=6;
-        doc.text(`Turno: ${turnoSel}`,20,y);doc.text(`Operador: ${operador}`,110,y);y+=6;
+        doc.text(`Turno: ${Array.isArray(turnoSel)?turnoSel.join(" + "):turnoSel}`,20,y);doc.text(`Operador: ${operador}`,110,y);y+=6;
         doc.text(`Generado: ${new Date().toLocaleString("es-AR")}`,20,y);y+=8;
         // Resumen
         doc.setFillColor(240,244,255);doc.roundedRect(18,y,W-36,18,3,3,"F");
@@ -8783,7 +8822,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(100,100,100);
         const lineaFirma=firmanteNombre||"Firma y aclaración";
         doc.text(lineaFirma,60,y+9,{align:"center"});
-        doc.save(`salida_${logSel}_${turnoSel}_${fecha}.pdf`);
+        doc.save(`salida_${logSel}_${Array.isArray(turnoSel)?turnoSel.join("-"):turnoSel}_${fecha}.pdf`);
       }
       // Guardar firmante para autocompletar en próximas sesiones
       if(firmanteNombre)localStorage.setItem("salida_firmante_ultimo",firmanteNombre);
@@ -8823,7 +8862,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         <div style={{background:"#0f1420",border:"1px solid #1a1f2e",borderRadius:"18px",padding:"1.5rem",width:"100%",maxWidth:"480px",maxHeight:"90vh",overflowY:"auto"}}>
           {/* Header */}
           <div style={{fontWeight:900,fontSize:"1.1rem",marginBottom:"0.3rem"}}>Cerrar sesión de despacho</div>
-          <div style={{color:"#6b7280",fontSize:"0.8rem",marginBottom:"1.2rem"}}>{lci.nombreFormal||logSel}{lci.nombreFormal?` (${logSel})`:""} · Turno {turnoSel} · {fecha}</div>
+          <div style={{color:"#6b7280",fontSize:"0.8rem",marginBottom:"1.2rem"}}>{lci.nombreFormal||logSel}{lci.nombreFormal?` (${logSel})`:""} · Turno {Array.isArray(turnoSel)?turnoSel.join(" + "):turnoSel} · {fecha}</div>
           {/* Resumen — lote completo del día */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:"8px",marginBottom:"1.2rem"}}>
             {[
@@ -8921,7 +8960,10 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         <div style={{flex:1}}>
           <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
             <div style={{fontWeight:900,fontSize:"1.05rem",color:logColor}}>{logSel}</div>
-            {turnoSel&&<span style={{background:TURNO_C[turnoSel]?.bg||"#1a1f2e",color:TURNO_C[turnoSel]?.c||"#8b5cf6",padding:"2px 9px",borderRadius:"6px",fontWeight:700,fontSize:"0.7rem",border:"1px solid "+(TURNO_C[turnoSel]?.c||"#8b5cf6")}}>{turnoSel}</span>}
+            {Array.isArray(turnoSel)&&turnoSel.length>0
+              ? turnoSel.map(t=>{const tc=TURNO_C[t]||{c:"#8b5cf6",bg:"#1a1f2e"};return(<span key={t} style={{background:tc.bg,color:tc.c,padding:"2px 9px",borderRadius:"6px",fontWeight:700,fontSize:"0.7rem",border:`1px solid ${tc.c}`,marginRight:"4px"}}>{t}</span>);})
+              : turnoSel&&<span style={{background:TURNO_C[turnoSel]?.bg||"#1a1f2e",color:TURNO_C[turnoSel]?.c||"#8b5cf6",padding:"2px 9px",borderRadius:"6px",fontWeight:700,fontSize:"0.7rem",border:"1px solid "+(TURNO_C[turnoSel]?.c||"#8b5cf6")}}>{turnoSel}</span>
+            }
           </div>
           {lci.nombreFormal&&<div style={{color:muted,fontSize:"0.72rem"}}>{lci.nombreFormal}</div>}
         </div>
@@ -9020,6 +9062,28 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         </div>
       )}
 
+      {/* Alerta: pedidos preparados sin logística asignada */}
+      {(()=>{
+        const sinAsignarPrep=envios.filter(e=>{
+          const f=e.fecha||e.fechaVenta||"";
+          return f===fecha&&!e.trans&&e.preparado&&e.estado!=="cancelado";
+        });
+        if(!sinAsignarPrep.length)return null;
+        return(
+          <div style={{background:"#1c1000",border:"1px solid #92400e",borderRadius:"10px",padding:"0.75rem 1rem",display:"flex",alignItems:"flex-start",gap:"10px"}}>
+            <span style={{fontSize:"1.1rem",flexShrink:0}}>⚠️</span>
+            <div>
+              <div style={{color:"#fbbf24",fontWeight:700,fontSize:"0.82rem"}}>
+                {sinAsignarPrep.length} pedido{sinAsignarPrep.length!==1?"s":""} preparado{sinAsignarPrep.length!==1?"s":""} sin logística asignada
+              </div>
+              <div style={{color:"#d97706",fontSize:"0.72rem",marginTop:"2px"}}>
+                {sinAsignarPrep.map(e=>nroRef(e)||dirCorta(e.direccion)).join(", ")}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Resumen pedidos del día para esta logística */}
       {pedidosLog.length>0&&(
         <div style={{background:card,border:`1px solid ${brd}`,borderRadius:"14px",padding:"1.2rem"}}>
@@ -9064,7 +9128,10 @@ function TabSalida({envios,setEnvios,lc,sesion}){
                     <div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginTop:"1px"}}>
                       {(e.localidad||e.ciudad||e.partido)&&<span style={{color:muted,fontSize:"0.67rem"}}>{e.localidad||e.ciudad||e.partido}</span>}
                       {nroRef(e)&&<span style={{color:muted,fontSize:"0.67rem",fontFamily:"monospace"}}>{nroRef(e)}</span>}
-                      <span style={{color:muted,fontSize:"0.67rem"}}>📦 {e.bultos||1} blt</span>
+                      {e.preparado
+                        ?<span style={{color:muted,fontSize:"0.67rem"}}>📦 {e.bultos||1} blt</span>
+                        :<span style={{color:"#f59e0b",fontSize:"0.67rem",fontWeight:700}}>⚠ NO PREPARADO</span>
+                      }
                       {e.armadorNombre&&<span style={{color:"#a78bfa",fontSize:"0.67rem",fontWeight:600}}>👤 {e.armadorNombre}{e.armadoTs?" · "+fmtHora(e.armadoTs):""}</span>}
                     </div>
                   </div>
