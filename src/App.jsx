@@ -6790,49 +6790,30 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
             </div>
           )}
 
-          {/* ── FILA 1: Controlador + Armadores ── */}
-          <div style={{display:"flex",gap:"8px",marginBottom:"0.75rem",alignItems:"flex-start",flexWrap:"wrap"}}>
+          {/* ── BOX UNIFICADO: Registrar Armado ── */}
+          <div style={{...S.card,padding:"0",marginBottom:"0.75rem",border:"2px solid #6366f133",overflow:"hidden"}}>
 
-            {/* Controlador — siempre visible, requerido */}
-            {listaControladores.length>0&&(
-              <div style={{...S.card,padding:"0.75rem 1rem",border:"1px solid "+(controladorSel?"#10b98133":"#f59e0b55"),flexShrink:0,minWidth:"170px"}}>
-                <div style={{fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:"6px",display:"flex",alignItems:"center",gap:"5px",
-                  color:controladorSel?"#10b981":"#f59e0b"}}>
-                  🔍 Controlador
-                  {!controladorSel&&<span style={{background:"#7c2d12",color:"#fed7aa",fontSize:"0.55rem",fontWeight:700,padding:"1px 5px",borderRadius:"3px"}}>requerido</span>}
-                  {controladorSel&&<button onClick={()=>setControladorSel(null)} style={{marginLeft:"auto",background:"none",border:"none",color:"#6b7280",cursor:"pointer",fontSize:"0.68rem",fontWeight:700,lineHeight:1,padding:"0 2px"}}>✕</button>}
-                </div>
-                <div style={{display:"flex",gap:"5px",flexWrap:"wrap"}}>
-                  {listaControladores.map(ctrl=>(
-                    <button key={ctrl.id} onClick={()=>setControladorSel(c=>c?.id===ctrl.id?null:ctrl)}
-                      style={{padding:"6px 11px",borderRadius:"7px",fontWeight:700,fontSize:"0.78rem",cursor:"pointer",
-                        background:controladorSel?.id===ctrl.id?"#064e3b":"#12172a",
-                        border:"1px solid "+(controladorSel?.id===ctrl.id?"#10b981":"#252d40"),
-                        color:controladorSel?.id===ctrl.id?(ctrl.color||"#34d399"):"#9ca3af"}}>
-                      {ctrl.nombre}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Header */}
+            <div style={{padding:"0.55rem 1rem",background:"#12172a",borderBottom:"1px solid #1a1f2e",display:"flex",alignItems:"center",gap:"10px",flexWrap:"wrap"}}>
+              <span style={{fontWeight:800,fontSize:"0.72rem",color:"#a78bfa",textTransform:"uppercase",letterSpacing:".08em"}}>📦 Registrar Armado</span>
+              {armadorActivo&&(<>
+                <span style={{color:"#4b5563",fontSize:"0.65rem"}}>·</span>
+                <span style={{fontWeight:800,fontSize:"0.9rem",color:armadorActivo.color||"#10b981"}}>{armadorActivo.nombre}</span>
+                {sesionContador>0&&<span style={{background:"#041f14",color:"#10b981",border:"1px solid #065f46",padding:"1px 8px",borderRadius:"20px",fontSize:"0.7rem",fontWeight:700}}>{sesionContador} arm.</span>}
+                <button onClick={()=>{if(armadorTimerRef.current)clearTimeout(armadorTimerRef.current);setArmadorActivo(null);setSesionContador(0);if(inputRef.current)inputRef.current.focus();}}
+                  style={{marginLeft:"auto",padding:"3px 10px",borderRadius:"6px",background:"#1c0404",border:"1px solid #7f1d1d",color:"#f87171",cursor:"pointer",fontWeight:700,fontSize:"0.7rem"}}>
+                  Liberar
+                </button>
+              </>)}
+            </div>
 
-            {/* Armadores */}
+            {/* Sección armadores */}
             {armadores.length>0&&(
-              <div style={{...S.card,padding:"0.75rem 1rem",flex:1,border:"1px solid "+(armadorActivo?"#065f46":"#1a1f2e"),minWidth:"220px"}}>
+              <div style={{padding:"0.6rem 1rem",borderBottom:"1px solid #1a1f2e"}}>
                 {armadorActivo?(
-                  <div style={{display:"flex",alignItems:"center",gap:"10px",flexWrap:"wrap"}}>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:"0.6rem",color:"#10b981",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:"2px"}}>🔒 Armador activo</div>
-                      <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
-                        <span style={{fontWeight:900,fontSize:"1.1rem",color:armadorActivo.color||"#e5e7eb"}}>{armadorActivo.nombre}</span>
-                        {sesionContador>0&&<span style={{background:"#041f14",color:"#10b981",border:"1px solid #065f46",padding:"2px 10px",borderRadius:"20px",fontSize:"0.75rem",fontWeight:700}}>{sesionContador} pedido{sesionContador!==1?"s":""}</span>}
-                      </div>
-                    </div>
-                    <button onClick={()=>{if(armadorTimerRef.current)clearTimeout(armadorTimerRef.current);setArmadorActivo(null);setSesionContador(0);if(inputRef.current)inputRef.current.focus();}}
-                      style={{padding:"8px 16px",borderRadius:"8px",background:"#1c0404",border:"1px solid #7f1d1d",color:"#f87171",cursor:"pointer",fontWeight:700,fontSize:"0.8rem",flexShrink:0}}>
-                      Liberar
-                    </button>
-                    <div style={{width:"100%",display:"flex",gap:"6px",flexWrap:"wrap",marginTop:"6px"}}>
+                  <div>
+                    <div style={{fontSize:"0.58rem",color:"#4b5563",textTransform:"uppercase",fontWeight:700,marginBottom:"5px"}}>Cambiar armador:</div>
+                    <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
                       {armadores.filter(a=>a.id!==armadorActivo.id).map(arm=>(
                         <button key={arm.id} onClick={()=>{setArmadorActivo(arm);setSesionContador(0);resetArmadorTimer();if(inputRef.current)inputRef.current.focus();}}
                           style={{padding:"5px 12px",borderRadius:"8px",background:"#12172a",border:"1px solid #252d40",color:arm.color||"#9ca3af",cursor:"pointer",fontSize:"0.78rem",fontWeight:600}}>
@@ -6842,10 +6823,8 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
                     </div>
                   </div>
                 ):(
-                  <>
-                    <div style={{fontSize:"0.6rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:"8px"}}>
-                      ¿Quién va a escanear? — tocá tu nombre para activarte
-                    </div>
+                  <div>
+                    <div style={{fontSize:"0.58rem",color:"#6b7280",textTransform:"uppercase",fontWeight:700,marginBottom:"6px"}}>¿Quién va a escanear? — tocá tu nombre</div>
                     <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
                       {armadores.map((arm,i)=>(
                         <button key={arm.id}
@@ -6858,58 +6837,74 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
                         </button>
                       ))}
                     </div>
-                  </>
+                  </div>
                 )}
               </div>
             )}
-          </div>
 
-          {/* ── FILA 2: Scan ── */}
-          <div style={{...S.card,padding:"0.85rem 1rem",marginBottom:"0.75rem",border:"1px solid #6366f133"}}>
-            <div style={{color:"#a78bfa",fontWeight:700,fontSize:"0.7rem",textTransform:"uppercase",letterSpacing:".06em",marginBottom:"8px"}}>
-              Escanear pedido
-              {armadorActivo
-                ?<span style={{color:armadorActivo.color||"#10b981",fontWeight:700,marginLeft:"8px",textTransform:"none"}}>· modo automático: {armadorActivo.nombre}</span>
-                :ultimoArmador&&<span style={{color:"#4b5563",fontWeight:400,marginLeft:"8px",textTransform:"none"}}>· último: <span style={{color:ultimoArmador.color||"#a78bfa",fontWeight:600}}>{ultimoArmador.nombre}</span></span>
-              }
-            </div>
-            <div style={{display:"flex",gap:"8px",marginBottom:(camara||resultado||!controladorSel)?"8px":"0"}}>
-              <input ref={inputRef} value={qrInput} onChange={e=>setQrInput(e.target.value)}
-                onKeyDown={e=>{if(e.key==="Enter"&&controladorSel){procesarScan(qrInput);setQrInput("");}}}
-                placeholder="Escaneá el código de barras o ingresá el nro..."
-                style={{...S.input,flex:1,fontSize:"0.88rem",padding:"10px 12px"}} autoComplete="off"/>
-              <button onClick={()=>{if(controladorSel){procesarScan(qrInput);setQrInput("");}}}
-                disabled={!controladorSel}
-                style={{...S.btn(true),background:controladorSel?"#12172a":"#0a0e1a",border:"1px solid "+(controladorSel?"#6366f1":"#252d40"),color:controladorSel?"#a78bfa":"#374151",padding:"8px 14px",fontWeight:700,fontSize:"0.8rem",cursor:controladorSel?"pointer":"not-allowed"}}>OK</button>
-              {soportaCamera&&(
-                <button onClick={()=>controladorSel&&setCamara(p=>!p)}
-                  title="Escanear con cámara"
-                  style={{...S.btn(camara),background:camara?"#0d1c04":"#0f1420",border:"1px solid "+(camara?"#84cc16":"#252d40"),color:camara?"#84cc16":(controladorSel?"#6b7280":"#374151"),padding:"8px 12px",fontSize:"1.1rem",cursor:controladorSel?"pointer":"not-allowed"}}>📷</button>
+            {/* Sección controlador */}
+            {listaControladores.length>0&&(
+              <div style={{padding:"0.5rem 1rem",borderBottom:"1px solid #1a1f2e",display:"flex",alignItems:"center",gap:"6px",flexWrap:"wrap"}}>
+                <span style={{fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",letterSpacing:".04em",color:controladorSel?"#10b981":"#f59e0b",whiteSpace:"nowrap"}}>
+                  🔍 Ctrl:
+                </span>
+                {!controladorSel&&<span style={{background:"#7c2d12",color:"#fed7aa",fontSize:"0.55rem",fontWeight:700,padding:"1px 5px",borderRadius:"3px"}}>requerido</span>}
+                {listaControladores.map(ctrl=>(
+                  <button key={ctrl.id} onClick={()=>setControladorSel(c=>c?.id===ctrl.id?null:ctrl)}
+                    style={{padding:"4px 10px",borderRadius:"6px",fontWeight:700,fontSize:"0.75rem",cursor:"pointer",
+                      background:controladorSel?.id===ctrl.id?"#064e3b":"#12172a",
+                      border:"1px solid "+(controladorSel?.id===ctrl.id?"#10b981":"#252d40"),
+                      color:controladorSel?.id===ctrl.id?(ctrl.color||"#34d399"):"#9ca3af"}}>
+                    {ctrl.nombre}
+                  </button>
+                ))}
+                {controladorSel&&<>
+                  <span style={{color:"#10b981",fontSize:"0.65rem",fontWeight:700}}>✓ {controladorSel.nombre}</span>
+                  <button onClick={()=>setControladorSel(null)} style={{background:"none",border:"none",color:"#6b7280",cursor:"pointer",fontSize:"0.68rem",fontWeight:700,padding:"0 2px",lineHeight:1}}>✕</button>
+                </>}
+              </div>
+            )}
+
+            {/* Scan input */}
+            <div style={{padding:"0.75rem 1rem"}}>
+              <div style={{display:"flex",gap:"8px",marginBottom:(camara||resultado||!controladorSel)?"8px":"0"}}>
+                <input ref={inputRef} value={qrInput} onChange={e=>setQrInput(e.target.value)}
+                  onKeyDown={e=>{if(e.key==="Enter"&&controladorSel){procesarScan(qrInput);setQrInput("");}}}
+                  placeholder={armadorActivo?"Escaneá el código de barras...":"Escaneá el código de barras o ingresá el nro..."}
+                  style={{...S.input,flex:1,fontSize:"0.88rem",padding:"10px 12px"}} autoComplete="off"/>
+                <button onClick={()=>{if(controladorSel){procesarScan(qrInput);setQrInput("");}}}
+                  disabled={!controladorSel}
+                  style={{...S.btn(true),background:controladorSel?"#12172a":"#0a0e1a",border:"1px solid "+(controladorSel?"#6366f1":"#252d40"),color:controladorSel?"#a78bfa":"#374151",padding:"8px 14px",fontWeight:700,fontSize:"0.8rem",cursor:controladorSel?"pointer":"not-allowed"}}>OK</button>
+                {soportaCamera&&(
+                  <button onClick={()=>controladorSel&&setCamara(p=>!p)}
+                    title="Escanear con cámara"
+                    style={{...S.btn(camara),background:camara?"#0d1c04":"#0f1420",border:"1px solid "+(camara?"#84cc16":"#252d40"),color:camara?"#84cc16":(controladorSel?"#6b7280":"#374151"),padding:"8px 12px",fontSize:"1.1rem",cursor:controladorSel?"pointer":"not-allowed"}}>📷</button>
+                )}
+              </div>
+              {!controladorSel&&(
+                <div style={{fontSize:"0.72rem",color:"#f97316",marginBottom:"4px",display:"flex",alignItems:"center",gap:"4px"}}>
+                  ⚠ Seleccioná un controlador para habilitar el escaneo
+                </div>
+              )}
+              {camara&&(
+                <div style={{marginBottom:"8px",borderRadius:"10px",overflow:"hidden",background:"#000",position:"relative"}}>
+                  <video ref={videoRef} style={{width:"100%",maxHeight:"220px",objectFit:"cover",display:"block"}} playsInline muted/>
+                  <div style={{position:"absolute",inset:0,border:"2px solid #84cc16",borderRadius:"10px",pointerEvents:"none"}}/>
+                  <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"150px",height:"150px",border:"2px solid #84cc16",borderRadius:"8px",boxShadow:"0 0 0 9999px rgba(0,0,0,0.45)"}}/>
+                  <button onClick={()=>setCamara(false)} style={{position:"absolute",top:"8px",right:"8px",background:"rgba(0,0,0,0.75)",border:"1px solid #84cc16",color:"#84cc16",borderRadius:"6px",padding:"4px 10px",fontSize:"0.75rem",cursor:"pointer"}}>Cerrar</button>
+                </div>
+              )}
+              {resultado&&(
+                <div onClick={()=>resultado.ok!==true&&setResultado(null)} style={{padding:"8px 12px",borderRadius:"8px",cursor:resultado.ok===true?"default":"pointer",
+                  background:resultado.ok===true?"#041f14":resultado.ok==="ya"?"#12172a":"#1c0404",
+                  border:"1px solid "+(resultado.ok===true?"#065f46":resultado.ok==="ya"?"#252d40":"#7f1d1d"),
+                  color:resultado.ok===true?"#34d399":resultado.ok==="ya"?"#6b7280":"#f87171",
+                  fontSize:"0.82rem",fontWeight:700,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"8px"}}>
+                  <div>{resultado.msg}{resultado.envio&&<div style={{fontWeight:400,color:"#9ca3af",marginTop:"2px",fontSize:"0.75rem"}}>{resultado.envio.direccion}{resultado.envio.trans&&<span style={{color:lc[resultado.envio.trans]?.color||"#6b7280",fontWeight:700}}> · {resultado.envio.trans}</span>}{resultado.bultos>1&&<span style={{color:"#f59e0b",fontWeight:700}}> · {resultado.bultos} bultos</span>}</div>}</div>
+                  {resultado.ok!==true&&<span style={{opacity:0.5,fontSize:"0.75rem",flexShrink:0}}>✕</span>}
+                </div>
               )}
             </div>
-            {!controladorSel&&(
-              <div style={{fontSize:"0.72rem",color:"#f97316",marginBottom:"4px",display:"flex",alignItems:"center",gap:"4px"}}>
-                ⚠ Seleccioná un controlador arriba para habilitar el escaneo
-              </div>
-            )}
-            {camara&&(
-              <div style={{marginBottom:"8px",borderRadius:"10px",overflow:"hidden",background:"#000",position:"relative"}}>
-                <video ref={videoRef} style={{width:"100%",maxHeight:"220px",objectFit:"cover",display:"block"}} playsInline muted/>
-                <div style={{position:"absolute",inset:0,border:"2px solid #84cc16",borderRadius:"10px",pointerEvents:"none"}}/>
-                <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"150px",height:"150px",border:"2px solid #84cc16",borderRadius:"8px",boxShadow:"0 0 0 9999px rgba(0,0,0,0.45)"}}/>
-                <button onClick={()=>setCamara(false)} style={{position:"absolute",top:"8px",right:"8px",background:"rgba(0,0,0,0.75)",border:"1px solid #84cc16",color:"#84cc16",borderRadius:"6px",padding:"4px 10px",fontSize:"0.75rem",cursor:"pointer"}}>Cerrar</button>
-              </div>
-            )}
-            {resultado&&(
-              <div onClick={()=>resultado.ok!==true&&setResultado(null)} style={{padding:"8px 12px",borderRadius:"8px",cursor:resultado.ok===true?"default":"pointer",
-                background:resultado.ok===true?"#041f14":resultado.ok==="ya"?"#12172a":"#1c0404",
-                border:"1px solid "+(resultado.ok===true?"#065f46":resultado.ok==="ya"?"#252d40":"#7f1d1d"),
-                color:resultado.ok===true?"#34d399":resultado.ok==="ya"?"#6b7280":"#f87171",
-                fontSize:"0.82rem",fontWeight:700,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"8px"}}>
-                <div>{resultado.msg}{resultado.envio&&<div style={{fontWeight:400,color:"#9ca3af",marginTop:"2px",fontSize:"0.75rem"}}>{resultado.envio.direccion}{resultado.envio.trans&&<span style={{color:lc[resultado.envio.trans]?.color||"#6b7280",fontWeight:700}}> · {resultado.envio.trans}</span>}{resultado.bultos>1&&<span style={{color:"#f59e0b",fontWeight:700}}> · {resultado.bultos} bultos</span>}</div>}</div>
-                {resultado.ok!==true&&<span style={{opacity:0.5,fontSize:"0.75rem",flexShrink:0}}>✕</span>}
-              </div>
-            )}
           </div>
 
           {/* Filtros */}
@@ -6934,9 +6929,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
             <button onClick={()=>setFilTurno("TODOS")} style={S.btnSm(filTurno==="TODOS")}>Todos</button>
             {TURNOS.map(t=><button key={t} onClick={()=>setFilTurno(t)} style={S.btnSm(filTurno===t,TURNO_C[t]?.c||"#8b5cf6")}>{t}</button>)}
             <button onClick={()=>setFilTurno("SIN_TURNO")} style={{...S.btnSm(filTurno==="SIN_TURNO"),color:filTurno==="SIN_TURNO"?"#f59e0b":"#6b7280"}}>Sin turno</button>
-          </div>
-          <div style={{marginBottom:"0.6rem"}}>
-            <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="🔍 Buscar..." style={{...S.input,width:"100%"}}/>
+            <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="🔍 Buscar..." style={{...S.input,marginLeft:"auto",width:"160px",fontSize:"0.78rem",padding:"4px 10px"}}/>
           </div>
 
           {/* Lista */}
@@ -6954,6 +6947,8 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
                 <div style={{display:"grid",gap:"6px"}}>
                   {items.map(e=>{
                     const esTN=e.origen==="Tienda Nube";
+                    const esFlex=e.origen==="ML";
+                    const esManual=!esTN&&!esFlex;
                     return(
                       <div key={e.id} style={{...S.card,overflow:"hidden",opacity:e.preparado?0.6:1,borderColor:e.preparado?"#065f46":"#252d40"}}>
                         <div style={{padding:"10px 14px",display:"flex",alignItems:"flex-start",gap:"10px"}}>
@@ -6961,9 +6956,23 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
                             {e.preparado&&<span style={{color:"#10b981",fontSize:"15px",lineHeight:1}}>✓</span>}
                           </div>
                           <div style={{flex:1,minWidth:0}}>
-                            <div style={{display:"flex",gap:"4px",flexWrap:"wrap",marginBottom:"3px"}}>
-                              {esTN&&<span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.8rem"}}>#{e.nroOrdenTN}</span>}
-                              {e.origen==="ML"&&e.nroSeguimiento&&<span style={{color:"#84cc16",fontFamily:"monospace",fontSize:"0.7rem"}}>{e.nroSeguimiento.slice(-10)}</span>}
+                            <div style={{display:"flex",gap:"4px",flexWrap:"wrap",marginBottom:"3px",alignItems:"center"}}>
+                              {/* Badge de tipo + referencia completa */}
+                              {esFlex&&<>
+                                <span style={{background:"#0d1c04",color:"#84cc16",border:"1px solid #2d5a0e",padding:"1px 5px",borderRadius:"4px",fontSize:"0.6rem",fontWeight:700,flexShrink:0}}>FLEX</span>
+                                {(e.nroPackId||e.nroVenta)&&<span style={{color:"#84cc16",fontFamily:"monospace",fontSize:"0.7rem",fontWeight:600}}>{e.nroPackId||e.nroVenta}</span>}
+                                {(e.nroPackId||e.nroVenta)&&e.nroSeguimiento&&<span style={{color:"#374151",fontSize:"0.65rem"}}>·</span>}
+                                {e.nroSeguimiento&&<span style={{color:"#84cc16",fontFamily:"monospace",fontSize:"0.7rem"}}>{e.nroSeguimiento}</span>}
+                              </>}
+                              {esTN&&<>
+                                <span style={{background:"#0d1c2e",color:"#38bdf8",border:"1px solid #1e4060",padding:"1px 5px",borderRadius:"4px",fontSize:"0.6rem",fontWeight:700,flexShrink:0}}>TN</span>
+                                {e.nroOrdenTN&&<span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.8rem"}}>#{e.nroOrdenTN}</span>}
+                                {e.clienteNombre&&<span style={{color:"#9ca3af",fontSize:"0.72rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"110px"}}>{e.clienteNombre}</span>}
+                              </>}
+                              {esManual&&<>
+                                <span style={{background:"#1a0e2e",color:"#a78bfa",border:"1px solid #4b1d8e",padding:"1px 5px",borderRadius:"4px",fontSize:"0.6rem",fontWeight:700,flexShrink:0}}>MANUAL</span>
+                                <span style={{color:"#6b7280",fontFamily:"monospace",fontSize:"0.68rem"}}>...{e.id.slice(-6)}</span>
+                              </>}
                               {e.turno&&<Bdg label={e.turno} bg={TURNO_C[e.turno]?.bg||"#130d2a"} t={TURNO_C[e.turno]?.c||"#a78bfa"}/>}
                               {e.preparado&&<Bdg label={"✓ "+(e.bultos||1)+"b"+(e.armadorNombre?" · "+e.armadorNombre:"")} bg="#041f14" t="#10b981"/>}
                               {e.cobranza&&<Bdg label={"$"+Number(e.cobranza).toLocaleString("es-AR")} bg="#1c1500" t="#fbbf24"/>}
