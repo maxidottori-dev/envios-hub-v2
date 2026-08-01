@@ -223,8 +223,14 @@ const parsearEtiquetasColectaPDF=async(file)=>{
     let nroSeguimiento="";
     if(idxDesp>=0){
       const winDesp=txt.slice(idxDesp,idxDesp+200);
-      const mBarra=winDesp.match(/(\d{4,6})\D+(\d{4,6})/);
-      nroSeguimiento=mBarra?(mBarra[1]+mBarra[2]):"";
+      // Formato nuevo: número completo (8-15 dígitos) en línea propia
+      const mSingle=winDesp.match(/\n(\d{8,15})\n/);
+      if(mSingle){nroSeguimiento=mSingle[1];}
+      else{
+        // Fallback formato viejo: dos chunks de 4-6 dígitos separados (partido por bold en PDF)
+        const mBarra=winDesp.match(/(\d{4,6})\D+(\d{4,6})/);
+        nroSeguimiento=mBarra?(mBarra[1]+mBarra[2]):"";
+      }
     } else {
       // Formato B: buscar número del código de barras después de "Etiqueta válida para envíos"
       const winValida=txt.slice(idxValida,idxValida+150);
