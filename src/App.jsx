@@ -52,7 +52,6 @@ const FEATURES=[
   {key:"tab_tarifas",     grupo:"tabs",    label:"Tarifas / Log.",    desc:"Configurar logísticas activas, zonas de reparto y tarifas por zona y bultos"},
   {key:"tab_informe",     grupo:"tabs",    label:"Informe",           desc:"Informes y estadísticas de envíos por período, logística y zona"},
   {key:"tab_cobranzaslog",grupo:"tabs",    label:"Cobranzas Log.",    desc:"Gestionar cobranzas de envíos y ver pagos de logísticas a clientes"},
-  {key:"tab_liquidacionlog",grupo:"tabs",  label:"Liquidación Log.",  desc:"Registrar y controlar los pagos que se le realizan a cada logística"},
   {key:"tab_ctasctes",    grupo:"tabs",    label:"Ctas. Ctes.",       desc:"Estado de cuenta corriente por cliente: saldo pendiente, deuda y pagos"},
   {key:"tab_localidades", grupo:"tabs",    label:"Localidades",       desc:"Administrar localidades y partidos: agregar CPs y reglas de mapeo"},
   {key:"tab_expedicion",  grupo:"tabs",    label:"Expedición",        desc:"Vista de expedición para preparar bultos y controlar salidas"},
@@ -2891,285 +2890,6 @@ function TabMapa({ envios, lc }) {
         <div style={{ textAlign: "center", padding: "3rem", color: "#4b5563" }}>
           <div style={{ fontSize: "2rem" }}>🗺️</div>
           <p style={{ marginTop: "0.5rem" }}>Carga un Excel primero</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════
-// TAB LIQUIDACION LOG — envíos confirmados y pagos a logísticas
-// ════════════════════════════════════════════════════════════════════
-function TabLiquidacionLog({envios,setEnvios,zc,lc,esAdmin=false,sesion=null}){
-  const hoy=fechaHoy();
-  const [filTrans,setFilTrans]=useState("TODOS");
-  const [filVista,setFilVista]=useState("pendiente");
-  const [filDesde,setFilDesde]=useState("");
-  const [filHasta,setFilHasta]=useState("");
-  const [modalPago,setModalPago]=useState(null);
-  const [pago,setPago]=useState({monto:"",fecha:hoy,notas:""});
-  const [guardandoPago,setGuardandoPago]=useState(false);
-  const [confirmEliminarPago,setConfirmEliminarPago]=useState(null);
-  const [historial,setHistorial]=useState([]);
-  const [vista,setVista]=useState("envios"); // "envios" | "historial"
-  const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
-  const tmap=buildTarifaMap(zc);
-  const getImp=e=>calcImp(e,tmap,lc,zc);
-  const fmt=n=>"$"+Math.round(n||0).toLocaleString("es-AR");
-  const fmtF=f=>f?f.split("-").reverse().join("/"):"";
-
-  useEffect(()=>{
-    const unsub=onSnapshot(collection(db,"pagosLogistica"),snap=>{
-      setHistorial(snap.docs.map(d=>({id:d.id,...d.data()}))
-        .sort((a,b)=>(b.creadoEn?.seconds||0)-(a.creadoEn?.seconds||0)));
-    });
-    return()=>unsub();
-  },[]);
-
-  // Excluir cancelados y envíos marcados como incumplidos (no_abonado / cancelado_liq)
-  // — esos no se le pagan a la logística
-  const envRelevantes=envios.filter(e=>
-    e.trans&&
-    e.estado!=="cancelado"&&
-    e.estadoLiq!=="cancelado_liq"&&
-    e.estadoLiq!=="no_abonado"
-  );
-
-  const cardsPorLog=logActivas.map(l=>{
-    const pend=envRelevantes.filter(e=>e.trans===l&&e.estadoPago!=="abonado");
-    const abon=envRelevantes.filter(e=>e.trans===l&&e.estadoPago==="abonado");
-    const saldo=pend.reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
-    const pagado=abon.reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
-    return{l,saldo,pagado,pendCount:pend.length,abonCount:abon.length};
-  }).filter(x=>x.pendCount>0||x.abonCount>0);
-
-  const envFil=envRelevantes.filter(e=>{
-    if(filTrans!=="TODOS"&&e.trans!==filTrans)return false;
-    if(filVista==="pendiente"&&e.estadoPago==="abonado")return false;
-    if(filVista==="abonado"&&e.estadoPago!=="abonado")return false;
-    const f=e.fecha||e.fechaVenta||"";
-    if(filDesde&&f<filDesde)return false;
-    if(filHasta&&f>filHasta)return false;
-    return true;
-  }).sort((a,b)=>{
-    const la=a.trans||"",lb=b.trans||"";
-    if(la!==lb)return la.localeCompare(lb);
-    return(a.fecha||"").localeCompare(b.fecha||"");
-  });
-
-  const porLog={};
-  envFil.forEach(e=>{if(!porLog[e.trans])porLog[e.trans]=[];porLog[e.trans].push(e);});
-
-  const abrirModalPago=(logistica,enviosAPagar)=>{
-    const total=enviosAPagar.reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
-    setModalPago({logistica,envios:enviosAPagar,total});
-    setPago({monto:Math.round(total).toString(),fecha:hoy,notas:""});
-  };
-
-  const registrarPago=async()=>{
-    if(!modalPago||guardandoPago)return;
-    setGuardandoPago(true);
-    const monto=parseFloat((pago.monto||"").toString().replace(",","."))||0;
-    const ids=modalPago.envios.map(e=>e.id);
-    setEnvios(prev=>prev.map(e=>ids.includes(e.id)?{...e,estadoPago:"abonado",estadoPagoFecha:hoy}:e));
-    const auditPL=mkAudit(sesion);
-    await addDoc(collection(db,"pagosLogistica"),{
-      logistica:modalPago.logistica,
-      enviosIds:ids,
-      cantEnvios:ids.length,
-      montoSistema:modalPago.total,
-      montoPagado:monto,
-      fecha:pago.fecha,
-      notas:pago.notas,
-      creadoEn:serverTimestamp(),
-      ...(auditPL?{abonoPor:auditPL}:{}),
-    });
-    setGuardandoPago(false);
-    setModalPago(null);
-  };
-
-  const eliminarPago=async(h)=>{
-    if(guardandoPago)return;
-    setGuardandoPago(true);
-    try{
-      // Revertir estadoPago en Firestore (batch, máx 400 por batch)
-      if(h.enviosIds?.length){
-        const CHUNK=400;
-        for(let i=0;i<h.enviosIds.length;i+=CHUNK){
-          const batch=writeBatch(db);
-          h.enviosIds.slice(i,i+CHUNK).forEach(id=>{
-            batch.update(doc(db,"envios",id),{estadoPago:null,estadoPagoFecha:null});
-          });
-          await batch.commit();
-        }
-        setEnvios(prev=>prev.map(e=>h.enviosIds.includes(e.id)?{...e,estadoPago:null,estadoPagoFecha:null}:e));
-      }
-      await deleteDoc(doc(db,"pagosLogistica",h.id));
-      setConfirmEliminarPago(null);
-    }catch(err){
-      console.error("Error eliminando pago:",err);
-      setConfirmEliminarPago(null); // cierra el confirm aunque falle
-    }finally{
-      setGuardandoPago(false);
-    }
-  };
-
-  const totalSaldoPendiente=envRelevantes.filter(e=>e.estadoPago!=="abonado").reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
-
-  return(
-    <div>
-      {/* Resumen global */}
-      {totalSaldoPendiente>0&&(
-        <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.8rem",background:"#1c1400",border:"1px solid #78350f",display:"flex",alignItems:"center",gap:"1rem",flexWrap:"wrap"}}>
-          <span style={{color:"#f59e0b",fontWeight:700,fontSize:"0.85rem"}}>Saldo pendiente de pago a logísticas</span>
-          <span style={{color:"#fbbf24",fontWeight:800,fontSize:"1.2rem"}}>{fmt(totalSaldoPendiente)}</span>
-        </div>
-      )}
-
-      {/* Cards por logística */}
-      {cardsPorLog.length>0&&(
-        <div style={{display:"flex",gap:"0.6rem",flexWrap:"wrap",marginBottom:"0.8rem"}}>
-          {cardsPorLog.map(c=>(
-            <div key={c.l} onClick={()=>setFilTrans(filTrans===c.l?"TODOS":c.l)}
-              style={{...S.card,padding:"0.65rem 1rem",cursor:"pointer",border:filTrans===c.l?"1px solid "+(lc[c.l]?.color||"#6366f1"):"1px solid #1e2535",minWidth:"160px",flex:"1 1 160px"}}>
-              <Bdg label={c.l} bg={lc[c.l]?.bg||"#1e293b"} t={lc[c.l]?.color||"#94a3b8"} style={{fontSize:"0.7rem",marginBottom:"6px",display:"inline-block"}}/>
-              <div style={{color:"#f59e0b",fontWeight:700,fontSize:"1.1rem"}}>{fmt(c.saldo)}</div>
-              <div style={{color:"#4b5563",fontSize:"0.68rem"}}>{c.pendCount} pendiente{c.pendCount!==1?"s":""} de pago</div>
-              {c.abonCount>0&&<div style={{color:"#10b981",fontSize:"0.68rem",marginTop:"2px"}}>✓ {c.abonCount} abonado{c.abonCount!==1?"s":""}</div>}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Barra principal de vistas */}
-      <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"4px",flexWrap:"wrap",alignItems:"center"}}>
-        <button onClick={()=>setVista("envios")} style={S.btn(vista==="envios","#6366f1")}>Envíos</button>
-        <button onClick={()=>setVista("historial")} style={S.btn(vista==="historial","#10b981")}>Historial pagos</button>
-        {vista==="envios"&&<>
-          <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
-          {["TODOS",...logActivas].map(t=>(
-            <button key={t} onClick={()=>setFilTrans(t)} style={S.btnSm(filTrans===t,lc[t]?.color||"#6366f1")}>{t}</button>
-          ))}
-          <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
-          {[{k:"pendiente",l:"Pendientes"},{k:"abonado",l:"Abonados"},{k:"todos",l:"Todos"}].map(x=>(
-            <button key={x.k} onClick={()=>setFilVista(x.k)} style={S.btnSm(filVista===x.k,x.k==="pendiente"?"#f59e0b":x.k==="abonado"?"#10b981":"#6b7280")}>{x.l}</button>
-          ))}
-          <span style={{color:"#374151",fontSize:"0.6rem"}}>|</span>
-          <input type="date" value={filDesde} onChange={ev=>setFilDesde(ev.target.value)} style={{...S.input,padding:"3px 6px",width:"128px",fontSize:"0.72rem"}}/>
-          <input type="date" value={filHasta} onChange={ev=>setFilHasta(ev.target.value)} style={{...S.input,padding:"3px 6px",width:"128px",fontSize:"0.72rem"}}/>
-          {(filDesde||filHasta)&&<button onClick={()=>{setFilDesde("");setFilHasta("");}} style={{...S.btnSm(false),fontSize:"0.68rem",color:"#6b7280"}}>✕</button>}
-        </>}
-      </div>
-
-      {/* Historial de pagos */}
-      {vista==="historial"&&(
-        <div style={{display:"flex",flexDirection:"column",gap:"0.5rem"}}>
-          {historial.length===0?(
-            <div style={{...S.card,padding:"2rem",textAlign:"center",color:"#4b5563"}}>Sin pagos registrados aún</div>
-          ):historial.filter(h=>filTrans==="TODOS"||h.logistica===filTrans).map(h=>(
-            <div key={h.id} style={{...S.card,padding:"0.75rem 1rem",display:"flex",gap:"1rem",alignItems:"center",flexWrap:"wrap",border:confirmEliminarPago===h.id?"1px solid #7f1d1d":"1px solid #1e2535"}}>
-              <Bdg label={h.logistica} bg={lc[h.logistica]?.bg||"#1e293b"} t={lc[h.logistica]?.color||"#94a3b8"} style={{fontSize:"0.7rem",flexShrink:0}}/>
-              <span style={{color:"#6b7280",fontSize:"0.75rem",flexShrink:0}}>{fmtF(h.fecha)}</span>
-              <span style={{color:"#6b7280",fontSize:"0.72rem",flexShrink:0}}>{h.cantEnvios} envíos</span>
-              {h.montoSistema!==h.montoPagado&&<span style={{color:"#4b5563",fontSize:"0.7rem"}}>Sistema: {fmt(h.montoSistema)}</span>}
-              <div style={{flex:1}}/>
-              {h.notas&&<span style={{color:"#4b5563",fontSize:"0.7rem",fontStyle:"italic"}}>{h.notas}</span>}
-              {h.abonoPor&&<span style={{color:"#374151",fontSize:"0.65rem"}}>por {h.abonoPor.nombre}</span>}
-              <span style={{color:"#10b981",fontWeight:700,fontSize:"1rem",flexShrink:0}}>{fmt(h.montoPagado)}</span>
-              {confirmEliminarPago===h.id?(
-                <div style={{display:"flex",gap:"6px",alignItems:"center",flexShrink:0}}>
-                  <span style={{color:"#f87171",fontSize:"0.72rem"}}>¿Eliminar y revertir envíos a pendiente?</span>
-                  <button onClick={()=>eliminarPago(h)} style={{...S.btnSm(false),color:"#f87171",borderColor:"#7f1d1d",fontSize:"0.72rem"}}>Sí</button>
-                  <button onClick={()=>setConfirmEliminarPago(null)} style={{...S.btnSm(false),fontSize:"0.72rem"}}>No</button>
-                </div>
-              ):(
-                <button onClick={()=>setConfirmEliminarPago(h.id)} style={{...S.btnSm(false),color:"#f87171",borderColor:"#7f1d1d",padding:"2px 8px",fontSize:"0.7rem",flexShrink:0}}>Eliminar</button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Envíos agrupados por logística */}
-      {vista==="envios"&&(
-        Object.keys(porLog).length===0?(
-          <div style={{...S.card,padding:"2rem",textAlign:"center",color:"#4b5563"}}>
-            {envRelevantes.length===0?"Sin envíos asignados a logísticas aún.":filVista==="pendiente"?"No hay envíos pendientes de pago en este filtro":"Sin envíos en este filtro"}
-          </div>
-        ):(
-          <div style={{display:"flex",flexDirection:"column",gap:"0.75rem"}}>
-              {Object.entries(porLog).map(([log,envLog])=>{
-              const totalLog=envLog.reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
-              const pendLog=envLog.filter(e=>e.estadoPago!=="abonado");
-              const totalPend=pendLog.reduce((s,e)=>s+(e.importeOverride||getImp(e)||0),0);
-              return(
-                <div key={log} style={{...S.card,padding:"0",overflow:"hidden",border:"1px solid #1e2535"}}>
-                  <div style={{padding:"0.65rem 1rem",background:"#12172a",borderBottom:"1px solid #252d40",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
-                    <Bdg label={log} bg={lc[log]?.bg||"#1e293b"} t={lc[log]?.color||"#94a3b8"} style={{fontSize:"0.75rem"}}/>
-                    <span style={{color:"#9ca3af",fontSize:"0.78rem"}}>{envLog.length} envío{envLog.length!==1?"s":""}</span>
-                    <div style={{flex:1}}/>
-                    {pendLog.length>0&&<span style={{color:"#f59e0b",fontWeight:700}}>{fmt(totalPend)} pendiente</span>}
-                    <span style={{color:"#10b981",fontWeight:700,fontSize:"0.95rem"}}>{fmt(totalLog)}</span>
-                    {pendLog.length>0&&puedeVer(sesion,"accion_abonar")&&(
-                      <button onClick={()=>abrirModalPago(log,pendLog)} style={{...S.btn(false,"#10b981"),padding:"0.3rem 0.8rem",fontSize:"0.75rem"}}>💳 Pagar {pendLog.length===envLog.length?"todos":pendLog.length}</button>
-                    )}
-                  </div>
-                  <div>
-                    {envLog.map(e=>{
-                      const imp=e.importeOverride||getImp(e)||0;
-                      const abonado=e.estadoPago==="abonado";
-                      return(
-                        <div key={e.id} style={{display:"flex",alignItems:"center",gap:"0.6rem",padding:"7px 1rem",borderBottom:"1px solid #1a1f2e"}}>
-                          <span style={{color:"#10b981",fontSize:"0.75rem",flexShrink:0,width:"16px"}}>{abonado?"✓":""}</span>
-                          <span style={{color:"#6b7280",fontSize:"0.72rem",flexShrink:0,minWidth:"50px"}}>{fmtF(e.fecha||e.fechaVenta)}</span>
-                          <span style={{color:"#e5e7eb",fontSize:"0.8rem",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.direccion}{e.partido?` · ${e.partido}`:""}</span>
-                          {e.nroOrdenTN&&<span style={{color:"#4b5563",fontSize:"0.7rem",flexShrink:0}}>#{e.nroOrdenTN}</span>}
-                          {e.origen==="ML"&&<span style={{color:"#84cc16",fontSize:"0.65rem",flexShrink:0,padding:"1px 5px",border:"1px solid #84cc16",borderRadius:"3px"}}>FLEX</span>}
-                          {e.importeOverride&&<span style={{color:"#fbbf24",fontSize:"0.68rem",flexShrink:0}}>*</span>}
-                          <span style={{color:abonado?"#4b5563":"#10b981",fontWeight:600,fontSize:"0.82rem",flexShrink:0,textDecoration:abonado?"line-through":"none"}}>{fmt(imp)}</span>
-                          {!abonado&&puedeVer(sesion,"accion_abonar")&&<button onClick={()=>abrirModalPago(log,[e])} style={{...S.btnSm(false),padding:"1px 7px",fontSize:"0.68rem",color:"#10b981",borderColor:"#065f46",flexShrink:0}}>Pagar</button>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )
-      )}
-
-      {/* Modal pago */}
-      {modalPago&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:"1rem"}}>
-          <div style={{background:"#12172a",border:"1px solid #1e2535",borderRadius:"14px",padding:"1.5rem",width:"100%",maxWidth:"440px"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
-              <span style={{color:"#e5e7eb",fontWeight:700,fontSize:"1rem"}}>Registrar pago — {modalPago.logistica}</span>
-              <button onClick={()=>setModalPago(null)} style={{background:"none",border:"none",color:"#6b7280",cursor:"pointer",fontSize:"1.2rem"}}>✕</button>
-            </div>
-            <div style={{color:"#6b7280",fontSize:"0.72rem",marginBottom:"1rem"}}>{modalPago.envios.length} envío{modalPago.envios.length!==1?"s":""} · Sistema: {fmt(modalPago.total)}</div>
-            <div style={{marginBottom:"0.75rem"}}>
-              <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Monto a pagar</div>
-              <input type="number" autoFocus value={pago.monto} onChange={ev=>setPago(p=>({...p,monto:ev.target.value}))} style={{...S.input,width:"100%",padding:"6px 10px",fontSize:"0.9rem"}}/>
-              {pago.monto&&Math.abs(parseFloat(pago.monto)-modalPago.total)>1&&(
-                <div style={{marginTop:"4px",fontSize:"0.72rem",color:parseFloat(pago.monto)>modalPago.total?"#f87171":"#34d399",fontWeight:600}}>
-                  Diferencia: {parseFloat(pago.monto)>modalPago.total?"+":""}{fmt(parseFloat(pago.monto)-modalPago.total)}
-                </div>
-              )}
-            </div>
-            <div style={{marginBottom:"0.75rem"}}>
-              <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Fecha</div>
-              <input type="date" value={pago.fecha} onChange={ev=>setPago(p=>({...p,fecha:ev.target.value}))} style={{...S.input,width:"100%",padding:"6px 10px"}}/>
-            </div>
-            <div style={{marginBottom:"1rem"}}>
-              <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Notas</div>
-              <textarea value={pago.notas} onChange={ev=>setPago(p=>({...p,notas:ev.target.value}))} placeholder="Ajustes, descuentos..." style={{...S.input,display:"block",width:"100%",height:"52px",resize:"vertical",fontSize:"0.8rem"}}/>
-            </div>
-            <div style={{display:"flex",gap:"8px",justifyContent:"flex-end"}}>
-              <button onClick={()=>setModalPago(null)} style={S.btnSm(false)}>Cancelar</button>
-              <button onClick={registrarPago} disabled={!pago.monto||!pago.fecha||guardandoPago} style={{...S.btn(false,"#10b981"),opacity:(!pago.monto||!pago.fecha||guardandoPago)?0.4:1}}>{guardandoPago?"Guardando...":"💳 Confirmar pago"}</button>
-            </div>
-          </div>
         </div>
       )}
     </div>
@@ -9508,7 +9228,7 @@ export default function App(){
     tablero:"tab_tablero",envios:"tab_noflex",flex:"tab_flex",
     imprimir:"tab_despacho",manual:"tab_manual",tarifas:"tab_tarifas",
     informe:"tab_informe",liquidacion:"tab_cobranzaslog",
-    liquidacionlog:"tab_liquidacionlog",ctasctes:"tab_ctasctes",
+    ctasctes:"tab_ctasctes",
     localidades:"tab_localidades",expedicion:"tab_expedicion",statsarmado:"tab_statsarmado",consultaarmado:"tab_consultaarmado",salida:"tab_salida",usuarios:"tab_usuarios",
   };
   const TABS=[
@@ -9520,7 +9240,6 @@ export default function App(){
     {id:"tarifas",l:"Tarifas / Log."},
     {id:"informe",l:"Informe"},
     {id:"liquidacion",l:"Cobranzas Log."},
-    {id:"liquidacionlog",l:"Liquidacion Log."},
     {id:"ctasctes",l:"Ctas. Ctes."},
     {id:"clientes",l:"Clientes"},
     {id:"localidades",l:"Localidades"},
@@ -9762,7 +9481,6 @@ export default function App(){
         {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZcPersist} lc={lc} setLc={setLcPersist}/>}
         {tab==="informe"     &&<TabInforme     envios={envios} zc={zc} lc={lc}/>}
         {tab==="liquidacion"    &&<TabLiquidacion    envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>}
-        {tab==="liquidacionlog" &&<TabLiquidacionLog envios={envios} setEnvios={setEnvios} zc={zc} lc={lc} esAdmin={esAdmin} sesion={sesion}/>}
         {tab==="ctasctes"       &&<TabCtasCtes       envios={envios} lc={lc} sesion={sesion} pagosInicial={pagosCC} facturaClientes={facturaClientes} setFacturaCliente={setFacturaCliente}/>}
         {tab==="clientes"       &&<TabClientes       envios={envios} lc={lc} pagosCC={pagosCC} facturaClientes={facturaClientes} setFacturaCliente={setFacturaCliente} sesion={sesion}/>}
         {tab==="localidades" &&<TabLocalidades cpExtra={cpExtra} setCpExtra={setCpExtra}/>}
