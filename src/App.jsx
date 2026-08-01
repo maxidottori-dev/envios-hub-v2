@@ -7836,7 +7836,8 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   // que puede perderse si el browser cierra antes de que React persista el estado.
   const sesionSet=new Set(sesionIds);
   const despachados=sesionIds.map(id=>enviosMap.get(id)).filter(Boolean);
-  const lotePend=pedidosLog.filter(e=>!sesionSet.has(e.id));
+  // Excluir los ya despachados en Firestore (de sesiones anteriores) a menos que estén en la sesión actual
+  const lotePend=pedidosLog.filter(e=>!sesionSet.has(e.id)&&!e.despachado);
   const pct=totalLog>0?Math.round(despachados.length/totalLog*100):0;
 
   // ── Procesar scan ─────────────────────────────────────────────────
@@ -9057,7 +9058,6 @@ export default function App(){
   const [error,setError]=useState("");
   const [loading,setLoading]=useState(false);
   const [syncLoading,setSyncLoading]=useState(true);
-  const [verHistorico,setVerHistorico]=useState(false);
   const [fileName,setFileName]=useState("");
   const [fechaImport,setFechaImport]=useState(fechaHoy());
   const [pagosCC,setPagosCC]=useState([]);
@@ -9105,11 +9105,9 @@ export default function App(){
   };
 
   useEffect(()=>{
-    prevEnviosRef.current=null; // reset al cambiar modo para no disparar alertas falsas
+    prevEnviosRef.current=null; // reset para no disparar alertas falsas al montar
     setSyncLoading(true);
-    const cutoff=(()=>{if(verHistorico)return null;const d=new Date();d.setDate(d.getDate()-90);return d.toISOString().slice(0,10);})();
-    const q=cutoff?query(collection(db,"envios"),where("fecha",">=",cutoff)):collection(db,"envios");
-    const unsub=onSnapshot(q,(snap)=>{
+    const unsub=onSnapshot(collection(db,"envios"),(snap)=>{
       const docs=snap.docs.map(d=>({...d.data(),id:d.id}));
       docs.sort((a,b)=>(b.fechaVenta||b.fecha||"").localeCompare(a.fechaVenta||a.fecha||""));
 
@@ -9137,7 +9135,7 @@ export default function App(){
       setEnviosLocal(docs);setSyncLoading(false);
     },(err)=>{console.error(err);setSyncLoading(false);});
     return()=>unsub();
-  },[verHistorico]);
+  },[]);
 
   const [pendingSaves,setPendingSaves]=useState(0);
 
@@ -9489,15 +9487,7 @@ export default function App(){
           <span style={{color:"#4b5563",fontSize:"0.7rem",borderLeft:"1px solid #1a1f2e",paddingLeft:"0.5rem"}}>{sesion?.usuario}</span>
           <button onClick={()=>{clearSession();setSesion(null);}} style={{...S.btnSm(false),color:"#f87171",fontSize:"0.7rem"}}>Salir</button>
         </div>
-        {/* Banner rango de datos */}
-        <div style={{width:"100%",display:"flex",alignItems:"center",gap:"8px",paddingTop:"5px",borderTop:"1px solid #1a1f2e",marginTop:"2px"}}>
-          <span style={{fontSize:"0.63rem",color:"#4b5563"}}>📅 {verHistorico?"Historial completo cargado":"Últimos 90 días"}</span>
-          <button onClick={()=>setVerHistorico(v=>!v)} style={{fontSize:"0.62rem",padding:"2px 9px",borderRadius:"4px",background:"none",border:"1px solid #374151",color:verHistorico?"#f59e0b":"#6b7280",cursor:"pointer",fontWeight:600}}>
-            {verHistorico?"← Volver a 90 días":"Ver historial completo"}
-          </button>
-          {verHistorico&&<span style={{fontSize:"0.62rem",color:"#f59e0b",fontWeight:600}}>⚠ Carga más lenta</span>}
-          {syncLoading&&<span style={{fontSize:"0.62rem",color:"#6366f1"}}>cargando...</span>}
-        </div>
+        {syncLoading&&<div style={{width:"100%",paddingTop:"3px"}}><span style={{fontSize:"0.62rem",color:"#6366f1"}}>cargando...</span></div>}
       </div>
       <ScrollTop/>
       <div style={{padding:"0.85rem 1rem",maxWidth:"1400px",margin:"0 auto"}}>
