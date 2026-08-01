@@ -6960,8 +6960,12 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
                               {/* Badge de tipo + referencia completa */}
                               {esFlex&&<>
                                 <span style={{background:"#0d1c04",color:"#84cc16",border:"1px solid #2d5a0e",padding:"1px 5px",borderRadius:"4px",fontSize:"0.6rem",fontWeight:700,flexShrink:0}}>FLEX</span>
-                                {(e.nroPackId||e.nroVenta)&&<span style={{color:"#84cc16",fontFamily:"monospace",fontSize:"0.7rem",fontWeight:600}}>{e.nroPackId||e.nroVenta}</span>}
-                                {(e.nroPackId||e.nroVenta)&&e.nroSeguimiento&&<span style={{color:"#374151",fontSize:"0.65rem"}}>·</span>}
+                                {/* PackID del PDF de colecta si existe, sino el id de venta (# de venta ML) si difiere del seguimiento */}
+                                {(e.nroPackId||e.nroVenta)
+                                  ?<span style={{color:"#84cc16",fontFamily:"monospace",fontSize:"0.7rem",fontWeight:600}}>{e.nroPackId||e.nroVenta}</span>
+                                  :(e.id&&e.id!==e.nroSeguimiento)&&<span style={{color:"#84cc16",fontFamily:"monospace",fontSize:"0.7rem",fontWeight:600}}>{e.id}</span>
+                                }
+                                {(e.nroPackId||e.nroVenta||(e.id&&e.id!==e.nroSeguimiento))&&e.nroSeguimiento&&<span style={{color:"#374151",fontSize:"0.65rem"}}>·</span>}
                                 {e.nroSeguimiento&&<span style={{color:"#84cc16",fontFamily:"monospace",fontSize:"0.7rem"}}>{e.nroSeguimiento}</span>}
                               </>}
                               {esTN&&<>
@@ -7037,14 +7041,18 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
                             <span style={{color:"#a78bfa",fontSize:"13px",lineHeight:1}}>{esArmada?"✓":"📋"}</span>
                           </div>
                           <div style={{flex:1,minWidth:0}}>
-                            <div style={{display:"flex",gap:"4px",flexWrap:"wrap",marginBottom:"3px"}}>
+                            <div style={{display:"flex",gap:"4px",flexWrap:"wrap",marginBottom:"3px",alignItems:"center"}}>
+                              <span style={{background:"#1e1433",color:"#a78bfa",border:"1px solid #4c1d95",padding:"1px 5px",borderRadius:"4px",fontSize:"0.6rem",fontWeight:700,flexShrink:0}}>COLECTA</span>
+                              {(c.nroPackId||c.nroVenta)&&<span style={{color:"#a78bfa",fontFamily:"monospace",fontSize:"0.7rem",fontWeight:600}}>{c.nroPackId||c.nroVenta}</span>}
+                              {(c.nroPackId||c.nroVenta)&&c.nroSeguimiento&&<span style={{color:"#374151",fontSize:"0.65rem"}}>·</span>}
+                              {c.nroSeguimiento&&<span style={{color:"#c4b5fd",fontFamily:"monospace",fontSize:"0.7rem"}}>{c.nroSeguimiento}</span>}
                               {c.fecha&&c.fecha!==fecha&&<Bdg label={fmtCorta(c.fecha)} bg="#1a1f2e" t="#f59e0b"/>}
                               {esArmada&&<Bdg label={"✓ armada"+(c.armadorNombre?" · "+c.armadorNombre:"")} bg="#1e1433" t="#a78bfa"/>}
                             </div>
                             <div style={{color:"#e5e7eb",fontSize:"0.85rem",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.destinatario||c.direccion||"—"}</div>
                             <div style={{color:"#6b7280",fontSize:"0.72rem",marginTop:"1px",display:"flex",gap:"8px",flexWrap:"wrap"}}>
-                              <span style={{fontFamily:"monospace"}}>{c.nroSeguimiento}</span>
                               {c.usuario&&<span style={{color:"#a78bfa",fontFamily:"sans-serif"}}>@{c.usuario}</span>}
+                              {c.partido&&<span>{c.partido}</span>}
                             </div>
                           </div>
                           <button
