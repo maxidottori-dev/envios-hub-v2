@@ -4488,13 +4488,15 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{}}){
               {logActivas.map(l=><option key={l} value={l}>{l}</option>)}
             </select>
           </div>}
-          {form.rol==="armador"&&<div>
-            <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Armador vinculado</div>
+          {(form.rol==="armador"||form.rol==="colaborador")&&<div>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>
+              Armador vinculado{form.rol==="colaborador"&&<span style={{fontWeight:400,marginLeft:"4px"}}>(opcional)</span>}
+            </div>
             <select value={form.armadorId} onChange={e=>setForm(p=>({...p,armadorId:e.target.value}))} style={{...S.input,width:"100%"}}>
-              <option value="">Elegir...</option>
+              <option value="">{form.rol==="armador"?"Elegir...":"Ninguno"}</option>
               {armadoresConfig.map(a=><option key={a.id} value={a.id}>{a.nombre}</option>)}
             </select>
-            {armadoresConfig.length===0&&<div style={{color:"#f59e0b",fontSize:"0.7rem",marginTop:"4px"}}>No hay armadores configurados todavía — agregá uno en la sección Expedición más abajo.</div>}
+            {form.rol==="armador"&&armadoresConfig.length===0&&<div style={{color:"#f59e0b",fontSize:"0.7rem",marginTop:"4px"}}>No hay armadores configurados todavía — agregá uno en la sección Expedición más abajo.</div>}
           </div>}
         </div>
         <div style={{display:"flex",gap:"0.5rem"}}>
@@ -4519,7 +4521,7 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{}}){
                     <span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.88rem"}}>{u.usuario}</span>
                     <span style={{padding:"1px 8px",background:rc.color+"22",color:rc.color,borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>{rc.label}</span>
                     {u.rol==="logistica"&&u.logistica&&<span style={{padding:"1px 8px",background:lc[u.logistica]?.bg||"#1a1f2e",color:lc[u.logistica]?.color||"#6b7280",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>{u.logistica}</span>}
-                    {u.rol==="armador"&&<span style={{padding:"1px 8px",background:"#0c2a30",color:armadoresConfig.find(a=>a.id===u.armadorId)?.color||"#06b6d4",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>{armadoresConfig.find(a=>a.id===u.armadorId)?.nombre||"⚠ armador no encontrado"}</span>}
+                    {(u.rol==="armador"||u.armadorId)&&u.armadorId&&<span style={{padding:"1px 8px",background:"#0c2a30",color:armadoresConfig.find(a=>a.id===u.armadorId)?.color||"#06b6d4",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>{u.rol==="colaborador"?"📦 ":""}{armadoresConfig.find(a=>a.id===u.armadorId)?.nombre||"⚠ armador no encontrado"}</span>}
                     {u.rol==="armador"&&u.puedeSalida&&<span style={{padding:"1px 8px",background:"#1a0f2e",color:"#a78bfa",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>🚚 + Salida</span>}
                     {u.esChofer&&<span style={{padding:"1px 8px",background:"#1c1500",color:"#f59e0b",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>🛵 Chofer</span>}
                     {!u.activo&&<span style={{padding:"1px 8px",background:"#1c0a0a",color:"#f87171",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700}}>Inactivo</span>}
@@ -5926,6 +5928,13 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
   const [modoEdicion,setModoEdicion]=useState(false);          // true cuando se edita un pedido ya preparado
   const [armadorActivo,setArmadorActivo]=useState(null);       // armador "bloqueado" para escaneo rápido
   const [sesionContador,setSesionContador]=useState(0);        // pedidos confirmados en la sesión activa
+  // Auto-seleccionar armador si el usuario tiene armadorId (colaborador o expedicion con armador propio)
+  const autoSelArmRef=useRef(false);
+  useEffect(()=>{
+    if(autoSelArmRef.current||!sesion?.armadorId||!armadores.length)return;
+    const arm=armadores.find(a=>a.id===sesion.armadorId);
+    if(arm){setArmadorActivo(arm);autoSelArmRef.current=true;}
+  },[sesion?.armadorId,armadores]);
   const [filLog,setFilLog]=useState("TODOS");
   const [soloPendientes,setSoloPendientes]=useState(true);
   const [filTipo,setFilTipo]=useState("TODOS");
