@@ -4315,7 +4315,7 @@ function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc,sesion=null}){
 // ════════════════════════════════════════════════════════════════════
 // TAB USUARIOS — solo admin
 // ════════════════════════════════════════════════════════════════════
-function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{}}){
+function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{},esAdmin=false}){
   const [usuarios,setUsuarios]=useState([]);
   const [loading,setLoading]=useState(true);
   const [form,setForm]=useState({usuario:"",password:"",rol:"colaborador",logistica:"",armadorId:"",esChofer:false,activo:true});
