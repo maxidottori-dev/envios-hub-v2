@@ -67,7 +67,6 @@ const FEATURES=[
   {key:"accion_verimportes",  grupo:"acciones", label:"Ver importes",       desc:"Ver el importe calculado de cada envío en la lista"},
   {key:"accion_exportar",     grupo:"acciones", label:"Exportar Excel",     desc:"Exportar la lista filtrada de envíos o informes a un archivo Excel descargable"},
   {key:"accion_imprimir",     grupo:"acciones", label:"Imprimir etiquetas", desc:"Imprimir etiquetas de envíos individuales con código QR y datos de entrega"},
-  {key:"accion_abonar",       grupo:"acciones", label:"Abonar logística",   desc:"Registrar el pago de una liquidación completa o parcial a la logística"},
   {key:"accion_autorizarcc",  grupo:"acciones", label:"Autorizar Cta. Corriente", desc:"Autorizar que un pedido de Tienda Nube con pago pendiente de acreditación pase a Cuenta Corriente, para poder asignarlo a una logística sin esperar el pago"},
   {key:"accion_verhistorialdespacho", grupo:"acciones", label:"Ver historial de despacho", desc:"Ver el registro histórico de envíos despachados, agrupado por fecha y logística"},
 ];
@@ -4382,6 +4381,12 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{}}){
     await setDoc(doc(db,"usuarios",u.id),{puedeSalida:nuevo},{merge:true});
   };
 
+  const eliminarUsuario=async(u)=>{
+    if(!window.confirm(`¿Eliminar a "${u.usuario}" permanentemente? Esta acción no se puede deshacer.`))return;
+    await deleteDoc(doc(db,"usuarios",u.id));
+    mostrarToast("Usuario eliminado");
+  };
+
   const ROL_C={admin:{label:"Admin",color:"#6366f1"},colaborador:{label:"Colaborador",color:"#10b981"},logistica:{label:"Logistica",color:"#8b5cf6"},expedicion:{label:"Expedicion",color:"#f59e0b"},armador:{label:"Armador",color:"#06b6d4"}};
 
   // Componente inline para el panel de permisos de un colaborador
@@ -4543,6 +4548,7 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{}}){
                   )}
                   <button onClick={()=>editar(u)} style={{...S.btnSm(false),color:"#6366f1"}}>Editar</button>
                   <button onClick={()=>toggleActivo(u)} style={S.btnSm(u.activo,u.activo?"#ef4444":"#10b981")}>{u.activo?"Desactivar":"Activar"}</button>
+                  {esAdmin&&<button onClick={()=>eliminarUsuario(u)} style={{...S.btnSm(false),color:"#f87171",borderColor:"#7f1d1d",fontSize:"0.7rem"}}>🗑</button>}
                 </div>
               </div>
               {/* Panel de permisos — solo colaboradores */}
@@ -9503,7 +9509,7 @@ export default function App(){
         {tab==="ctasctes"       &&<TabCtasCtes       envios={envios} lc={lc} sesion={sesion} pagosInicial={pagosCC} facturaClientes={facturaClientes} setFacturaCliente={setFacturaCliente}/>}
         {tab==="clientes"       &&<TabClientes       envios={envios} lc={lc} pagosCC={pagosCC} facturaClientes={facturaClientes} setFacturaCliente={setFacturaCliente} sesion={sesion}/>}
         {tab==="localidades" &&<TabLocalidades cpExtra={cpExtra} setCpExtra={setCpExtra}/>}
-        {tab==="usuarios"   &&<TabUsuarios lc={lc} setLc={setLcPersist} configExpedicion={configExpedicion} setConfigExpedicion={setConfigExpedicion}/>}
+        {tab==="usuarios"   &&<TabUsuarios lc={lc} setLc={setLcPersist} configExpedicion={configExpedicion} setConfigExpedicion={setConfigExpedicion} esAdmin={esAdmin}/>}
         {tab==="expedicion" &&<VistaExpedicion envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} configExpedicion={configExpedicion} esAdmin={esAdmin}/>}
         {tab==="statsarmado"   &&<TabStatsArmado configExpedicion={configExpedicion} setConfigExpedicion={setConfigExpedicion} esAdmin={esAdmin}/>}
         {tab==="consultaarmado"&&<TabConsultaArmado esAdmin={esAdmin}/>}
