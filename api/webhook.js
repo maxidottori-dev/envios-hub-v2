@@ -1,5 +1,5 @@
 import { initDb } from "./_firebase.js";
-import { ordenAEnvio, parsearDatepicker, getPagoEstadoInicial } from "./_tn.js";
+import { ordenAEnvio, ordenAOtroPedido, parsearDatepicker, getPagoEstadoInicial } from "./_tn.js";
 
 const TN_TOKEN   = process.env.TN_ACCESS_TOKEN;
 const TN_STOREID = process.env.TN_STORE_ID;
@@ -22,15 +22,15 @@ export default async function handler(req, res) {
 
   console.log("WEBHOOK_IN", JSON.stringify({ topic: topicFinal, orderId: order.id, shipping: order.shipping_option || "" }));
 
-  // TN manda el webhook con body reducido — buscar orden completa si shipping_option esta vacio
-  if (!order.shipping_option) {
+  // TN manda el webhook con body reducido — buscar orden completa si faltan datos clave
+  if (!order.shipping_option || !order.fulfillments) {
     try {
       const resp = await fetch(`https://api.tiendanube.com/v1/${TN_STOREID}/orders/${order.id}`, {
         headers: { "Authentication": `bearer ${TN_TOKEN}`, "User-Agent": "EnviosHub (maxidottori@gmail.com)" }
       });
       if (resp.ok) {
         order = await resp.json();
-        console.log("WEBHOOK_FETCHED", JSON.stringify({ orderId: order.id, shipping: order.shipping_option || "" }));
+        console.log("WEBHOOK_FETCHED", JSON.stringify({ orderId: order.id, shipping: order.shipping_option || "", fulfillStatus: order.fulfillments?.[0]?.status || "" }));
       } else {
         console.log("WEBHOOK_FETCH_FAIL", resp.status);
       }
@@ -40,97 +40,158 @@ export default async function handler(req, res) {
   }
 
   const metodo = (order.shipping_option || order.shipping?.name || "").toUpperCase();
-  if (!metodo.includes("LOGISTICA UMP")) {
-    console.log("WEBHOOK SKIP - not LOGISTICA UMP", metodo.slice(0, 80));
-    return res.status(200).json({ ok: true, skipped: "not LOGISTICA UMP", metodo });
-  }
+  const esUMP  = metodo.includes("LOGISTICA UMP");
 
   let db;
   try { db = initDb(); } catch(e) { return res.status(500).json({ error: "Firebase init failed", detail: e.message }); }
 
-  const docRef = db.collection("envios").doc(String(order.id));
-  const existing = await docRef.get();
+  // ── LOGISTICA UMP → colección "envios" ────────────────────────────────────
+  if (esUMP) {
+    const docRef  = db.collection("envios").doc(String(order.id));
+    const existing = await docRef.get();
+
+    if (topicFinal === "order/created") {
+      if (existing.exists) return res.status(200).json({ ok: true, skipped: "already exists" });
+      const envio = ordenAEnvio(order);
+      await docRef.set(envio);
+      console.log("WEBHOOK CREATED", order.id);
+      return res.status(200).json({ ok: true, action: "created", id: envio.id });
+    }
+
+    if (topicFinal === "order/updated") {
+      const notasOrden   = order.owner_note || "";
+      const notasCliente = order.note || "";
+      const { fecha, turno, datepickerRaw } = parsearDatepicker(notasOrden);
+
+      if (!existing.exists) {
+        const envio = ordenAEnvio(order);
+        await docRef.set(envio);
+        console.log("WEBHOOK CREATED_ON_UPDATE", order.id);
+        return res.status(200).json({ ok: true, action: "created_on_update", id: envio.id });
+      }
+
+      const data = existing.data();
+
+      if (data.trans) {
+        console.log("WEBHOOK SKIP_SET - already assigned", order.id, "trans:", data.trans);
+      }
+      if (data.estado === "cancelado") return res.status(200).json({ ok: true, skipped: "cancelled" });
+
+      if (order.status === "cancelled") {
+        await docRef.update({ estado: "cancelado" });
+        console.log("WEBHOOK CANCELLED", order.id);
+        return res.status(200).json({ ok: true, action: "cancelled", id: String(order.id) });
+      }
+
+      const update = { notasOrden, notasCliente };
+
+      if (datepickerRaw) {
+        update.datepickerRaw = datepickerRaw;
+        if (!data.fecha) update.fecha = fecha;
+        if (!data.turno) update.turno = turno;
+      }
+
+      if (!data.trans) {
+        const ship = order.shipping_address || {};
+        const calleNum  = [ship.address, ship.number].filter(Boolean).join(" ");
+        const pisoDepto = ship.floor ? "Piso/Dto " + ship.floor : "";
+        const newDir    = [calleNum, pisoDepto].filter(Boolean).join(", ");
+        const newCp     = String(ship.zipcode || order.billing_zipcode || "").replace(/\D/g, "");
+        const newCiudad    = ship.city     || order.billing_city     || "";
+        const newLocalidad = ship.locality || order.billing_locality || "";
+        if (newDir) {
+          update.direccion = newDir    || data.direccion;
+          update.cp        = newCp     || data.cp;
+          update.ciudad    = newCiudad    || data.ciudad;
+          update.localidad = newLocalidad || data.localidad;
+          console.log("WEBHOOK DIR_UPDATED", order.id, newDir);
+        }
+      }
+
+      if (order.payment_status === "paid") {
+        update.pagoEstado = "pagado";
+      } else if (data.pagoEstado !== "cuenta_corriente") {
+        update.pagoEstado = getPagoEstadoInicial(order);
+      }
+
+      if (order.payment_status === "paid" && !data.cobranzaRecibida) {
+        update.cobranza = null;
+        console.log("WEBHOOK COBRANZA_CLEARED", order.id, "payment_status=paid, cobranzaRecibida=false");
+      }
+
+      await docRef.update(update);
+      console.log("WEBHOOK UPDATED", order.id);
+      return res.status(200).json({ ok: true, action: "updated", id: String(order.id) });
+    }
+
+    return res.status(200).json({ ok: true, skipped: "unhandled topic", topic: topicFinal });
+  }
+
+  // ── NO UMP → colección "otrosPedidos" ────────────────────────────────────
+  const otroRef     = db.collection("otrosPedidos").doc(String(order.id));
+  const otroExisting = await otroRef.get();
+  const fulfillStatus = order.fulfillments?.[0]?.status || "";
+
+  console.log("WEBHOOK OTRO", JSON.stringify({ orderId: order.id, metodo: metodo.slice(0, 60), fulfillStatus, topic: topicFinal }));
 
   if (topicFinal === "order/created") {
-    if (existing.exists) return res.status(200).json({ ok: true, skipped: "already exists" });
-    const envio = ordenAEnvio(order);
-    await docRef.set(envio);
-    console.log("WEBHOOK CREATED", order.id);
-    return res.status(200).json({ ok: true, action: "created", id: envio.id });
+    if (otroExisting.exists) return res.status(200).json({ ok: true, skipped: "otro already exists" });
+    const otro = ordenAOtroPedido(order);
+    await otroRef.set(otro);
+    console.log("WEBHOOK OTRO CREATED", order.id, otro.tipoOtro);
+    return res.status(200).json({ ok: true, action: "otro_created", tipoOtro: otro.tipoOtro });
   }
 
   if (topicFinal === "order/updated") {
-    const notasOrden   = order.owner_note || "";
-    const notasCliente = order.note || "";
-    const { fecha, turno, datepickerRaw } = parsearDatepicker(notasOrden);
-
-    if (!existing.exists) {
-      const envio = ordenAEnvio(order);
-      await docRef.set(envio);
-      console.log("WEBHOOK CREATED_ON_UPDATE", order.id);
-      return res.status(200).json({ ok: true, action: "created_on_update", id: envio.id });
+    if (!otroExisting.exists) {
+      // Llegó un updated antes que el created — crear el documento
+      const otro = ordenAOtroPedido(order);
+      // Si ya viene empaquetado, arrancar en por_preparar
+      if (["ready_for_pickup", "packed"].includes(fulfillStatus)) otro.estado = "por_preparar";
+      await otroRef.set(otro);
+      console.log("WEBHOOK OTRO CREATED_ON_UPDATE", order.id, otro.tipoOtro);
+      return res.status(200).json({ ok: true, action: "otro_created_on_update", tipoOtro: otro.tipoOtro });
     }
 
-    const data = existing.data();
+    const otroData = otroExisting.data();
 
-    // PROTECCION: si ya tiene trans asignado, nunca sobreescribir con set()
-    // Esto evita que un webhook mal clasificado borre la asignacion
-    if (data.trans) {
-      console.log("WEBHOOK SKIP_SET - already assigned", order.id, "trans:", data.trans);
+    // Estados terminales: no tocar
+    if (["cancelado", "despachado", "convertido_a_ump"].includes(otroData.estado)) {
+      return res.status(200).json({ ok: true, skipped: "otro terminal state", estado: otroData.estado });
     }
-    if (data.estado === "cancelado") return res.status(200).json({ ok: true, skipped: "cancelled" });
 
-    // Si TN cancela la orden → marcar como cancelado en Firestore
+    // TN cancela
     if (order.status === "cancelled") {
-      await docRef.update({ estado: "cancelado" });
-      console.log("WEBHOOK CANCELLED", order.id);
-      return res.status(200).json({ ok: true, action: "cancelled", id: String(order.id) });
+      await otroRef.update({ estado: "cancelado" });
+      console.log("WEBHOOK OTRO CANCELLED", order.id);
+      return res.status(200).json({ ok: true, action: "otro_cancelled" });
     }
 
-    const update = { notasOrden, notasCliente };
-
-    // Actualizar fecha/turno si viene del datepicker y no estaban asignados
-    if (datepickerRaw) {
-      update.datepickerRaw = datepickerRaw;
-      if (!data.fecha) update.fecha = fecha;
-      if (!data.turno) update.turno = turno;
+    // TN archiva → operación cerrada
+    if (order.status === "closed") {
+      await otroRef.update({ estado: "despachado", despachadoTs: new Date().toISOString() });
+      console.log("WEBHOOK OTRO CLOSED→DESPACHADO", order.id);
+      return res.status(200).json({ ok: true, action: "otro_despachado_closed" });
     }
 
-    // Actualizar dirección si el envío todavía no fue asignado a ninguna logística
-    if (!data.trans) {
-      const ship = order.shipping_address || {};
-      const calleNum = [ship.address, ship.number].filter(Boolean).join(" ");
-      const pisoDepto = ship.floor ? "Piso/Dto " + ship.floor : "";
-      const newDir = [calleNum, pisoDepto].filter(Boolean).join(", ");
-      const newCp = String(ship.zipcode || order.billing_zipcode || "").replace(/\D/g, "");
-      const newCiudad = ship.city || order.billing_city || "";
-      const newLocalidad = ship.locality || order.billing_locality || "";
-      if (newDir) {
-        update.direccion = newDir || data.direccion;
-        update.cp = newCp || data.cp;
-        update.ciudad = newCiudad || data.ciudad;
-        update.localidad = newLocalidad || data.localidad;
-        console.log("WEBHOOK DIR_UPDATED", order.id, newDir);
-      }
+    const update = { notasOrden: order.owner_note || "", notasCliente: order.note || "" };
+
+    // Empaquetado en TN → por_preparar (solo si todavía está pendiente)
+    if (["ready_for_pickup", "packed"].includes(fulfillStatus) && otroData.estado === "pendiente") {
+      update.estado = "por_preparar";
+      console.log("WEBHOOK OTRO POR_PREPARAR", order.id, fulfillStatus);
     }
 
-    // Actualizar pagoEstado
-    // Si TN confirma el pago, actualizar siempre (incluso en pedidos CC)
+    // Pago actualizado desde TN
     if (order.payment_status === "paid") {
       update.pagoEstado = "pagado";
-    } else if (data.pagoEstado !== "cuenta_corriente") {
+    } else if (otroData.pagoEstado !== "cuenta_corriente") {
       update.pagoEstado = getPagoEstadoInicial(order);
     }
 
-    // Si TN marca como pagado y la cobranza no fue recibida aún → limpiar cobranza
-    if (order.payment_status === "paid" && !data.cobranzaRecibida) {
-      update.cobranza = null;
-      console.log("WEBHOOK COBRANZA_CLEARED", order.id, "payment_status=paid, cobranzaRecibida=false");
-    }
-
-    await docRef.update(update);
-    console.log("WEBHOOK UPDATED", order.id);
-    return res.status(200).json({ ok: true, action: "updated", id: String(order.id) });
+    await otroRef.update(update);
+    console.log("WEBHOOK OTRO UPDATED", order.id);
+    return res.status(200).json({ ok: true, action: "otro_updated" });
   }
 
   return res.status(200).json({ ok: true, skipped: "unhandled topic", topic: topicFinal });

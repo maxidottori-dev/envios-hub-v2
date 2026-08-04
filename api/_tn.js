@@ -50,6 +50,68 @@ export function getPagoEstadoInicial(order) {
   return "pendiente";
 }
 
+// Clasifica un pedido no-UMP en tipoOtro + carrier
+export function clasificarOtro(shipping_option) {
+  const s = (shipping_option || "").toUpperCase();
+  if (s.includes("UMPAPEL DISTRIBUIDORA") || s.includes("RETIRADO EN PUNTO DE VENTA")) {
+    return { tipoOtro: "retiro_deposito", carrier: null };
+  }
+  if (s.includes("A CONVENIR") || s.includes("CONVENIR")) {
+    return { tipoOtro: "a_convenir", carrier: null };
+  }
+  // courier — detectar transportista
+  let carrier = "Otro";
+  if      (s.includes("OCA"))                                              carrier = "OCA";
+  else if (s.includes("ANDREANI"))                                          carrier = "Andreani";
+  else if (s.includes("RÁPIDA") || s.includes("RAPIDA") || s.includes("EPICK") || s.includes("E-PICK")) carrier = "E-pick";
+  else if (s.includes("CORREO"))                                            carrier = "Correo Arg.";
+  return { tipoOtro: "courier", carrier };
+}
+
+// Mapea una orden de TN → documento para la colección otrosPedidos
+export function ordenAOtroPedido(order) {
+  const ship = order.shipping_address || {};
+  const cp   = String(ship.zipcode || order.billing_zipcode || "").replace(/\D/g, "");
+  const calleNum  = [ship.address, ship.number].filter(Boolean).join(" ");
+  const pisoDepto = ship.floor ? "Piso/Dto " + ship.floor : "";
+  const dir       = [calleNum, pisoDepto].filter(Boolean).join(", ");
+  const ciudad    = ship.city     || order.billing_city     || "";
+  const localidad = ship.locality || order.billing_locality || "";
+  const partido   = cpAPartido(cp) || localidad || ciudad;
+  const alertaSinDireccion = !dir || !cp;
+  const { tipoOtro, carrier } = clasificarOtro(order.shipping_option);
+
+  return {
+    id:             String(order.id),
+    origen:         "Tienda Nube",
+    idTN:           order.id,
+    nroOrdenTN:     String(order.number || order.id),
+    linkTN:         `https://umpapeldistribuidora.mitiendanube.com/admin/orders/${order.id}`,
+    clienteNombre:  getNombreCliente(order),
+    telefono:       order.contact_phone || ship.phone || "",
+    direccion:      dir || "SIN DIRECCION",
+    ciudad,
+    localidad,
+    cp,
+    partido,
+    provincia:      ship.province || order.billing_province || "",
+    alertaDireccion: alertaSinDireccion,
+    formaPago:      getFormaPago(order),
+    importeOrden:   parseFloat(order.total) || 0,
+    notasOrden:     order.owner_note || "",
+    notasCliente:   order.note      || "",
+    fechaVenta:     (order.created_at || "").split("T")[0],
+    tipoOtro,
+    carrier:        carrier || null,
+    empresa:        "",
+    metodEnvio:     order.shipping_option || "",
+    fulfillmentId:  order.fulfillments?.[0]?.id || null,
+    estado:         "pendiente",
+    pagoEstado:     getPagoEstadoInicial(order),
+    observaciones:  alertaSinDireccion ? "ALERTA: sin direccion o CP" : "",
+  };
+}
+
 export function ordenAEnvio(order) {
   const ship = order.shipping_address || {};
   const cp   = String(ship.zipcode || order.billing_zipcode || "").replace(/\D/g, "");

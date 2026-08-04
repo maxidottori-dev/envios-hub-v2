@@ -5918,7 +5918,7 @@ function TabTablero({envios,lc,zc,pagosCC=[]}){
 }
 
 
-function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,configExpedicion={},esAdmin=false}){
+function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,configExpedicion={},esAdmin=false,otrosPedidos=[]}){
   const {impresionHabilitada=false,armadores=[]}=configExpedicion;
   // Lista efectiva de controladores: armadores con puedeControlar=true; fallback a todos si ninguno lo tiene
   const listaControladores=armadores.some(a=>a.puedeControlar)?armadores.filter(a=>a.puedeControlar):armadores;
@@ -6528,6 +6528,34 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* ── OTROS PEDIDOS: por preparar ── */}
+          {otrosPedidos.filter(p=>p.estado==="por_preparar").length>0&&(
+            <div style={{...S.card,padding:"0",marginBottom:"0.75rem",border:"1px solid #d9770644",overflow:"hidden"}}>
+              <div style={{padding:"0.55rem 1rem",background:"#1a1200",borderBottom:"1px solid #292000",display:"flex",alignItems:"center",gap:"10px"}}>
+                <span style={{fontWeight:800,fontSize:"0.72rem",color:"#f59e0b",textTransform:"uppercase",letterSpacing:".08em"}}>🏪 Otros pedidos — por preparar</span>
+                <span style={{background:"#78350f",color:"#fcd34d",borderRadius:"12px",padding:"1px 8px",fontSize:"0.68rem",fontWeight:700}}>{otrosPedidos.filter(p=>p.estado==="por_preparar").length}</span>
+              </div>
+              <div style={{padding:"0.5rem 0.75rem",display:"flex",flexDirection:"column",gap:"6px"}}>
+                {otrosPedidos.filter(p=>p.estado==="por_preparar").map(p=>{
+                  const TIPO_COLOR_O={retiro_deposito:"#1D9E75",courier:"#378ADD",a_convenir:"#BA7517"};
+                  const TIPO_LABEL_O={retiro_deposito:"Retiro",courier:"Courier",a_convenir:"A convenir"};
+                  return(
+                    <div key={p.id} style={{background:"#0f1420",borderRadius:"8px",padding:"8px 12px",borderLeft:`3px solid ${TIPO_COLOR_O[p.tipoOtro]||"#374151"}`,display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
+                      <span style={{fontWeight:700,fontSize:"0.82rem"}}>#{p.nroOrdenTN}</span>
+                      <span style={{fontSize:"0.8rem",color:"#d1d5db"}}>{p.clienteNombre}</span>
+                      <span style={{padding:"1px 6px",borderRadius:"8px",fontSize:"0.67rem",fontWeight:600,background:`${TIPO_COLOR_O[p.tipoOtro]}22`,color:TIPO_COLOR_O[p.tipoOtro]}}>{TIPO_LABEL_O[p.tipoOtro]}</span>
+                      {p.carrier&&<span style={{padding:"1px 6px",borderRadius:"6px",fontSize:"0.67rem",background:"#1a1f2e",color:"#9ca3af"}}>{p.carrier}</span>}
+                      <button onClick={()=>updateDoc(doc(db,"otrosPedidos",p.id),{estado:"preparado"})}
+                        style={{marginLeft:"auto",padding:"3px 10px",borderRadius:"6px",background:"#1e3a5f",border:"1px solid #378ADD",color:"#93c5fd",cursor:"pointer",fontWeight:700,fontSize:"0.7rem"}}>
+                        Preparado ✓
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -7706,6 +7734,247 @@ function ConfirmPage({token}){
         </div>
       )}
       <div style={{textAlign:"center",color:muted,fontSize:"0.72rem",marginTop:"1.5rem",paddingBottom:"1rem"}}>EnviosHub · Link de solo confirmación</div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// TAB OTROS PEDIDOS — retiro_deposito / courier / a_convenir
+// ════════════════════════════════════════════════════════════════════
+function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false}){
+  const [filterTipo,setFilterTipo]=useState("all");
+  const [filterEstado,setFilterEstado]=useState("all");
+  const [working,setWorking]=useState(null);
+  const [converting,setConverting]=useState(null); // id del pedido a convertir
+  const [convFecha,setConvFecha]=useState("");
+  const [convTurno,setConvTurno]=useState("AM");
+
+  const TIPO_LABEL={retiro_deposito:"Retiro depósito",courier:"Courier",a_convenir:"A convenir"};
+  const TIPO_COLOR={retiro_deposito:"#1D9E75",courier:"#378ADD",a_convenir:"#BA7517"};
+  const TIPO_BG={retiro_deposito:"#0c2a10",courier:"#0c1a40",a_convenir:"#1a1506"};
+  const ESTADO_LABEL={pendiente:"Pendiente",por_preparar:"Por preparar",preparado:"Preparado",despachado:"Despachado",cancelado:"Cancelado",convertido_a_ump:"Convertido UMP"};
+  const ESTADO_COLOR={pendiente:"#6b7280",por_preparar:"#d97706",preparado:"#7c3aed",despachado:"#059669",cancelado:"#dc2626",convertido_a_ump:"#db2777"};
+  const PAGO_COLOR={pagado:"#059669",pendiente:"#dc2626",cuenta_corriente:"#7c3aed"};
+  const PAGO_LABEL={pagado:"Pagado",pendiente:"Sin pago",cuenta_corriente:"Cta. Cte."};
+
+  const activos=otrosPedidos.filter(p=>!["despachado","cancelado","convertido_a_ump"].includes(p.estado));
+  const visible=activos.filter(p=>{
+    if(filterTipo!=="all"&&p.tipoOtro!==filterTipo)return false;
+    if(filterEstado!=="all"&&p.estado!==filterEstado)return false;
+    return true;
+  });
+
+  // Batch por carrier (solo preparados)
+  const carrierGroups={};
+  activos.filter(p=>p.tipoOtro==="courier"&&p.estado==="preparado").forEach(p=>{
+    const c=p.carrier||"Otro";
+    if(!carrierGroups[c])carrierGroups[c]=[];
+    carrierGroups[c].push(p);
+  });
+  const carriersConPreparados=Object.entries(carrierGroups);
+
+  const avanzar=async(p)=>{
+    if(working)return;
+    const next=p.estado==="pendiente"||p.estado==="por_preparar"?"preparado":p.estado==="preparado"?"despachado":null;
+    if(!next)return;
+    if(next==="despachado"&&p.pagoEstado==="pendiente"){alert("No se puede despachar: pedido sin pago.");return;}
+    setWorking(p.id);
+    try{
+      const u={estado:next};
+      if(next==="despachado")u.despachadoTs=new Date().toISOString();
+      await updateDoc(doc(db,"otrosPedidos",p.id),u);
+    }catch(e){console.error(e);}
+    setWorking(null);
+  };
+
+  const cancelar=async(p)=>{
+    if(!confirm(`¿Cancelar pedido #${p.nroOrdenTN}?`))return;
+    await updateDoc(doc(db,"otrosPedidos",p.id),{estado:"cancelado"});
+  };
+
+  const despacharCarrier=async(carrier,peds)=>{
+    if(!confirm(`¿Marcar ${peds.length} pedido${peds.length>1?"s":""} de ${carrier} como despachados?`))return;
+    const ts=new Date().toISOString();
+    const batch=writeBatch(db);
+    peds.forEach(p=>batch.update(doc(db,"otrosPedidos",p.id),{estado:"despachado",despachadoTs:ts}));
+    await batch.commit();
+  };
+
+  const iniciarConversion=(p)=>{
+    setConvFecha("");setConvTurno("AM");setConverting(p.id);
+  };
+
+  const confirmarConversion=async(p)=>{
+    if(!convFecha){alert("Ingresá la fecha de entrega.");return;}
+    setWorking(p.id);
+    try{
+      const batch=writeBatch(db);
+      const envioData={
+        id:p.id,origen:"Tienda Nube",idTN:p.idTN,nroOrdenTN:p.nroOrdenTN,
+        nroSeguimiento:"",linkTN:p.linkTN,linkML:"",
+        clienteNombre:p.clienteNombre,telefono:p.telefono,
+        direccion:p.direccion,ciudad:p.ciudad,localidad:p.localidad,
+        cp:p.cp,partido:p.partido,provincia:p.provincia,alertaDireccion:p.alertaDireccion,
+        formaPago:p.formaPago,importeOrden:p.importeOrden,cobranza:null,
+        notasOrden:p.notasOrden,notasCliente:p.notasCliente,datepickerRaw:"",
+        fechaVenta:p.fechaVenta,fecha:convFecha,turno:convTurno,
+        trans:"",pagoEstado:p.pagoEstado,estado:"sin_asignar",
+        importe:0,bultos:null,cambio:null,retiro:null,
+        observaciones:`Convertido de ${TIPO_LABEL[p.tipoOtro]||p.tipoOtro} #${p.nroOrdenTN}`,
+        metodEnvio:p.metodEnvio,fulfillmentId:p.fulfillmentId||null,
+        convertidoDesde:p.tipoOtro,
+      };
+      batch.set(doc(db,"envios",p.id),envioData);
+      batch.update(doc(db,"otrosPedidos",p.id),{estado:"convertido_a_ump"});
+      await batch.commit();
+      setConverting(null);
+    }catch(e){console.error(e);alert("Error: "+e.message);}
+    setWorking(null);
+  };
+
+  const btnFiltro=(label,active,onClick,color="#6b7280")=>(
+    <button onClick={onClick} style={{padding:"4px 12px",borderRadius:"20px",border:`1px solid ${active?color:"#374151"}`,background:active?"#1a1f2e":"transparent",color:active?color:"#6b7280",fontSize:"0.75rem",fontWeight:600,cursor:"pointer"}}>{label}</button>
+  );
+
+  const badgeEstado=(estado)=>(
+    <span style={{padding:"2px 8px",borderRadius:"12px",fontSize:"0.7rem",fontWeight:600,background:ESTADO_COLOR[estado]+"22",color:ESTADO_COLOR[estado],border:`1px solid ${ESTADO_COLOR[estado]}44`}}>{ESTADO_LABEL[estado]||estado}</span>
+  );
+  const badgeTipo=(tipo)=>(
+    <span style={{padding:"2px 8px",borderRadius:"12px",fontSize:"0.7rem",fontWeight:600,background:TIPO_COLOR[tipo]+"22",color:TIPO_COLOR[tipo],border:`1px solid ${TIPO_COLOR[tipo]}44`}}>{TIPO_LABEL[tipo]||tipo}</span>
+  );
+  const badgePago=(pago)=>(
+    <span style={{padding:"2px 7px",borderRadius:"10px",fontSize:"0.68rem",fontWeight:600,background:PAGO_COLOR[pago]+"22",color:PAGO_COLOR[pago]}}>{PAGO_LABEL[pago]||pago}</span>
+  );
+
+  const nextLabel=(p)=>{
+    if(p.estado==="pendiente"||p.estado==="por_preparar")return"Marcar preparado";
+    if(p.estado==="preparado")return p.pagoEstado==="pendiente"?"🔒 Despachar":"Despachar";
+    return null;
+  };
+  const nextIsPrimary=(p)=>p.estado==="preparado"&&p.pagoEstado!=="pendiente";
+
+  return(
+    <div style={{padding:"1rem",maxWidth:"860px",margin:"0 auto"}}>
+      {/* Stats */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"8px",marginBottom:"1rem"}}>
+        {[
+          {label:"Activos",val:activos.length,color:"#6b7280"},
+          {label:"Por preparar",val:activos.filter(p=>p.estado==="por_preparar").length,color:"#d97706"},
+          {label:"Preparados",val:activos.filter(p=>p.estado==="preparado").length,color:"#7c3aed"},
+          {label:"Sin pago",val:activos.filter(p=>p.pagoEstado==="pendiente").length,color:"#dc2626"},
+        ].map(s=>(
+          <div key={s.label} style={{background:"#0f1420",borderRadius:"10px",padding:"10px 14px",textAlign:"center"}}>
+            <div style={{fontSize:"1.5rem",fontWeight:700,color:s.color}}>{s.val}</div>
+            <div style={{fontSize:"0.7rem",color:"#6b7280",marginTop:"2px"}}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filtros tipo */}
+      <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"8px",alignItems:"center"}}>
+        <span style={{fontSize:"0.7rem",color:"#6b7280",fontWeight:600,textTransform:"uppercase",letterSpacing:".05em"}}>Tipo</span>
+        {btnFiltro("Todos",filterTipo==="all",()=>setFilterTipo("all"),"#9ca3af")}
+        {btnFiltro("Retiro depósito",filterTipo==="retiro_deposito",()=>setFilterTipo("retiro_deposito"),"#1D9E75")}
+        {btnFiltro("Courier",filterTipo==="courier",()=>setFilterTipo("courier"),"#378ADD")}
+        {btnFiltro("A convenir",filterTipo==="a_convenir",()=>setFilterTipo("a_convenir"),"#BA7517")}
+      </div>
+
+      {/* Filtros estado */}
+      <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"1rem",alignItems:"center"}}>
+        <span style={{fontSize:"0.7rem",color:"#6b7280",fontWeight:600,textTransform:"uppercase",letterSpacing:".05em"}}>Estado</span>
+        {btnFiltro("Todos",filterEstado==="all",()=>setFilterEstado("all"),"#9ca3af")}
+        {btnFiltro("Pendiente",filterEstado==="pendiente",()=>setFilterEstado("pendiente"),"#6b7280")}
+        {btnFiltro("Por preparar",filterEstado==="por_preparar",()=>setFilterEstado("por_preparar"),"#d97706")}
+        {btnFiltro("Preparado",filterEstado==="preparado",()=>setFilterEstado("preparado"),"#7c3aed")}
+      </div>
+
+      {/* Batch bar couriers preparados */}
+      {carriersConPreparados.length>0&&(
+        <div style={{background:"#0f1420",border:"1px solid #1a1f2e",borderRadius:"10px",padding:"10px 14px",marginBottom:"1rem",display:"flex",alignItems:"center",gap:"10px",flexWrap:"wrap"}}>
+          <span style={{fontSize:"0.78rem",color:"#9ca3af",fontWeight:600}}>Preparados para despachar:</span>
+          {carriersConPreparados.map(([carrier,peds])=>(
+            <button key={carrier} onClick={()=>despacharCarrier(carrier,peds)}
+              style={{padding:"5px 12px",borderRadius:"8px",background:"#1e3a5f",border:"1px solid #378ADD",color:"#93c5fd",fontSize:"0.75rem",fontWeight:700,cursor:"pointer"}}>
+              🚚 Despachar {carrier} ({peds.length})
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Cards */}
+      <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+        {visible.length===0&&<div style={{textAlign:"center",padding:"2rem",color:"#374151",fontSize:"0.85rem"}}>Sin pedidos para estos filtros</div>}
+        {visible.map(p=>(
+          <div key={p.id} style={{background:"#0f1420",border:"1px solid #1a1f2e",borderRadius:"12px",padding:"12px 14px",borderLeft:`3px solid ${TIPO_COLOR[p.tipoOtro]||"#374151"}`}}>
+            {/* Línea 1: número, tipo, carrier, estado, pago */}
+            <div style={{display:"flex",alignItems:"center",gap:"6px",flexWrap:"wrap",marginBottom:"6px"}}>
+              <span style={{fontWeight:700,fontSize:"0.9rem"}}>#{p.nroOrdenTN}</span>
+              <span style={{fontWeight:600,fontSize:"0.88rem",color:"#e5e7eb"}}>{p.clienteNombre}</span>
+              {badgeTipo(p.tipoOtro)}
+              {p.carrier&&<span style={{padding:"2px 7px",borderRadius:"8px",fontSize:"0.68rem",background:"#1a1f2e",color:"#9ca3af",border:"1px solid #374151"}}>{p.carrier}</span>}
+              {p.empresa&&<span style={{padding:"2px 7px",borderRadius:"8px",fontSize:"0.68rem",background:"#1a1f2e",color:"#9ca3af",border:"1px solid #374151"}}>{p.empresa}</span>}
+              {badgeEstado(p.estado)}
+              {badgePago(p.pagoEstado)}
+            </div>
+            {/* Línea 2: dirección, fecha, teléfono */}
+            <div style={{display:"flex",gap:"12px",flexWrap:"wrap",marginBottom:"8px"}}>
+              <span style={{fontSize:"0.78rem",color:"#6b7280"}}>📍 {p.direccion}{p.partido?` · ${p.partido}`:""}</span>
+              <span style={{fontSize:"0.78rem",color:"#6b7280"}}>📅 {p.fechaVenta}</span>
+              {p.telefono&&<span style={{fontSize:"0.78rem",color:"#6b7280"}}>📞 {p.telefono}</span>}
+            </div>
+            {/* Acciones */}
+            <div style={{display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center"}}>
+              {nextLabel(p)&&(
+                <button onClick={()=>avanzar(p)} disabled={!!working}
+                  style={{padding:"4px 12px",borderRadius:"8px",fontSize:"0.75rem",fontWeight:700,cursor:"pointer",
+                    background:nextIsPrimary(p)?"#1e3a5f":"transparent",
+                    border:`1px solid ${nextIsPrimary(p)?"#378ADD":"#4b5563"}`,
+                    color:nextIsPrimary(p)?"#93c5fd":"#9ca3af",
+                    opacity:working?0.5:1}}>
+                  {nextLabel(p)}
+                </button>
+              )}
+              {p.tipoOtro==="retiro_deposito"&&p.estado!=="despachado"&&converting!==p.id&&(
+                <button onClick={()=>iniciarConversion(p)} disabled={!!working}
+                  style={{padding:"4px 12px",borderRadius:"8px",fontSize:"0.72rem",fontWeight:700,cursor:"pointer",background:"#2e1065",border:"1px solid #7c3aed",color:"#c4b5fd",opacity:working?0.5:1}}>
+                  → Convertir a UMP
+                </button>
+              )}
+              {p.estado==="pendiente"&&(
+                <button onClick={()=>cancelar(p)} disabled={!!working}
+                  style={{padding:"4px 10px",borderRadius:"8px",fontSize:"0.72rem",fontWeight:600,cursor:"pointer",background:"transparent",border:"1px solid #7f1d1d",color:"#f87171",opacity:working?0.5:1}}>
+                  Cancelar
+                </button>
+              )}
+              {p.pagoEstado==="pendiente"&&p.estado==="preparado"&&(
+                <span style={{fontSize:"0.72rem",color:"#f87171"}}>🔒 Pago pendiente en TN</span>
+              )}
+              <a href={p.linkTN} target="_blank" rel="noreferrer" style={{fontSize:"0.72rem",color:"#6b7280",marginLeft:"auto"}}>Ver en TN ↗</a>
+            </div>
+            {/* Panel convertir a UMP */}
+            {converting===p.id&&(
+              <div style={{marginTop:"10px",padding:"10px 12px",background:"#12102a",border:"1px solid #4c1d95",borderRadius:"10px",display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}}>
+                <span style={{fontSize:"0.78rem",color:"#c4b5fd",fontWeight:600}}>Convertir a UMP — fecha entrega:</span>
+                <input type="date" value={convFecha} onChange={e=>setConvFecha(e.target.value)}
+                  style={{padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #4c1d95",color:"#e5e7eb",fontSize:"0.78rem"}}/>
+                <select value={convTurno} onChange={e=>setConvTurno(e.target.value)}
+                  style={{padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #4c1d95",color:"#e5e7eb",fontSize:"0.78rem"}}>
+                  <option value="AM">AM</option>
+                  <option value="PM">PM</option>
+                </select>
+                <button onClick={()=>confirmarConversion(p)} disabled={!!working}
+                  style={{padding:"4px 12px",borderRadius:"8px",fontSize:"0.75rem",fontWeight:700,cursor:"pointer",background:"#4c1d95",border:"none",color:"#fff"}}>
+                  Confirmar
+                </button>
+                <button onClick={()=>setConverting(null)}
+                  style={{padding:"4px 10px",borderRadius:"8px",fontSize:"0.75rem",cursor:"pointer",background:"transparent",border:"1px solid #374151",color:"#6b7280"}}>
+                  Cancelar
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -9014,6 +9283,17 @@ export default function App(){
   const [colectaProgMsg,setColectaProgMsg]=useState(""); // texto de progreso a mostrar en el botón "Colecta" mientras se espera ML Armado
   const [envios,setEnviosLocal]=useState([]);
   const [colectas,setColectas]=useState([]); // colectas ML pendientes de armado (estado=pendiente)
+  const [otrosPedidos,setOtrosPedidos]=useState([]);
+  useEffect(()=>{
+    // Solo activos (excluye despachado/cancelado/convertido) para no cargar histórico
+    const q=query(collection(db,"otrosPedidos"),where("estado","in",["pendiente","por_preparar","preparado"]));
+    const unsub=onSnapshot(q,snap=>{
+      const docs=snap.docs.map(d=>({...d.data(),id:d.id}));
+      docs.sort((a,b)=>(b.fechaVenta||"").localeCompare(a.fechaVenta||""));
+      setOtrosPedidos(docs);
+    },err=>console.error("otrosPedidos:",err));
+    return()=>unsub();
+  },[]);
   useEffect(()=>{
     const unsub=onSnapshot(query(collection(db,"colectas"),where("estado","==","pendiente")),snap=>{
       setColectas(snap.docs.map(d=>({...d.data(),id:d.id})));
@@ -9244,7 +9524,7 @@ export default function App(){
     if(esChofer)return<VistaChofer envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>;
     return<VistaLogistica envios={envios} sesion={sesion} lc={lc}/>;
   }
-  if(sesion.rol==="expedicion")return<VistaExpedicion envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} configExpedicion={configExpedicion}/>;
+  if(sesion.rol==="expedicion")return<VistaExpedicion envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} configExpedicion={configExpedicion} otrosPedidos={otrosPedidos}/>;
   if(sesion.rol==="armador"){
     const arm=(configExpedicion.armadores||[]).find(a=>a.id===sesion.armadorId);
     return<VistaArmador envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} armador={arm} armadores={configExpedicion.armadores||[]} gapUmbralMin={configExpedicion.gapUmbralMin||5}/>;
@@ -9279,6 +9559,7 @@ export default function App(){
     {id:"statsarmado",l:"📊 Stats Armado"},
     {id:"consultaarmado",l:"🔍 Consulta Armado"},
     {id:"salida",l:"🚚 Salida"},
+    {id:"otros",l:"🏪 Otros Pedidos"},
     {id:"usuarios",l:"Usuarios"},
   ].filter(t=>{
     const fk=TAB_FEATURE_MAP[t.id];
@@ -9518,10 +9799,11 @@ export default function App(){
         {tab==="clientes"       &&<TabClientes       envios={envios} lc={lc} pagosCC={pagosCC} facturaClientes={facturaClientes} setFacturaCliente={setFacturaCliente} sesion={sesion}/>}
         {tab==="localidades" &&<TabLocalidades cpExtra={cpExtra} setCpExtra={setCpExtra}/>}
         {tab==="usuarios"   &&<TabUsuarios lc={lc} setLc={setLcPersist} configExpedicion={configExpedicion} setConfigExpedicion={setConfigExpedicion} esAdmin={esAdmin}/>}
-        {tab==="expedicion" &&<VistaExpedicion envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} configExpedicion={configExpedicion} esAdmin={esAdmin}/>}
+        {tab==="expedicion" &&<VistaExpedicion envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} configExpedicion={configExpedicion} esAdmin={esAdmin} otrosPedidos={otrosPedidos}/>}
         {tab==="statsarmado"   &&<TabStatsArmado configExpedicion={configExpedicion} setConfigExpedicion={setConfigExpedicion} esAdmin={esAdmin}/>}
         {tab==="consultaarmado"&&<TabConsultaArmado esAdmin={esAdmin}/>}
         {tab==="salida"        &&<TabSalida envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>}
+        {tab==="otros"         &&<TabOtrosPedidos otrosPedidos={otrosPedidos} sesion={sesion} esAdmin={esAdmin}/>}
       </div>
     </div>
   );
