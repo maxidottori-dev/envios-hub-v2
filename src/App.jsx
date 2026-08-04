@@ -6531,7 +6531,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
             </div>
           )}
 
-          {/* ── OTROS PEDIDOS: por preparar ── */}
+          {/* ── OTROS PEDIDOS: por preparar (empaquetado en TN) ── */}
           {otrosPedidos.filter(p=>p.estado==="por_preparar").length>0&&(
             <div style={{...S.card,padding:"0",marginBottom:"0.75rem",border:"1px solid #d9770644",overflow:"hidden"}}>
               <div style={{padding:"0.55rem 1rem",background:"#1a1200",borderBottom:"1px solid #292000",display:"flex",alignItems:"center",gap:"10px"}}>
