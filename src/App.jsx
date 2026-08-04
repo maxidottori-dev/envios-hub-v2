@@ -3245,7 +3245,7 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
               <button onClick={()=>{
                 confirmModal.tipo==="cobranza"?marcarCobranza(confirmModal.id,true):marcarRetiro(confirmModal.id,true);
                 setConfirmModal(null);
-              }} style={{flex:2,padding:"0.5rem",borderRadius:"8px",border:"none",fontWeight:700,fontSize:"0.82rem",cursor:"pointer",
+              }} style={{flex:2,padding:"0.5rem",borderRadius:"8px",fontWeight:700,fontSize:"0.82rem",cursor:"pointer",
                 background:confirmModal.tipo==="cobranza"?"#0d2b0d":"#1c0d00",
                 color:confirmModal.tipo==="cobranza"?"#4ade80":"#f97316",
                 border:confirmModal.tipo==="cobranza"?"1px solid #1a4a1a":"1px solid #3d1f00"
@@ -4383,8 +4383,13 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{},esAdmin=
 
   const eliminarUsuario=async(u)=>{
     if(!window.confirm(`¿Eliminar a "${u.usuario}" permanentemente? Esta acción no se puede deshacer.`))return;
-    await deleteDoc(doc(db,"usuarios",u.id));
-    mostrarToast("Usuario eliminado");
+    try{
+      await deleteDoc(doc(db,"usuarios",u.id));
+      mostrarToast("Usuario eliminado");
+    }catch(err){
+      console.error("Error al eliminar usuario:",err);
+      mostrarToast("Error al eliminar usuario");
+    }
   };
 
   const ROL_C={admin:{label:"Admin",color:"#6366f1"},colaborador:{label:"Colaborador",color:"#10b981"},logistica:{label:"Logistica",color:"#8b5cf6"},expedicion:{label:"Expedicion",color:"#f59e0b"},armador:{label:"Armador",color:"#06b6d4"}};
@@ -8633,7 +8638,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         <div style={{display:"flex",gap:"6px",marginBottom:"1rem",alignItems:"center"}}>
           <button onClick={()=>setSubTab("despacho")} style={{...S.btnSm(false),padding:"6px 16px",fontSize:"0.82rem"}}>← Salida</button>
           <div style={{flex:1,fontWeight:700,fontSize:"0.95rem"}}>Cierres de sesión</div>
-          <button onClick={()=>{setSesionesLoading(true);getDocs(query(collection(db,"sesionesSalida"),orderBy("creadoEn","desc"),limit(60))).then(snap=>setSesiones(snap.docs.map(d=>({id:d.id,...d.data()})))).finally(()=>setSesionesLoading(false));}}
+          <button onClick={()=>{setSesionesLoading(true);getDocs(query(collection(db,"sesionesSalida"),orderBy("creadoEn","desc"),limit(60))).then(snap=>setSesiones(snap.docs.map(d=>({id:d.id,...d.data()})))).catch(err=>console.error("Error al actualizar sesiones:",err)).finally(()=>setSesionesLoading(false));}}
             style={{...S.btnSm(false),padding:"4px 10px",fontSize:"0.75rem"}}>↺ Actualizar</button>
         </div>
         {sesionesLoading&&<div style={{color:"#6b7280",textAlign:"center",padding:"2rem",fontSize:"0.85rem"}}>Cargando…</div>}
