@@ -6542,13 +6542,42 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
                 {otrosPedidos.filter(p=>p.estado==="por_preparar").map(p=>{
                   const TIPO_COLOR_O={retiro_deposito:"#1D9E75",courier:"#378ADD",a_convenir:"#BA7517"};
                   const TIPO_LABEL_O={retiro_deposito:"Retiro",courier:"Courier",a_convenir:"A convenir"};
+                  const prepararOtro=async()=>{
+                    const ts=new Date().toISOString();
+                    const arm=armadorActivo||null;
+                    const ctrl=controladorSel||null;
+                    const hoy2=new Date().toISOString().split("T")[0];
+                    await updateDoc(doc(db,"otrosPedidos",p.id),{
+                      estado:"preparado",
+                      armadorId:arm?.id||"",armadorNombre:arm?.nombre||"",
+                      controladorId:ctrl?.id||"",controladorNombre:ctrl?.nombre||"",
+                      armadoTs:ts,
+                    });
+                    addDoc(collection(db,"armados"),{
+                      envioId:p.id,
+                      nroSeguimiento:"",
+                      nroOrdenTN:String(p.nroOrdenTN||""),
+                      clienteNombre:p.clienteNombre||"",
+                      armadorId:arm?.id||"",armadorNombre:arm?.nombre||"",
+                      controladorId:ctrl?.id||"",controladorNombre:ctrl?.nombre||"",
+                      ts,fecha:hoy2,
+                      bultos:1,
+                      logistica:p.carrier||p.tipoOtro||"",
+                      direccion:p.direccion||"",
+                      partido:p.partido||"",
+                      esFlex:false,esOtro:true,
+                      tipoOtro:p.tipoOtro||"",
+                      carrier:p.carrier||"",
+                      esEdicion:false,
+                    }).catch(e=>console.error("armado otro:",e));
+                  };
                   return(
                     <div key={p.id} style={{background:"#0f1420",borderRadius:"8px",padding:"8px 12px",borderLeft:`3px solid ${TIPO_COLOR_O[p.tipoOtro]||"#374151"}`,display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
                       <span style={{fontWeight:700,fontSize:"0.82rem"}}>#{p.nroOrdenTN}</span>
                       <span style={{fontSize:"0.8rem",color:"#d1d5db"}}>{p.clienteNombre}</span>
                       <span style={{padding:"1px 6px",borderRadius:"8px",fontSize:"0.67rem",fontWeight:600,background:`${TIPO_COLOR_O[p.tipoOtro]}22`,color:TIPO_COLOR_O[p.tipoOtro]}}>{TIPO_LABEL_O[p.tipoOtro]}</span>
                       {p.carrier&&<span style={{padding:"1px 6px",borderRadius:"6px",fontSize:"0.67rem",background:"#1a1f2e",color:"#9ca3af"}}>{p.carrier}</span>}
-                      <button onClick={()=>updateDoc(doc(db,"otrosPedidos",p.id),{estado:"preparado"})}
+                      <button onClick={prepararOtro}
                         style={{marginLeft:"auto",padding:"3px 10px",borderRadius:"6px",background:"#1e3a5f",border:"1px solid #378ADD",color:"#93c5fd",cursor:"pointer",fontWeight:700,fontSize:"0.7rem"}}>
                         Preparado ✓
                       </button>
@@ -6907,6 +6936,7 @@ function TabConsultaArmado({esAdmin=false}){
       (a.nroPackId||"").includes(busqueda.trim())||
       norm(a.direccion||"").includes(s)||
       norm(a.destinatario||"").includes(s)||
+      norm(a.clienteNombre||"").includes(s)||
       norm(a.usuario||"").includes(s)||
       norm(a.armadorNombre||"").includes(s)||
       norm(a.controladorNombre||"").includes(s)||
@@ -6960,12 +6990,13 @@ function TabConsultaArmado({esAdmin=false}){
                 <div>
                   <div style={{display:"flex",gap:"3px",flexWrap:"wrap",marginBottom:"2px"}}>
                     {a.esColecta&&<span style={{background:"#1a0d2e",color:"#a78bfa",border:"1px solid #a78bfa44",padding:"1px 5px",borderRadius:"3px",fontSize:"0.58rem",fontWeight:700}}>📋 Colecta</span>}
-                    {a.esFlex&&!a.esColecta&&<span style={{background:"#0d1c04",color:"#84cc16",border:"1px solid #84cc1644",padding:"1px 5px",borderRadius:"3px",fontSize:"0.58rem",fontWeight:700}}>FLEX</span>}
-                    {!a.esFlex&&!a.esColecta&&<span style={{background:"#12172a",color:"#6366f1",border:"1px solid #6366f144",padding:"1px 5px",borderRadius:"3px",fontSize:"0.58rem",fontWeight:700}}>NO FX</span>}
+                    {a.esOtro&&<span style={{background:"#0c1a10",color:"#1D9E75",border:"1px solid #1D9E7544",padding:"1px 5px",borderRadius:"3px",fontSize:"0.58rem",fontWeight:700}}>🏪 Otro</span>}
+                    {a.esFlex&&!a.esColecta&&!a.esOtro&&<span style={{background:"#0d1c04",color:"#84cc16",border:"1px solid #84cc1644",padding:"1px 5px",borderRadius:"3px",fontSize:"0.58rem",fontWeight:700}}>FLEX</span>}
+                    {!a.esFlex&&!a.esColecta&&!a.esOtro&&<span style={{background:"#12172a",color:"#6366f1",border:"1px solid #6366f144",padding:"1px 5px",borderRadius:"3px",fontSize:"0.58rem",fontWeight:700}}>NO FX</span>}
                     {a.nroOrdenTN&&<span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.7rem"}}>#{a.nroOrdenTN}</span>}
                     {(a.bultos||1)>1&&<span style={{color:"#f59e0b",fontSize:"0.62rem",fontWeight:700}}>{a.bultos}b</span>}
                   </div>
-                  <div style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.8rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.esColecta?(a.destinatario||a.direccion||"—"):a.direccion||"—"}</div>
+                  <div style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.8rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.esColecta?(a.destinatario||a.direccion||"—"):a.esOtro?(a.clienteNombre||a.direccion||"—"):a.direccion||"—"}</div>
                   <div style={{color:"#6b7280",fontSize:"0.62rem"}}>{a.partido}</div>
                 </div>
                 {/* Logística */}
@@ -7923,6 +7954,14 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false}){
               <span style={{fontSize:"0.78rem",color:"#6b7280"}}>📅 {p.fechaVenta}</span>
               {p.telefono&&<span style={{fontSize:"0.78rem",color:"#6b7280"}}>📞 {p.telefono}</span>}
             </div>
+            {/* Info armado (si está preparado) */}
+            {p.estado==="preparado"&&p.armadoTs&&(
+              <div style={{fontSize:"0.7rem",color:"#6b7280",marginBottom:"6px",display:"flex",gap:"8px",flexWrap:"wrap"}}>
+                <span>✅ Preparado {fmtHora(p.armadoTs)}</span>
+                {p.armadorNombre&&<span>· {p.armadorNombre}</span>}
+                {p.controladorNombre&&<span>· ctrl: {p.controladorNombre}</span>}
+              </div>
+            )}
             {/* Acciones */}
             <div style={{display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center"}}>
               {nextLabel(p)&&(
