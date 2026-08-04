@@ -9004,19 +9004,19 @@ function TabSalida({envios,setEnvios,lc,sesion}){
           nota:notasPendientes[e.id]||null,
         })),
       });
+      // Notificar TN: marcar como enviado (best effort — no bloquea el cierre)
+      const conTN=despachados_cierre.filter(e=>e.origen==="Tienda Nube"&&(e.idTN||e.id));
+      if(conTN.length>0){
+        Promise.all(conTN.map(e=>{
+          const orderTNId=e.idTN||e.id;
+          return fetch("/api/marcar-enviado-tn",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({orderTNId})})
+            .then(r=>r.json().catch(()=>({})))
+            .then(d=>console.log("TN dispatch result",orderTNId,d))
+            .catch(err=>console.warn("TN dispatch warn",orderTNId,err));
+        })).then(()=>console.log("TN dispatch completado:",conTN.length,"pedidos"));
+      }
     }catch(err){console.error("Error cierre sesión:",err);}
     finally{setGuardandoCierre(false);}
-    // Notificar TN: marcar como enviado (best effort — no bloquea el cierre)
-    const conTN=despachados_cierre.filter(e=>e.origen==="Tienda Nube"&&(e.idTN||e.id));
-    if(conTN.length>0){
-      Promise.all(conTN.map(e=>{
-        const orderTNId=e.idTN||e.id;
-        return fetch("/api/marcar-enviado-tn",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({orderTNId})})
-          .then(r=>r.json().catch(()=>({})))
-          .then(d=>console.log("TN dispatch result",orderTNId,d))
-          .catch(err=>console.warn("TN dispatch warn",orderTNId,err));
-      })).then(()=>console.log("TN dispatch completado:",conTN.length,"pedidos"));
-    }
     liberarLogistica();
   };
 
