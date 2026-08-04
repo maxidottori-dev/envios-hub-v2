@@ -6515,18 +6515,24 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
             const pctFlex=flexFecha.length>0?Math.round(prepFlex/flexFecha.length*100):0;
             const pctNoFlex=deFecha.length>0?Math.round(prepNoflex/deFecha.length*100):0;
             const pctCol=colTotal>0?Math.round(colArm/colTotal*100):0;
+            const hoyStr=new Date().toISOString().split("T")[0];
+            const otrPendStat=otrosPedidos.filter(p=>p.estado==="por_preparar");
+            const otrPrepStat=otrosPedidos.filter(p=>p.estado==="preparado"&&p.armadoTs&&p.armadoTs.startsWith(hoyStr));
+            const otrTotal=otrPendStat.length+otrPrepStat.length;
+            const pctOtr=otrTotal>0?Math.round(otrPrepStat.length/otrTotal*100):0;
             const cols=[
               {label:"Total",pend:total-preparados,arm:preparados,tot:total,pct,color:"#6366f1",bar:"#6366f1",onClick:()=>{setFilLog("TODOS");setFilTipo("TODOS");}},
               {label:"FLEX",pend:flexPend,arm:prepFlex,tot:flexFecha.length,pct:pctFlex,color:"#84cc16",bar:"#84cc16",onClick:()=>{setFilLog("TODOS");setFilTipo("FLEX");}},
               {label:"NO FLEX",pend:noflexPend,arm:prepNoflex,tot:deFecha.length,pct:pctNoFlex,color:"#38bdf8",bar:"#38bdf8",onClick:()=>{setFilLog("TODOS");setFilTipo("NOFLEX");}},
               {label:"📋 Colectas",pend:colPend,arm:colArm,tot:colTotal,pct:pctCol,color:"#a78bfa",bar:"#a78bfa",onClick:()=>{setFilLog("__COLECTAS__");setFilTipo("TODOS");}},
+              {label:"🏪 Otros",pend:otrPendStat.length,arm:otrPrepStat.length,tot:otrTotal,pct:pctOtr,color:"#1D9E75",bar:"#1D9E75",onClick:()=>{setFilLog("__OTROS__");setFilTipo("TODOS");}},
             ];
-            const activeBar=(filLog==="__COLECTAS__")?3:(filTipo==="FLEX")?1:(filTipo==="NOFLEX")?2:-1;
+            const activeBar=(filLog==="__OTROS__")?4:(filLog==="__COLECTAS__")?3:(filTipo==="FLEX")?1:(filTipo==="NOFLEX")?2:-1;
             return(
               <div style={{...S.card,padding:"0",marginBottom:"0.75rem",overflow:"hidden"}}>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)"}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)"}}>
                   {cols.map((c,i)=>(
-                    <div key={c.label} onClick={c.onClick} style={{padding:"0.65rem 0.7rem",borderRight:i<3?"1px solid #1a1f2e":"none",position:"relative",cursor:"pointer",background:activeBar===i?"#12172a":"transparent",transition:"background .15s"}}>
+                    <div key={c.label} onClick={c.onClick} style={{padding:"0.65rem 0.7rem",borderRight:i<4?"1px solid #1a1f2e":"none",position:"relative",cursor:"pointer",background:activeBar===i?"#12172a":"transparent",transition:"background .15s"}}>
                       <div style={{fontSize:"0.55rem",color:activeBar===i?c.color:"#6b7280",textTransform:"uppercase",fontWeight:700,letterSpacing:".05em",marginBottom:"2px"}}>{c.label}{activeBar===i&&" ▾"}</div>
                       <div style={{display:"flex",alignItems:"baseline",gap:"4px"}}>
                         <span style={{fontSize:"1.4rem",fontWeight:800,color:c.color,lineHeight:1}}>{c.pend}</span>
@@ -6703,6 +6709,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
             <button onClick={()=>{setFilLog("TODOS");setFilTipo("TODOS");}} style={S.btnSm(filLog==="TODOS"&&filTipo==="TODOS")}>Todos</button>
             {logActivas.map(l=><button key={l} onClick={()=>{setFilLog(filLog===l?"TODOS":l);}} style={S.btnSm(filLog===l,lc[l]?.color)}>{l}</button>)}
             <button onClick={()=>{setFilLog("__COLECTAS__");setFilTipo("TODOS");}} style={{...S.btnSm(filLog==="__COLECTAS__","#a78bfa")}}>📋 Colectas</button>
+            <button onClick={()=>{setFilLog("__OTROS__");setFilTipo("TODOS");}} style={{...S.btnSm(filLog==="__OTROS__","#1D9E75")}}>🏪 Otros</button>
             <button onClick={()=>setSoloPendientes(!soloPendientes)} style={{...S.btnSm(soloPendientes,"#f59e0b"),marginLeft:"auto"}}>Solo pendientes</button>
           </div>
           <div style={{display:"flex",gap:"6px",marginBottom:"0.6rem",alignItems:"center"}}>
@@ -6712,7 +6719,9 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
             <span style={{color:"#4b5563",fontSize:"0.68rem",marginLeft:"4px"}}>
               {filLog==="__COLECTAS__"
                 ?(colectas.length+colectasArmadasHoy.length)+" colectas"
-                :filtrados.length+" pedidos"}
+                :filLog==="__OTROS__"
+                  ?otrosPedidos.length+" otros"
+                  :filtrados.length+" pedidos"}
             </span>
           </div>
           <div style={{display:"flex",gap:"6px",marginBottom:"0.6rem",alignItems:"center",flexWrap:"wrap"}}>
@@ -6724,7 +6733,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
           </div>
 
           {/* Lista */}
-          {filtrados.length===0&&<div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📦</div><p style={{marginTop:"8px"}}>Sin pedidos para esta fecha</p></div>}
+          {filtrados.length===0&&filLog!=="__OTROS__"&&<div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📦</div><p style={{marginTop:"8px"}}>Sin pedidos para esta fecha</p></div>}
           {Object.entries(grupos).map(([log,items])=>{
             const lcD=lc[log]||{color:"#6b7280",bg:"#1a1f2e"};
             const prepG=items.filter(e=>e.preparado).length;
@@ -6799,8 +6808,10 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
           {/* ── Grupo Otros Pedidos en el listado ────────────────────────── */}
           {(()=>{
             if(filTipo==="FLEX")return null;
+            if(filLog!=="TODOS"&&filLog!=="__OTROS__")return null;
+            const hoyStr2=new Date().toISOString().split("T")[0];
             const otrPend=otrosPedidos.filter(p=>p.estado==="por_preparar");
-            const otrPrep=otrosPedidos.filter(p=>p.estado==="preparado"&&p.armadoTs&&p.armadoTs.startsWith(new Date().toISOString().split("T")[0]));
+            const otrPrep=otrosPedidos.filter(p=>p.estado==="preparado"&&p.armadoTs&&p.armadoTs.startsWith(hoyStr2));
             if(otrPend.length===0&&otrPrep.length===0)return null;
             const items=[...otrPend,...otrPrep];
             const TIPO_C={retiro_deposito:"#1D9E75",courier:"#378ADD",a_convenir:"#BA7517"};
