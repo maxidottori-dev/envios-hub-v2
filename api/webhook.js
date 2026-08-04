@@ -179,9 +179,14 @@ export default async function handler(req, res) {
     const update = { notasOrden: order.owner_note || "", notasCliente: order.note || "" };
 
     // Empaquetado en TN → por_preparar (solo si todavía está pendiente)
-    if (["ready_for_pickup", "packed"].includes(fulfillStatus) && otroData.estado === "pendiente") {
+    // Para retiro_deposito: fulfillments[0].status = "ready_for_pickup"
+    // Para courier (Envio Nube): fulfillments son strings (IDs), no objetos → usamos shipping_status = "packed"
+    const shippingStatus = order.shipping_status || "";
+    const esEmpaquetado = ["ready_for_pickup", "packed"].includes(fulfillStatus)
+      || shippingStatus === "packed";
+    if (esEmpaquetado && otroData.estado === "pendiente") {
       update.estado = "por_preparar";
-      console.log("WEBHOOK OTRO POR_PREPARAR", order.id, fulfillStatus);
+      console.log("WEBHOOK OTRO POR_PREPARAR", order.id, { fulfillStatus, shippingStatus });
     }
 
     // Pago actualizado desde TN
