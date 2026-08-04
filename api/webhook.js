@@ -133,6 +133,8 @@ export default async function handler(req, res) {
   const fulfillStatus = order.fulfillments?.[0]?.status || "";
 
   console.log("WEBHOOK OTRO", JSON.stringify({ orderId: order.id, metodo: metodo.slice(0, 60), fulfillStatus, topic: topicFinal }));
+  console.log("WEBHOOK OTRO FULFILLMENTS", JSON.stringify(order.fulfillments || []));
+  console.log("WEBHOOK OTRO ORDER_STATUS", JSON.stringify({ status: order.status, payment_status: order.payment_status, shipping_status: order.shipping_status || "" }));
 
   if (topicFinal === "order/created") {
     if (otroExisting.exists) return res.status(200).json({ ok: true, skipped: "otro already exists" });
