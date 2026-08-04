@@ -6581,16 +6581,6 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
             </div>
           )}
 
-          {/* ── Indicador compacto: otros pedidos pendientes ── */}
-          {(()=>{const otrPend=otrosPedidos.filter(p=>p.estado==="por_preparar");if(otrPend.length===0)return null;return(
-            <div style={{...S.card,padding:"0.45rem 0.9rem",marginBottom:"0.5rem",border:"1px solid #d9770633",display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}}>
-              <span style={{fontSize:"0.7rem",fontWeight:800,color:"#f59e0b"}}>🏪</span>
-              <span style={{fontSize:"0.72rem",color:"#f59e0b",fontWeight:700}}>{otrPend.length} otro{otrPend.length>1?"s":""} por preparar</span>
-              <span style={{fontSize:"0.65rem",color:"#6b7280"}}>—</span>
-              {otrPend.map(p=><span key={p.id} style={{fontSize:"0.68rem",color:"#9ca3af"}}>#{p.nroOrdenTN} {p.clienteNombre}</span>)}
-            </div>
-          );})()}
-
           {/* ── BOX UNIFICADO: Registrar Armado ── */}
           <div style={{...S.card,padding:"0",marginBottom:"0.75rem",border:"2px solid #6366f133",overflow:"hidden"}}>
 
@@ -6805,6 +6795,62 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
               </div>
             );
           })}
+
+          {/* ── Grupo Otros Pedidos en el listado ────────────────────────── */}
+          {(()=>{
+            if(filTipo==="FLEX")return null;
+            const otrPend=otrosPedidos.filter(p=>p.estado==="por_preparar");
+            const otrPrep=otrosPedidos.filter(p=>p.estado==="preparado"&&p.armadoTs&&p.armadoTs.startsWith(new Date().toISOString().split("T")[0]));
+            if(otrPend.length===0&&otrPrep.length===0)return null;
+            const items=[...otrPend,...otrPrep];
+            const TIPO_C={retiro_deposito:"#1D9E75",courier:"#378ADD",a_convenir:"#BA7517"};
+            const TIPO_L={retiro_deposito:"Retiro",courier:"Courier",a_convenir:"A conv."};
+            return(
+              <div style={{marginBottom:"16px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}>
+                  <div style={{flex:1,height:"1px",background:"#1a1f2e"}}/>
+                  <div style={{background:"#0c1a10",color:"#1D9E75",padding:"2px 12px",borderRadius:"10px",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>🏪 Otros · {otrPrep.length}/{items.length}</div>
+                  <div style={{flex:1,height:"1px",background:"#1a1f2e"}}/>
+                </div>
+                <div style={{display:"grid",gap:"6px"}}>
+                  {items.map(p=>{
+                    const esPrepared=p.estado==="preparado";
+                    const tipoC=TIPO_C[p.tipoOtro]||"#6b7280";
+                    return(
+                      <div key={p.id} style={{...S.card,overflow:"hidden",opacity:esPrepared?0.6:1,borderColor:esPrepared?"#1D9E7544":"#252d40",borderLeft:`3px solid ${tipoC}`}}>
+                        <div style={{padding:"10px 14px",display:"flex",alignItems:"flex-start",gap:"10px"}}>
+                          <div style={{width:"26px",height:"26px",borderRadius:"7px",background:esPrepared?"#0c1a10":"#0f1420",border:"2px solid "+(esPrepared?"#1D9E75":"#374151"),display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:"2px"}}>
+                            {esPrepared?<span style={{color:"#1D9E75",fontSize:"15px",lineHeight:1}}>✓</span>:<span style={{fontSize:"13px",lineHeight:1}}>🏪</span>}
+                          </div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{display:"flex",gap:"4px",flexWrap:"wrap",marginBottom:"3px",alignItems:"center"}}>
+                              <span style={{background:`${tipoC}22`,color:tipoC,border:`1px solid ${tipoC}44`,padding:"1px 5px",borderRadius:"4px",fontSize:"0.6rem",fontWeight:700,flexShrink:0}}>{TIPO_L[p.tipoOtro]||p.tipoOtro||"Otro"}</span>
+                              {p.nroOrdenTN&&<span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.8rem"}}>#{p.nroOrdenTN}</span>}
+                              {p.carrier&&<span style={{color:"#9ca3af",fontSize:"0.68rem"}}>{p.carrier}</span>}
+                              {esPrepared&&<Bdg label={"✓ "+(p.armadorNombre||"")} bg="#0c1a10" t="#1D9E75"/>}
+                            </div>
+                            <div style={{color:"#e5e7eb",fontSize:"0.85rem",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.clienteNombre||p.direccion||"—"}</div>
+                            <div style={{color:"#6b7280",fontSize:"0.72rem",marginTop:"1px"}}>{p.direccion}{p.partido?" · "+p.partido:""}</div>
+                          </div>
+                          <button
+                            onClick={()=>!esPrepared&&abrirPanelArmador({...p,_isOtro:true})}
+                            disabled={esPrepared}
+                            title={esPrepared?"Ya preparado":"Asignar armador"}
+                            style={{flexShrink:0,width:"34px",height:"34px",borderRadius:"8px",display:"flex",alignItems:"center",justifyContent:"center",cursor:esPrepared?"default":"pointer",fontSize:"0.95rem",
+                              background:esPrepared?"#0c1a10":"#0f1420",
+                              border:"1px solid "+(esPrepared?"#1D9E7544":"#252d40"),
+                              color:esPrepared?"#1D9E75":"#6b7280",
+                              transition:"all .15s",opacity:esPrepared?0.5:1}}>
+                            {esPrepared?"✓":"📦"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* ── Grupo Colectas en el listado ─────────────────────────────── */}
           {(()=>{
