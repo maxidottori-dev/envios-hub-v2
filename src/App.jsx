@@ -6113,6 +6113,39 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
     }).catch(err=>console.error("Error guardando armado:",err));
   },[setColectas]);
 
+  // ── Lógica de confirmación para otros pedidos (retiro/courier/a_convenir) ──
+  const ejecutarArmadoOtro=useCallback((otro,armador,controlador)=>{
+    const ts=new Date().toISOString();
+    const hoy2=new Date().toISOString().split("T")[0];
+    setUltimoArmador(armador);
+    setResultado({ok:true,envio:{...otro,nroSeguimiento:"",direccion:otro.direccion||otro.clienteNombre||"",bultos:1},bultos:1,msg:"🏪 Otro · #"+otro.nroOrdenTN+" · "+armador.nombre+(controlador?" — ctrl: "+controlador.nombre:"")});
+    setTimeout(()=>setResultado(null),5000);
+    if(inputRef.current)inputRef.current.focus();
+    updateDoc(doc(db,"otrosPedidos",otro.id),{
+      estado:"preparado",
+      armadorId:armador.id||"",armadorNombre:armador.nombre||"",
+      controladorId:controlador?.id||"",controladorNombre:controlador?.nombre||"",
+      armadoTs:ts,
+    }).catch(err=>console.error("Error otrosPedidos:",err));
+    addDoc(collection(db,"armados"),{
+      envioId:otro.id,
+      nroSeguimiento:"",
+      nroOrdenTN:String(otro.nroOrdenTN||""),
+      clienteNombre:otro.clienteNombre||"",
+      armadorId:armador.id||"",armadorNombre:armador.nombre||"",
+      controladorId:controlador?.id||"",controladorNombre:controlador?.nombre||"",
+      ts,fecha:hoy2,
+      bultos:1,
+      logistica:otro.carrier||otro.tipoOtro||"",
+      direccion:otro.direccion||"",
+      partido:otro.partido||"",
+      esFlex:false,esOtro:true,
+      tipoOtro:otro.tipoOtro||"",
+      carrier:otro.carrier||"",
+      esEdicion:false,
+    }).catch(err=>console.error("Error armado otro:",err));
+  },[]);
+
   // ── Scan handler con scoring ──────────────────────────────────────
   const procesarScan=useCallback((nro)=>{
     const srch=nro.trim().replace(/^#/,"");if(!srch)return;
@@ -6120,6 +6153,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
     const nums=srch.replace(/\D/g,"");
     // Helper: busca contra colectas pendientes (ML, circuito separado) — SIN filtro de fecha,
     // porque Maxi puede cargar colectas para el día siguiente con anticipación.
+    const buscarOtro=()=>otrosPedidos.filter(p=>p.estado==="por_preparar"&&(String(p.nroOrdenTN)===srch||String(p.id)===srch||String(p.nroOrdenTN).includes(srch)));
     const buscarColecta=()=>colectas
       .map(c=>({c,score:scoreBusqueda(c,srch,nums)}))
       .filter(x=>x.score>0)
@@ -6134,6 +6168,14 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
         const candColecta=buscarColecta();
         if(candColecta.length>0){
           ejecutarArmadoColecta(candColecta[0].c,armadorActivo,controladorSel||null);
+          setSesionContador(p=>p+1);
+          resetArmadorTimer();
+          beepOK();
+          return;
+        }
+        const candOtro=buscarOtro();
+        if(candOtro.length>0){
+          ejecutarArmadoOtro(candOtro[0],armadorActivo,controladorSel||null);
           setSesionContador(p=>p+1);
           resetArmadorTimer();
           beepOK();
@@ -6162,8 +6204,13 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
       // Fallback: no matcheó en envíos → probar contra colectas pendientes
       const candColecta=buscarColecta();
       if(candColecta.length===0){
-        setResultado({ok:false,msg:"No encontrado: "+srch.slice(0,20)});
-        setTimeout(()=>setResultado(null),8000);return;
+        // Probar contra otros pedidos por_preparar
+        const candOtro=buscarOtro();
+        if(candOtro.length===0){
+          setResultado({ok:false,msg:"No encontrado: "+srch.slice(0,20)});
+          setTimeout(()=>setResultado(null),8000);return;
+        }
+        abrirPanelArmador({...candOtro[0],_isOtro:true});return;
       }
       if(candColecta.length===1){
         abrirPanelArmador({...candColecta[0].c,_isColecta:true});return;
@@ -6208,7 +6255,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
       setTimeout(()=>setResultado(null),5000);
       if(inputRef.current)inputRef.current.focus();
     },30000);
-  },[envios,colectas,armadorActivo,ejecutarArmado,ejecutarArmadoColecta,abrirPanelArmador,resetArmadorTimer]);
+  },[envios,colectas,otrosPedidos,armadorActivo,ejecutarArmado,ejecutarArmadoColecta,ejecutarArmadoOtro,abrirPanelArmador,resetArmadorTimer]);
 
   // ── Confirmar armado desde el panel flotante ──────────────────────
   const confirmarArmado=useCallback((armador)=>{
@@ -6221,10 +6268,12 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
     setScanPendiente(null);setModoEdicion(false);
     if(item._isColecta){
       ejecutarArmadoColecta(item,armador,ctrl);
+    } else if(item._isOtro){
+      ejecutarArmadoOtro(item,armador,ctrl);
     } else {
       ejecutarArmado(item,armador,bultos,ctrl,esEdit);
     }
-  },[scanPendiente,bultosSel,modoEdicion,controladorSel,ejecutarArmado,ejecutarArmadoColecta]);
+  },[scanPendiente,bultosSel,modoEdicion,controladorSel,ejecutarArmado,ejecutarArmadoColecta,ejecutarArmadoOtro]);
 
   useEffect(()=>{if(inputRef.current)inputRef.current.focus();},[]);
 
@@ -6358,6 +6407,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
                 <div style={{fontWeight:700,fontSize:"0.95rem",color:"#e5e7eb",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{scanPendiente.direccion}</div>
                 <div style={{fontSize:"0.75rem",color:"#6b7280",marginTop:"3px",display:"flex",gap:"8px",flexWrap:"wrap"}}>
                   {scanPendiente._isColecta&&<span style={{background:"#1a0d2e",color:"#a78bfa",border:"1px solid #a78bfa",padding:"1px 6px",borderRadius:"4px",fontWeight:700}}>📋 Colecta</span>}
+                  {scanPendiente._isOtro&&<span style={{background:"#0c1a10",color:"#1D9E75",border:"1px solid #1D9E75",padding:"1px 6px",borderRadius:"4px",fontWeight:700}}>🏪 Otro</span>}
                   {scanPendiente._isColecta&&scanPendiente.nroSeguimiento&&<span style={{color:"#7dd3fc",fontWeight:700}}>{scanPendiente.nroSeguimiento}</span>}
                   {scanPendiente.nroOrdenTN&&<span style={{color:"#7dd3fc",fontWeight:700}}>#{scanPendiente.nroOrdenTN}</span>}
                   {scanPendiente.trans&&<span style={{color:lc[scanPendiente.trans]?.color||"#9ca3af",fontWeight:700}}>{scanPendiente.trans}</span>}
@@ -6365,8 +6415,8 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
                   {scanPendiente.cobranza&&<span style={{color:"#fbbf24",fontWeight:700}}>${Number(scanPendiente.cobranza).toLocaleString("es-AR")}</span>}
                 </div>
               </div>
-              {/* Selector de bultos — no aplica a colectas (siempre 1 bulto por etiqueta) */}
-              {!scanPendiente._isColecta&&<div style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"1.1rem"}}>
+              {/* Selector de bultos — no aplica a colectas ni a otros pedidos (siempre 1 bulto) */}
+              {!scanPendiente._isColecta&&!scanPendiente._isOtro&&<div style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"1.1rem"}}>
                 <span style={{fontSize:"0.7rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",minWidth:"50px"}}>Bultos</span>
                 <button onClick={()=>setBultosSel(b=>Math.max(1,b-1))} style={{width:"38px",height:"38px",borderRadius:"8px",background:"#1a1f2e",border:"1px solid #374151",color:"#e5e7eb",fontSize:"1.3rem",cursor:"pointer"}}>−</button>
                 <span style={{fontSize:"1.8rem",fontWeight:900,color:"#e5e7eb",minWidth:"32px",textAlign:"center"}}>{bultosSel}</span>
@@ -6531,62 +6581,15 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
             </div>
           )}
 
-          {/* ── OTROS PEDIDOS: por preparar (empaquetado en TN) ── */}
-          {otrosPedidos.filter(p=>p.estado==="por_preparar").length>0&&(
-            <div style={{...S.card,padding:"0",marginBottom:"0.75rem",border:"1px solid #d9770644",overflow:"hidden"}}>
-              <div style={{padding:"0.55rem 1rem",background:"#1a1200",borderBottom:"1px solid #292000",display:"flex",alignItems:"center",gap:"10px"}}>
-                <span style={{fontWeight:800,fontSize:"0.72rem",color:"#f59e0b",textTransform:"uppercase",letterSpacing:".08em"}}>🏪 Otros pedidos — por preparar</span>
-                <span style={{background:"#78350f",color:"#fcd34d",borderRadius:"12px",padding:"1px 8px",fontSize:"0.68rem",fontWeight:700}}>{otrosPedidos.filter(p=>p.estado==="por_preparar").length}</span>
-              </div>
-              <div style={{padding:"0.5rem 0.75rem",display:"flex",flexDirection:"column",gap:"6px"}}>
-                {otrosPedidos.filter(p=>p.estado==="por_preparar").map(p=>{
-                  const TIPO_COLOR_O={retiro_deposito:"#1D9E75",courier:"#378ADD",a_convenir:"#BA7517"};
-                  const TIPO_LABEL_O={retiro_deposito:"Retiro",courier:"Courier",a_convenir:"A convenir"};
-                  const prepararOtro=async()=>{
-                    const ts=new Date().toISOString();
-                    const arm=armadorActivo||null;
-                    const ctrl=controladorSel||null;
-                    const hoy2=new Date().toISOString().split("T")[0];
-                    await updateDoc(doc(db,"otrosPedidos",p.id),{
-                      estado:"preparado",
-                      armadorId:arm?.id||"",armadorNombre:arm?.nombre||"",
-                      controladorId:ctrl?.id||"",controladorNombre:ctrl?.nombre||"",
-                      armadoTs:ts,
-                    });
-                    addDoc(collection(db,"armados"),{
-                      envioId:p.id,
-                      nroSeguimiento:"",
-                      nroOrdenTN:String(p.nroOrdenTN||""),
-                      clienteNombre:p.clienteNombre||"",
-                      armadorId:arm?.id||"",armadorNombre:arm?.nombre||"",
-                      controladorId:ctrl?.id||"",controladorNombre:ctrl?.nombre||"",
-                      ts,fecha:hoy2,
-                      bultos:1,
-                      logistica:p.carrier||p.tipoOtro||"",
-                      direccion:p.direccion||"",
-                      partido:p.partido||"",
-                      esFlex:false,esOtro:true,
-                      tipoOtro:p.tipoOtro||"",
-                      carrier:p.carrier||"",
-                      esEdicion:false,
-                    }).catch(e=>console.error("armado otro:",e));
-                  };
-                  return(
-                    <div key={p.id} style={{background:"#0f1420",borderRadius:"8px",padding:"8px 12px",borderLeft:`3px solid ${TIPO_COLOR_O[p.tipoOtro]||"#374151"}`,display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
-                      <span style={{fontWeight:700,fontSize:"0.82rem"}}>#{p.nroOrdenTN}</span>
-                      <span style={{fontSize:"0.8rem",color:"#d1d5db"}}>{p.clienteNombre}</span>
-                      <span style={{padding:"1px 6px",borderRadius:"8px",fontSize:"0.67rem",fontWeight:600,background:`${TIPO_COLOR_O[p.tipoOtro]}22`,color:TIPO_COLOR_O[p.tipoOtro]}}>{TIPO_LABEL_O[p.tipoOtro]}</span>
-                      {p.carrier&&<span style={{padding:"1px 6px",borderRadius:"6px",fontSize:"0.67rem",background:"#1a1f2e",color:"#9ca3af"}}>{p.carrier}</span>}
-                      <button onClick={prepararOtro}
-                        style={{marginLeft:"auto",padding:"3px 10px",borderRadius:"6px",background:"#1e3a5f",border:"1px solid #378ADD",color:"#93c5fd",cursor:"pointer",fontWeight:700,fontSize:"0.7rem"}}>
-                        Preparado ✓
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
+          {/* ── Indicador compacto: otros pedidos pendientes ── */}
+          {(()=>{const otrPend=otrosPedidos.filter(p=>p.estado==="por_preparar");if(otrPend.length===0)return null;return(
+            <div style={{...S.card,padding:"0.45rem 0.9rem",marginBottom:"0.5rem",border:"1px solid #d9770633",display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}}>
+              <span style={{fontSize:"0.7rem",fontWeight:800,color:"#f59e0b"}}>🏪</span>
+              <span style={{fontSize:"0.72rem",color:"#f59e0b",fontWeight:700}}>{otrPend.length} otro{otrPend.length>1?"s":""} por preparar</span>
+              <span style={{fontSize:"0.65rem",color:"#6b7280"}}>—</span>
+              {otrPend.map(p=><span key={p.id} style={{fontSize:"0.68rem",color:"#9ca3af"}}>#{p.nroOrdenTN} {p.clienteNombre}</span>)}
             </div>
-          )}
+          );})()}
 
           {/* ── BOX UNIFICADO: Registrar Armado ── */}
           <div style={{...S.card,padding:"0",marginBottom:"0.75rem",border:"2px solid #6366f133",overflow:"hidden"}}>
