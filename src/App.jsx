@@ -8637,6 +8637,14 @@ function TabSalida({envios,setEnvios,lc,sesion}){
       });
     }catch(err){console.error("Error cierre sesión:",err);}
     finally{setGuardandoCierre(false);}
+    // Notificar TN: marcar como enviado (best effort — no bloquea el cierre)
+    const conFulfillment=despachados_cierre.filter(e=>e.origen==="Tienda Nube"&&e.fulfillmentId);
+    if(conFulfillment.length>0){
+      Promise.all(conFulfillment.map(e=>
+        fetch("/api/marcar-enviado-tn",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({fulfillmentId:e.fulfillmentId})})
+          .catch(err=>console.warn("TN dispatch warn",e.fulfillmentId,err))
+      )).then(()=>console.log("TN dispatch notificado:",conFulfillment.length,"pedidos"));
+    }
     liberarLogistica();
   };
 

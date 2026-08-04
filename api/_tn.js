@@ -107,5 +107,6 @@ export function ordenAEnvio(order) {
     retiro:        null,
     observaciones: alertaSinDireccion ? "ALERTA: sin direccion o CP" : "",
     metodEnvio:    order.shipping_option || "",
+    fulfillmentId: order.fulfillments?.[0]?.id || null,
   };
 }
