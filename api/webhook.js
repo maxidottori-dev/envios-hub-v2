@@ -149,7 +149,10 @@ export default async function handler(req, res) {
       // Llegó un updated antes que el created — crear el documento
       const otro = ordenAOtroPedido(order);
       // Si ya viene empaquetado, arrancar en por_preparar
-      if (["ready_for_pickup", "packed"].includes(fulfillStatus)) otro.estado = "por_preparar";
+      const shippingStatusNew = order.shipping_status || "";
+      if (["ready_for_pickup", "packed"].includes(fulfillStatus) || shippingStatusNew === "unshipped") {
+        otro.estado = "por_preparar";
+      }
       await otroRef.set(otro);
       console.log("WEBHOOK OTRO CREATED_ON_UPDATE", order.id, otro.tipoOtro);
       return res.status(200).json({ ok: true, action: "otro_created_on_update", tipoOtro: otro.tipoOtro });
@@ -179,14 +182,20 @@ export default async function handler(req, res) {
     const update = { notasOrden: order.owner_note || "", notasCliente: order.note || "" };
 
     // Empaquetado en TN → por_preparar (solo si todavía está pendiente)
-    // Para retiro_deposito: fulfillments[0].status = "ready_for_pickup"
-    // Para courier (Envio Nube): fulfillments son strings (IDs), no objetos → usamos shipping_status = "packed"
+    // retiro_deposito: fulfillments[0].status = "ready_for_pickup"
+    // courier (Envio Nube): fulfillments son IDs (strings), no objetos
+    //   → usar shipping_status: "unshipped" = empaquetado, "unpacked" = no empaquetado
     const shippingStatus = order.shipping_status || "";
     const esEmpaquetado = ["ready_for_pickup", "packed"].includes(fulfillStatus)
-      || shippingStatus === "packed";
+      || shippingStatus === "unshipped";
     if (esEmpaquetado && otroData.estado === "pendiente") {
       update.estado = "por_preparar";
       console.log("WEBHOOK OTRO POR_PREPARAR", order.id, { fulfillStatus, shippingStatus });
+    }
+    // Si desmarcan empaquetado en TN → volver a pendiente
+    if (shippingStatus === "unpacked" && otroData.estado === "por_preparar") {
+      update.estado = "pendiente";
+      console.log("WEBHOOK OTRO VUELVE_PENDIENTE", order.id, shippingStatus);
     }
 
     // Pago actualizado desde TN

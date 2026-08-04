@@ -7775,7 +7775,7 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false}){
 
   const avanzar=async(p)=>{
     if(working)return;
-    const next=p.estado==="pendiente"?"por_preparar":p.estado==="por_preparar"?"preparado":p.estado==="preparado"?"despachado":null;
+    const next=p.estado==="por_preparar"?"preparado":p.estado==="preparado"?"despachado":null;
     if(!next)return;
     if(next==="despachado"&&p.pagoEstado==="pendiente"){alert("No se puede despachar: pedido sin pago.");return;}
     setWorking(p.id);
@@ -7847,7 +7847,7 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false}){
   );
 
   const nextLabel=(p)=>{
-    if(p.estado==="pendiente")return"→ Por preparar";
+    if(p.estado==="pendiente")return null; // solo avanza via webhook TN (empaquetado)
     if(p.estado==="por_preparar")return"Marcar preparado";
     if(p.estado==="preparado")return p.pagoEstado==="pendiente"?"🔒 Despachar":"Despachar";
     return null;
