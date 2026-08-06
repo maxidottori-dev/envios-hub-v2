@@ -6119,18 +6119,18 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
   },[setColectas]);
 
   // ── Lógica de confirmación para otros pedidos (retiro/courier/a_convenir) ──
-  const ejecutarArmadoOtro=useCallback((otro,armador,controlador)=>{
+  const ejecutarArmadoOtro=useCallback((otro,armador,controlador,bultos=1)=>{
     const ts=new Date().toISOString();
     const hoy2=new Date().toISOString().split("T")[0];
     setUltimoArmador(armador);
-    setResultado({ok:true,envio:{...otro,nroSeguimiento:"",direccion:otro.direccion||otro.clienteNombre||"",bultos:1},bultos:1,msg:"🏪 Otro · #"+otro.nroOrdenTN+" · "+armador.nombre+(controlador?" — ctrl: "+controlador.nombre:"")});
+    setResultado({ok:true,envio:{...otro,nroSeguimiento:"",direccion:otro.direccion||otro.clienteNombre||"",bultos},bultos,msg:"🏪 Otro · #"+otro.nroOrdenTN+" · "+armador.nombre+(controlador?" — ctrl: "+controlador.nombre:"")});
     setTimeout(()=>setResultado(null),5000);
     if(inputRef.current)inputRef.current.focus();
     updateDoc(doc(db,"otrosPedidos",otro.id),{
       estado:"preparado",
       armadorId:armador.id||"",armadorNombre:armador.nombre||"",
       controladorId:controlador?.id||"",controladorNombre:controlador?.nombre||"",
-      armadoTs:ts,
+      armadoTs:ts,bultos,
     }).catch(err=>console.error("Error otrosPedidos:",err));
     addDoc(collection(db,"armados"),{
       envioId:otro.id,
@@ -6140,7 +6140,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
       armadorId:armador.id||"",armadorNombre:armador.nombre||"",
       controladorId:controlador?.id||"",controladorNombre:controlador?.nombre||"",
       ts,fecha:hoy2,
-      bultos:1,
+      bultos,
       logistica:otro.carrier||otro.tipoOtro||"",
       direccion:otro.direccion||"",
       partido:otro.partido||"",
@@ -6274,7 +6274,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
     if(item._isColecta){
       ejecutarArmadoColecta(item,armador,ctrl);
     } else if(item._isOtro){
-      ejecutarArmadoOtro(item,armador,ctrl);
+      ejecutarArmadoOtro(item,armador,ctrl,bultos);
     } else {
       ejecutarArmado(item,armador,bultos,ctrl,esEdit);
     }
@@ -6420,8 +6420,8 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
                   {scanPendiente.cobranza&&<span style={{color:"#fbbf24",fontWeight:700}}>${Number(scanPendiente.cobranza).toLocaleString("es-AR")}</span>}
                 </div>
               </div>
-              {/* Selector de bultos — no aplica a colectas ni a otros pedidos (siempre 1 bulto) */}
-              {!scanPendiente._isColecta&&!scanPendiente._isOtro&&<div style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"1.1rem"}}>
+              {/* Selector de bultos — no aplica a colectas */}
+              {!scanPendiente._isColecta&&<div style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"1.1rem"}}>
                 <span style={{fontSize:"0.7rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",minWidth:"50px"}}>Bultos</span>
                 <button onClick={()=>setBultosSel(b=>Math.max(1,b-1))} style={{width:"38px",height:"38px",borderRadius:"8px",background:"#1a1f2e",border:"1px solid #374151",color:"#e5e7eb",fontSize:"1.3rem",cursor:"pointer"}}>−</button>
                 <span style={{fontSize:"1.8rem",fontWeight:900,color:"#e5e7eb",minWidth:"32px",textAlign:"center"}}>{bultosSel}</span>
