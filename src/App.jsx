@@ -7904,7 +7904,12 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false,configExpedicion=
   };
 
   const iniciarConversion=(p)=>{
-    setConvFecha("");setConvTurno("AM");setConvArmadorId("");setConvCtrlId("");setConvBultos(1);setConverting(p.id);
+    setConvFecha("");setConvTurno("AM");
+    // Pre-cargar datos del armado si el pedido ya estaba preparado
+    setConvArmadorId(p.armadorId||"");
+    setConvCtrlId(p.controladorId||"");
+    setConvBultos(p.bultos||1);
+    setConverting(p.id);
   };
 
   const confirmarConversion=async(p)=>{
@@ -7915,6 +7920,14 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false,configExpedicion=
       const armador=armadoresConfig.find(a=>a.id===convArmadorId)||null;
       const ctrl=armadoresConfig.find(a=>a.id===convCtrlId)||null;
       const nowTs=new Date().toISOString();
+      // Si el pedido ya tenía armado registrado, preservar esos datos y timestamps
+      const armadorFinal=armador
+        ?{id:armador.id,nombre:armador.nombre}
+        :p.armadorId?{id:p.armadorId,nombre:p.armadorNombre}:null;
+      const ctrlFinal=ctrl
+        ?{id:ctrl.id,nombre:ctrl.nombre}
+        :p.controladorId?{id:p.controladorId,nombre:p.controladorNombre}:null;
+      const armadoTsFinal=armadorFinal?(p.armadoTs||nowTs):null;
       const envioData={
         id:p.id,origen:"Tienda Nube",idTN:p.idTN,nroOrdenTN:p.nroOrdenTN,
         nroSeguimiento:"",linkTN:p.linkTN,linkML:"",
@@ -7925,18 +7938,18 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false,configExpedicion=
         notasOrden:p.notasOrden,notasCliente:p.notasCliente,datepickerRaw:"",
         fechaVenta:p.fechaVenta,fecha:convFecha,turno:convTurno,
         trans:"",pagoEstado:p.pagoEstado,
-        estado:armador?"preparado":"sin_asignar",
+        estado:armadorFinal?"preparado":"sin_asignar",
         importe:0,bultos:convBultos||1,cambio:null,retiro:null,
         observaciones:`Convertido de ${TIPO_LABEL[p.tipoOtro]||p.tipoOtro} #${p.nroOrdenTN}`,
         metodEnvio:p.metodEnvio,fulfillmentId:p.fulfillmentId||null,
         convertidoDesde:p.tipoOtro,
-        armadorId:armador?.id||null,
-        armadorNombre:armador?.nombre||null,
-        controladorId:ctrl?.id||null,
-        controladorNombre:ctrl?.nombre||null,
-        armadoTs:armador?nowTs:null,
-        fechaArmado:armador?nowTs.slice(0,10):null,
-        horaArmado:armador?nowTs.slice(11,16):null,
+        armadorId:armadorFinal?.id||null,
+        armadorNombre:armadorFinal?.nombre||null,
+        controladorId:ctrlFinal?.id||null,
+        controladorNombre:ctrlFinal?.nombre||null,
+        armadoTs:armadoTsFinal,
+        fechaArmado:armadoTsFinal?armadoTsFinal.slice(0,10):null,
+        horaArmado:armadoTsFinal?armadoTsFinal.slice(11,16):null,
       };
       batch.set(doc(db,"envios",p.id),envioData);
       batch.update(doc(db,"otrosPedidos",p.id),{estado:"convertido_a_ump"});
