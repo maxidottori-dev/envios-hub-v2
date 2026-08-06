@@ -7837,13 +7837,18 @@ function ConfirmPage({token}){
 // ════════════════════════════════════════════════════════════════════
 // TAB OTROS PEDIDOS — retiro_deposito / courier / a_convenir
 // ════════════════════════════════════════════════════════════════════
-function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false}){
+function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false,configExpedicion={}}){
   const [filterTipo,setFilterTipo]=useState("all");
   const [filterEstado,setFilterEstado]=useState("all");
+  const [buscar,setBuscar]=useState("");
   const [working,setWorking]=useState(null);
   const [converting,setConverting]=useState(null); // id del pedido a convertir
   const [convFecha,setConvFecha]=useState("");
   const [convTurno,setConvTurno]=useState("AM");
+  const [convArmadorId,setConvArmadorId]=useState("");
+  const [convCtrlId,setConvCtrlId]=useState("");
+  const [convBultos,setConvBultos]=useState(1);
+  const armadoresConfig=configExpedicion.armadores||[];
 
   const TIPO_LABEL={retiro_deposito:"Retiro depósito",courier:"Courier",a_convenir:"A convenir"};
   const TIPO_COLOR={retiro_deposito:"#1D9E75",courier:"#378ADD",a_convenir:"#BA7517"};
@@ -7854,9 +7859,11 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false}){
   const PAGO_LABEL={pagado:"Pagado",pendiente:"Sin pago",cuenta_corriente:"Cta. Cte."};
 
   const activos=otrosPedidos.filter(p=>!["despachado","cancelado","convertido_a_ump"].includes(p.estado));
+  const srchL=buscar.trim().toLowerCase();
   const visible=activos.filter(p=>{
     if(filterTipo!=="all"&&p.tipoOtro!==filterTipo)return false;
     if(filterEstado!=="all"&&p.estado!==filterEstado)return false;
+    if(srchL&&![p.nroOrdenTN,p.clienteNombre,p.empresa,p.carrier,p.direccion].some(v=>String(v||"").toLowerCase().includes(srchL)))return false;
     return true;
   });
 
@@ -7897,7 +7904,7 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false}){
   };
 
   const iniciarConversion=(p)=>{
-    setConvFecha("");setConvTurno("AM");setConverting(p.id);
+    setConvFecha("");setConvTurno("AM");setConvArmadorId("");setConvCtrlId("");setConvBultos(1);setConverting(p.id);
   };
 
   const confirmarConversion=async(p)=>{
@@ -7905,6 +7912,9 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false}){
     setWorking(p.id);
     try{
       const batch=writeBatch(db);
+      const armador=armadoresConfig.find(a=>a.id===convArmadorId)||null;
+      const ctrl=armadoresConfig.find(a=>a.id===convCtrlId)||null;
+      const nowTs=new Date().toISOString();
       const envioData={
         id:p.id,origen:"Tienda Nube",idTN:p.idTN,nroOrdenTN:p.nroOrdenTN,
         nroSeguimiento:"",linkTN:p.linkTN,linkML:"",
@@ -7914,11 +7924,19 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false}){
         formaPago:p.formaPago,importeOrden:p.importeOrden,cobranza:null,
         notasOrden:p.notasOrden,notasCliente:p.notasCliente,datepickerRaw:"",
         fechaVenta:p.fechaVenta,fecha:convFecha,turno:convTurno,
-        trans:"",pagoEstado:p.pagoEstado,estado:"sin_asignar",
-        importe:0,bultos:null,cambio:null,retiro:null,
+        trans:"",pagoEstado:p.pagoEstado,
+        estado:armador?"preparado":"sin_asignar",
+        importe:0,bultos:convBultos||1,cambio:null,retiro:null,
         observaciones:`Convertido de ${TIPO_LABEL[p.tipoOtro]||p.tipoOtro} #${p.nroOrdenTN}`,
         metodEnvio:p.metodEnvio,fulfillmentId:p.fulfillmentId||null,
         convertidoDesde:p.tipoOtro,
+        armadorId:armador?.id||null,
+        armadorNombre:armador?.nombre||null,
+        controladorId:ctrl?.id||null,
+        controladorNombre:ctrl?.nombre||null,
+        armadoTs:armador?nowTs:null,
+        fechaArmado:armador?nowTs.slice(0,10):null,
+        horaArmado:armador?nowTs.slice(11,16):null,
       };
       batch.set(doc(db,"envios",p.id),envioData);
       batch.update(doc(db,"otrosPedidos",p.id),{estado:"convertido_a_ump"});
@@ -7952,6 +7970,9 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false}){
 
   return(
     <div style={{padding:"1rem",maxWidth:"860px",margin:"0 auto"}}>
+      {/* Buscador */}
+      <input value={buscar} onChange={e=>setBuscar(e.target.value)} placeholder="🔍 Buscar por nro, cliente, empresa..."
+        style={{width:"100%",boxSizing:"border-box",padding:"7px 12px",borderRadius:"8px",background:"#0f1420",border:"1px solid #252d40",color:"#e5e7eb",fontSize:"0.82rem",marginBottom:"10px",outline:"none"}}/>
       {/* Stats */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"8px",marginBottom:"1rem"}}>
         {[
@@ -8039,7 +8060,7 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false}){
                   {nextLabel(p)}
                 </button>
               )}
-              {p.tipoOtro==="retiro_deposito"&&p.estado!=="despachado"&&converting!==p.id&&(
+              {(p.tipoOtro==="retiro_deposito"||p.tipoOtro==="a_convenir")&&p.estado!=="despachado"&&converting!==p.id&&(
                 <button onClick={()=>iniciarConversion(p)} disabled={!!working}
                   style={{padding:"4px 12px",borderRadius:"8px",fontSize:"0.72rem",fontWeight:700,cursor:"pointer",background:"#2e1065",border:"1px solid #7c3aed",color:"#c4b5fd",opacity:working?0.5:1}}>
                   → Convertir a UMP
@@ -8059,7 +8080,8 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false}){
             {/* Panel convertir a UMP */}
             {converting===p.id&&(
               <div style={{marginTop:"10px",padding:"10px 12px",background:"#12102a",border:"1px solid #4c1d95",borderRadius:"10px",display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}}>
-                <span style={{fontSize:"0.78rem",color:"#c4b5fd",fontWeight:600}}>Convertir a UMP — fecha entrega:</span>
+                <span style={{fontSize:"0.78rem",color:"#c4b5fd",fontWeight:600,width:"100%"}}>→ Convertir a UMP</span>
+                <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>Fecha entrega</label>
                 <input type="date" value={convFecha} onChange={e=>setConvFecha(e.target.value)}
                   style={{padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #4c1d95",color:"#e5e7eb",fontSize:"0.78rem"}}/>
                 <select value={convTurno} onChange={e=>setConvTurno(e.target.value)}
@@ -8067,8 +8089,25 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false}){
                   <option value="AM">AM</option>
                   <option value="PM">PM</option>
                 </select>
+                <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>Bultos</label>
+                <input type="number" min="1" value={convBultos} onChange={e=>setConvBultos(Number(e.target.value)||1)}
+                  style={{width:"52px",padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #4c1d95",color:"#e5e7eb",fontSize:"0.78rem"}}/>
+                {armadoresConfig.length>0&&(<>
+                  <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>Armador</label>
+                  <select value={convArmadorId} onChange={e=>setConvArmadorId(e.target.value)}
+                    style={{padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #4c1d95",color:"#e5e7eb",fontSize:"0.78rem"}}>
+                    <option value="">— sin armador —</option>
+                    {armadoresConfig.map(a=><option key={a.id} value={a.id}>{a.nombre}</option>)}
+                  </select>
+                  <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>Controlador</label>
+                  <select value={convCtrlId} onChange={e=>setConvCtrlId(e.target.value)}
+                    style={{padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #4c1d95",color:"#e5e7eb",fontSize:"0.78rem"}}>
+                    <option value="">— sin controlador —</option>
+                    {armadoresConfig.filter(a=>a.id!==convArmadorId).map(a=><option key={a.id} value={a.id}>{a.nombre}</option>)}
+                  </select>
+                </>)}
                 <button onClick={()=>confirmarConversion(p)} disabled={!!working}
-                  style={{padding:"4px 12px",borderRadius:"8px",fontSize:"0.75rem",fontWeight:700,cursor:"pointer",background:"#4c1d95",border:"none",color:"#fff"}}>
+                  style={{padding:"4px 14px",borderRadius:"8px",fontSize:"0.75rem",fontWeight:700,cursor:"pointer",background:"#4c1d95",border:"none",color:"#fff",marginLeft:"auto"}}>
                   Confirmar
                 </button>
                 <button onClick={()=>setConverting(null)}
@@ -9911,7 +9950,7 @@ export default function App(){
         {tab==="statsarmado"   &&<TabStatsArmado configExpedicion={configExpedicion} setConfigExpedicion={setConfigExpedicion} esAdmin={esAdmin}/>}
         {tab==="consultaarmado"&&<TabConsultaArmado esAdmin={esAdmin}/>}
         {tab==="salida"        &&<TabSalida envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>}
-        {tab==="otros"         &&<TabOtrosPedidos otrosPedidos={otrosPedidos} sesion={sesion} esAdmin={esAdmin}/>}
+        {tab==="otros"         &&<TabOtrosPedidos otrosPedidos={otrosPedidos} sesion={sesion} esAdmin={esAdmin} configExpedicion={configExpedicion}/>}
       </div>
     </div>
   );
