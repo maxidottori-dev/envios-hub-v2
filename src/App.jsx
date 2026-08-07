@@ -667,7 +667,8 @@ function PantallaLogin({onLogin}){
 
 function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc,envios=[],sesion=null}){
   const hoy=fechaHoy();
-  const [asig,setAsig]=useState({});
+  // Pre-cargar trans/turno/fecha desde los envíos ya asignados (evita pisar al reasignar)
+  const [asig,setAsig]=useState(()=>{const a={};borrador.forEach(e=>{if(e.trans||e.turno||e.fecha)a[e.id]={trans:e.trans||"",fecha:e.fecha||hoy,turno:e.turno||""};});return a;});
   const [modo,setModo]=useState("zona");
   const [flotanteOpen,setFlotanteOpen]=useState(true);
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
@@ -686,7 +687,7 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc,envios=
   const puedeConfirmar=incompletos.length===0&&sinPartido.length===0;
   const [confirmando,setConfirmando]=useState(false);
   const audit=mkAudit(sesion);
-  const confirmar=()=>{if(!puedeConfirmar||confirmando)return;setConfirmando(true);onConfirmar(borrador.map(e=>({...e,...getA(e.id),estado:getA(e.id).trans?"asignado":"sin_asignar",...(getA(e.id).trans&&audit?{asignadoPor:audit}:{})})));};
+  const confirmar=()=>{if(!puedeConfirmar||confirmando)return;setConfirmando(true);onConfirmar(borrador.map(e=>{const a=getA(e.id);const trans=a.trans||e.trans||"";return{...e,...a,trans,estado:trans?"asignado":"sin_asignar",...(trans&&audit?{asignadoPor:audit}:{})};}))};;
 
   // === Resumen flotante: FLEX hoy ya en sistema + borrador en curso ===
   const flexHoy=envios.filter(e=>e.origen==="ML"&&e.trans&&e.estado!=="cancelado"&&(e.fecha||e.fechaVenta||"")===hoy);
