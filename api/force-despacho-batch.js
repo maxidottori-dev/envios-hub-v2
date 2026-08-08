@@ -13,10 +13,9 @@ export default async function handler(req, res) {
   let db;
   try { db = initDb(); } catch(e) { return res.status(500).json({ error: e.message }); }
 
-  // Buscar todos los envíos con fecha < hoy, con logística asignada, sin despachar, no cancelados
-  const snap = await db.collection("envios")
-    .where("despachado", "!=", true)
-    .get();
+  // Traer todos los envíos y filtrar client-side
+  // (despachado puede no existir en docs viejos; Firestore !=true no los devuelve)
+  const snap = await db.collection("envios").get();
 
   const ahora = new Date().toISOString();
   const candidatos = snap.docs.filter(d => {
