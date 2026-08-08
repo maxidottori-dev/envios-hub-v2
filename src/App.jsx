@@ -7844,40 +7844,49 @@ function ConfirmPage({token}){
 // TAB PENDIENTES — alertas operativas para colaboradores
 // ════════════════════════════════════════════════════════════════════
 function TabPendientes({envios=[],otrosPedidos=[],esAdmin=false,configExpedicion={},setConfigExpedicion=()=>{}}){
-  const diasUmbral=configExpedicion.pendientesDias||7;
+  const cfg=configExpedicion.pendientesDiasConfig||{};
+  const diasRetiros    =cfg.retiros     ??7;
+  const diasFechaPasada=cfg.fechaPasada ??7;
+  const diasSinAsignar =cfg.sinAsignar  ??7;
+  const diasSinempaquetar=cfg.sinempaquetar??7;
+
   const [expandidos,setExpandidos]=useState({});
+  const [forzando,setForzando]=useState(null); // id del envio siendo forzado
   const toggle=(k)=>setExpandidos(p=>({...p,[k]:!p[k]}));
 
   const hoy=fechaHoy();
   const diasAtras=(n)=>{const d=new Date(hoy+"T00:00:00");d.setDate(d.getDate()-n);return d.toISOString().split("T")[0];};
-  const umbralFecha=diasAtras(diasUmbral);
   const diasDesde=(fv)=>{
     if(!fv)return 0;
     const d1=new Date(fv+"T00:00:00");const d2=new Date(hoy+"T00:00:00");
     return Math.floor((d2-d1)/(1000*60*60*24));
   };
+  const setCfgKey=(key,val)=>setConfigExpedicion(p=>({
+    ...p,pendientesDiasConfig:{...(p.pendientesDiasConfig||{}), [key]:Math.max(0,parseInt(val)||0)}
+  }));
 
   // 1. Retiros vencidos en depósito
   const retirosVencidos=otrosPedidos.filter(p=>
     p.tipoOtro==="retiro_deposito"&&
     !["archivado","cancelado","convertido_a_ump","despachado"].includes(p.estado)&&
-    (p.fechaVenta||"")<=umbralFecha
+    (p.fechaVenta||"")<=diasAtras(diasRetiros)
   );
 
-  // 2. Envíos con fecha pasada sin despachar
+  // 2. Envíos con fecha pasada sin despachar (más de N días vencidos)
   const fechaPasada=envios.filter(e=>
-    e.fecha&&e.fecha<hoy&&e.trans&&!e.despachado&&e.estado!=="cancelado"
+    e.fecha&&e.trans&&!e.despachado&&e.estado!=="cancelado"&&
+    e.fecha<=diasAtras(diasFechaPasada)
   );
 
   // 3. Sin asignar hace mucho
   const sinAsignarViejos=envios.filter(e=>
     !e.trans&&e.estado!=="cancelado"&&e.origen!=="ML"&&
-    (e.fechaVenta||e.fecha||"")<=umbralFecha
+    (e.fechaVenta||e.fecha||"")<=diasAtras(diasSinAsignar)
   );
 
   // 4. Otros pedidos sin empaquetar hace mucho (estado pendiente)
   const otrosSinEmpaquetar=otrosPedidos.filter(p=>
-    p.estado==="pendiente"&&(p.fechaVenta||"")<=umbralFecha
+    p.estado==="pendiente"&&(p.fechaVenta||"")<=diasAtras(diasSinempaquetar)
   );
 
   // 5. Devoluciones pendientes
@@ -7900,6 +7909,20 @@ function TabPendientes({envios=[],otrosPedidos=[],esAdmin=false,configExpedicion
   const totalAlertas=retirosVencidos.length+fechaPasada.length+sinAsignarViejos.length+
     otrosSinEmpaquetar.length+devoluciones.length+sinPago.length+enviadosSinPago.length;
 
+  const forzarDespacho=async(e)=>{
+    if(forzando)return;
+    if(!confirm(`¿Forzar despacho del envío #${e.nroOrdenTN||e.id.slice(-6)} (${e.clienteNombre||e.direccion})?\nSe marcará como despachado sin pasar por Tab Salida.`))return;
+    setForzando(e.id);
+    try{
+      await updateDoc(doc(db,"envios",e.id),{
+        despachado:true,
+        despachoTs:new Date().toISOString(),
+        despachado_forzado:true,
+      });
+    }catch(err){console.error("forzarDespacho",err);alert("Error al forzar despacho");}
+    setForzando(null);
+  };
+
   const S2={
     card:{background:"#0f1420",border:"1px solid #1a1f2e",borderRadius:"12px",marginBottom:"10px",overflow:"hidden"},
     header:{display:"flex",alignItems:"center",gap:"10px",padding:"12px 16px",cursor:"pointer",userSelect:"none"},
@@ -7916,15 +7939,26 @@ function TabPendientes({envios=[],otrosPedidos=[],esAdmin=false,configExpedicion
 
   const badgeRojo=(n)=>n>0?<span style={{background:"#450a0a",color:"#f87171",borderRadius:"10px",padding:"1px 8px",fontSize:"0.68rem",fontWeight:700}}>{n}</span>:<span style={{background:"#1a1f2e",color:"#4b5563",borderRadius:"10px",padding:"1px 8px",fontSize:"0.68rem",fontWeight:600}}>0</span>;
   const badgeAmbar=(n)=>n>0?<span style={{background:"#1c1500",color:"#fbbf24",borderRadius:"10px",padding:"1px 8px",fontSize:"0.68rem",fontWeight:700}}>{n}</span>:<span style={{background:"#1a1f2e",color:"#4b5563",borderRadius:"10px",padding:"1px 8px",fontSize:"0.68rem",fontWeight:600}}>0</span>;
-  const chevron=(k)=><span style={{color:"#4b5563",fontSize:"11px",marginLeft:"auto",transition:"transform .15s",display:"inline-block",transform:expandidos[k]?"rotate(180deg)":"none"}}>▼</span>;
+  const chevron=(k)=><span style={{color:"#4b5563",fontSize:"11px",transition:"transform .15s",display:"inline-block",transform:expandidos[k]?"rotate(180deg)":"none"}}>▼</span>;
 
-  const CardHeader=({id,icon,iconBg,title,subtitle,badge})=>(
+  // Input de umbral por categoría (solo admin)
+  const UmbralInput=({cfgKey,valor})=>esAdmin?(
+    <span onClick={ev=>ev.stopPropagation()} style={{display:"flex",alignItems:"center",gap:"4px",fontSize:"0.68rem",color:"#6b7280",flexShrink:0}}>
+      <input type="number" min="0" max="90" value={valor}
+        onChange={ev=>setCfgKey(cfgKey,ev.target.value)}
+        style={{width:"38px",background:"#0a0e1a",border:"1px solid #374151",borderRadius:"4px",color:"#e5e7eb",fontSize:"0.68rem",padding:"1px 4px",textAlign:"center"}}/>
+      d
+    </span>
+  ):null;
+
+  const CardHeader=({id,icon,iconBg,title,subtitle,badge,cfgKey,diasVal})=>(
     <div style={S2.header} onClick={()=>toggle(id)}>
       <div style={{...S2.icon,background:iconBg}}>{icon}</div>
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontSize:"0.88rem",fontWeight:700,color:"#e5e7eb"}}>{title}</div>
         <div style={{fontSize:"0.7rem",color:"#6b7280",marginTop:"1px"}}>{subtitle}</div>
       </div>
+      {cfgKey&&<UmbralInput cfgKey={cfgKey} valor={diasVal}/>}
       {badge}
       {chevron(id)}
     </div>
@@ -7941,22 +7975,14 @@ function TabPendientes({envios=[],otrosPedidos=[],esAdmin=false,configExpedicion
           ?<span style={{background:"#450a0a",color:"#f87171",borderRadius:"12px",padding:"2px 10px",fontSize:"0.75rem",fontWeight:700}}>{totalAlertas} alertas</span>
           :<span style={{background:"#041f14",color:"#34d399",borderRadius:"12px",padding:"2px 10px",fontSize:"0.75rem",fontWeight:700}}>✓ Sin alertas</span>
         }
-        <span style={{marginLeft:"auto",fontSize:"0.72rem",color:"#6b7280"}}>
-          Umbral: <strong style={{color:"#9ca3af"}}>{diasUmbral} días</strong>
-          {esAdmin&&<>
-            {" "}·{" "}
-            <input type="number" min="1" max="60" value={diasUmbral}
-              onChange={e=>{const v=Math.max(1,parseInt(e.target.value)||7);setConfigExpedicion(p=>({...p,pendientesDias:v}));}}
-              style={{width:"44px",background:"#0f1420",border:"1px solid #374151",borderRadius:"5px",color:"#e5e7eb",fontSize:"0.72rem",padding:"1px 5px",textAlign:"center"}}/>
-            {" "}días
-          </>}
-        </span>
+        {esAdmin&&<span style={{marginLeft:"auto",fontSize:"0.68rem",color:"#4b5563"}}>Umbrales configurables por categoría ↓</span>}
       </div>
 
       {/* 1. Retiros vencidos */}
       <div style={S2.card}>
         <CardHeader id="retiros" icon="🏪" iconBg="#1c0a0a" title="Retiros vencidos en depósito"
-          subtitle={`Sin retirar hace más de ${diasUmbral} días`} badge={badgeRojo(retirosVencidos.length)}/>
+          subtitle={`Sin retirar hace más de ${diasRetiros} días`} badge={badgeRojo(retirosVencidos.length)}
+          cfgKey="retiros" diasVal={diasRetiros}/>
         {expandidos.retiros&&<div style={S2.body}>
           {retirosVencidos.length===0?<div style={S2.empty}>Sin retiros vencidos.</div>
             :retirosVencidos.map(p=>(
@@ -7974,7 +8000,8 @@ function TabPendientes({envios=[],otrosPedidos=[],esAdmin=false,configExpedicion
       {/* 2. Fecha pasada sin despachar */}
       <div style={S2.card}>
         <CardHeader id="fechapasada" icon="📅" iconBg="#1c0a0a" title="Fecha pasada sin despachar"
-          subtitle="Asignados cuya fecha de entrega ya venció" badge={badgeRojo(fechaPasada.length)}/>
+          subtitle={`Asignados con fecha vencida hace más de ${diasFechaPasada} días`} badge={badgeRojo(fechaPasada.length)}
+          cfgKey="fechaPasada" diasVal={diasFechaPasada}/>
         {expandidos.fechapasada&&<div style={S2.body}>
           {fechaPasada.length===0?<div style={S2.empty}>Sin envíos con fecha vencida.</div>
             :fechaPasada.map(e=>(
@@ -7982,8 +8009,16 @@ function TabPendientes({envios=[],otrosPedidos=[],esAdmin=false,configExpedicion
                 <span style={S2.nro}>#{e.nroOrdenTN||e.id.slice(-6)}</span>
                 <span style={S2.nombre}>{e.clienteNombre||e.direccion}</span>
                 <span style={S2.tag("#1a1f2e","#9ca3af")}>{e.trans}</span>
-                <span style={S2.meta}>vencido: {e.fecha}</span>
+                <span style={S2.meta}>venc. {e.fecha} · hace {diasDesde(e.fecha)}d</span>
                 {e.linkTN&&<LinkTN url={e.linkTN}/>}
+                {esAdmin&&(
+                  <button
+                    onClick={()=>forzarDespacho(e)}
+                    disabled={forzando===e.id}
+                    style={{padding:"2px 8px",borderRadius:"5px",border:"none",background:"#1c0a0a",color:"#f87171",fontSize:"0.68rem",fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
+                    {forzando===e.id?"…":"Forzar despacho"}
+                  </button>
+                )}
               </div>
             ))}
         </div>}
@@ -7992,7 +8027,8 @@ function TabPendientes({envios=[],otrosPedidos=[],esAdmin=false,configExpedicion
       {/* 3. Sin asignar hace mucho */}
       <div style={S2.card}>
         <CardHeader id="sinasignar" icon="⏳" iconBg="#1c1500" title="Sin asignar logística"
-          subtitle={`Entraron hace más de ${diasUmbral} días sin logística`} badge={badgeAmbar(sinAsignarViejos.length)}/>
+          subtitle={`Entraron hace más de ${diasSinAsignar} días sin logística`} badge={badgeAmbar(sinAsignarViejos.length)}
+          cfgKey="sinAsignar" diasVal={diasSinAsignar}/>
         {expandidos.sinasignar&&<div style={S2.body}>
           {sinAsignarViejos.length===0?<div style={S2.empty}>Sin envíos sin asignar viejos.</div>
             :sinAsignarViejos.map(e=>(
@@ -8010,7 +8046,8 @@ function TabPendientes({envios=[],otrosPedidos=[],esAdmin=false,configExpedicion
       {/* 4. Otros sin empaquetar */}
       <div style={S2.card}>
         <CardHeader id="sinempaquetar" icon="📦" iconBg="#1c1500" title="Otros pedidos sin empaquetar"
-          subtitle={`TN no los empaquetó en más de ${diasUmbral} días`} badge={badgeAmbar(otrosSinEmpaquetar.length)}/>
+          subtitle={`TN no los empaquetó en más de ${diasSinempaquetar} días`} badge={badgeAmbar(otrosSinEmpaquetar.length)}
+          cfgKey="sinempaquetar" diasVal={diasSinempaquetar}/>
         {expandidos.sinempaquetar&&<div style={S2.body}>
           {otrosSinEmpaquetar.length===0?<div style={S2.empty}>Sin pedidos en espera.</div>
             :otrosSinEmpaquetar.map(p=>(
