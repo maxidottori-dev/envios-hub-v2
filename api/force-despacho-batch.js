@@ -28,8 +28,9 @@ export default async function handler(req, res) {
     );
   });
 
+  const sampleAll = snap.docs.slice(0, 3).map(d => ({ id: d.id, ...pick(d.data(), ["fecha","trans","despachado","estado"]) }));
   if (candidatos.length === 0) {
-    return res.status(200).json({ ok: true, actualizados: 0, mensaje: "Sin candidatos" });
+    return res.status(200).json({ ok: true, actualizados: 0, mensaje: "Sin candidatos", totalDocs: snap.size, hoy: HOY, sample: sampleAll });
   }
 
   // Batch de Firestore (máx 500 por batch)
