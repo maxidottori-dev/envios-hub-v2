@@ -148,10 +148,14 @@ export default async function handler(req, res) {
     if (!otroExisting.exists) {
       // Llegó un updated antes que el created — crear el documento
       const otro = ordenAOtroPedido(order);
-      // Si ya viene empaquetado, arrancar en por_preparar
+      // Si ya viene empaquetado, arrancar en en_expedicion
       const shippingStatusNew = order.shipping_status || "";
-      if (["ready_for_pickup", "packed"].includes(fulfillStatus) || shippingStatusNew === "unshipped") {
-        otro.estado = "por_preparar";
+      const fulfillStatusNew = order.fulfillments?.[0]?.status || "";
+      if (["shipped","fulfilled"].includes(fulfillStatusNew) || shippingStatusNew === "shipped") {
+        otro.estado = "enviado";
+        otro.enviadoTs = new Date().toISOString();
+      } else if (["ready_for_pickup", "packed"].includes(fulfillStatusNew) || shippingStatusNew === "unshipped") {
+        otro.estado = "en_expedicion";
       }
       await otroRef.set(otro);
       console.log("WEBHOOK OTRO CREATED_ON_UPDATE", order.id, otro.tipoOtro);
@@ -161,7 +165,7 @@ export default async function handler(req, res) {
     const otroData = otroExisting.data();
 
     // Estados terminales: no tocar
-    if (["cancelado", "despachado", "convertido_a_ump"].includes(otroData.estado)) {
+    if (["cancelado", "archivado", "despachado", "convertido_a_ump"].includes(otroData.estado)) {
       return res.status(200).json({ ok: true, skipped: "otro terminal state", estado: otroData.estado });
     }
 
@@ -172,28 +176,41 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, action: "otro_cancelled" });
     }
 
-    // TN archiva → operación cerrada
+    // TN archiva → archivado
     if (order.status === "closed") {
-      await otroRef.update({ estado: "despachado", despachadoTs: new Date().toISOString() });
-      console.log("WEBHOOK OTRO CLOSED→DESPACHADO", order.id);
-      return res.status(200).json({ ok: true, action: "otro_despachado_closed" });
+      await otroRef.update({ estado: "archivado", archivadoTs: new Date().toISOString() });
+      console.log("WEBHOOK OTRO CLOSED→ARCHIVADO", order.id);
+      return res.status(200).json({ ok: true, action: "otro_archivado" });
     }
 
     const update = { notasOrden: order.owner_note || "", notasCliente: order.note || "" };
 
-    // Empaquetado en TN → por_preparar (solo si todavía está pendiente)
+    const shippingStatus = order.shipping_status || "";
+
+    // Enviado por TN (Nube Envíos despacha) → enviado
+    // fulfillment status "shipped" o "fulfilled", o shipping_status "shipped"
+    const esEnviado = ["shipped", "fulfilled"].includes(fulfillStatus)
+      || shippingStatus === "shipped";
+    if (esEnviado && ["pendiente","en_expedicion","por_preparar","preparado"].includes(otroData.estado)) {
+      update.estado = "enviado";
+      update.enviadoTs = new Date().toISOString();
+      console.log("WEBHOOK OTRO ENVIADO", order.id, { fulfillStatus, shippingStatus });
+    }
+
+    // Empaquetado en TN → en_expedicion (solo si todavía está pendiente)
     // retiro_deposito: fulfillments[0].status = "ready_for_pickup"
     // courier (Envio Nube): fulfillments son IDs (strings), no objetos
     //   → usar shipping_status: "unshipped" = empaquetado, "unpacked" = no empaquetado
-    const shippingStatus = order.shipping_status || "";
-    const esEmpaquetado = ["ready_for_pickup", "packed"].includes(fulfillStatus)
-      || shippingStatus === "unshipped";
+    const esEmpaquetado = !esEnviado && (
+      ["ready_for_pickup", "packed"].includes(fulfillStatus)
+      || shippingStatus === "unshipped"
+    );
     if (esEmpaquetado && otroData.estado === "pendiente") {
-      update.estado = "por_preparar";
-      console.log("WEBHOOK OTRO POR_PREPARAR", order.id, { fulfillStatus, shippingStatus });
+      update.estado = "en_expedicion";
+      console.log("WEBHOOK OTRO EN_EXPEDICION", order.id, { fulfillStatus, shippingStatus });
     }
     // Si desmarcan empaquetado en TN → volver a pendiente
-    if (shippingStatus === "unpacked" && otroData.estado === "por_preparar") {
+    if (shippingStatus === "unpacked" && ["en_expedicion","por_preparar"].includes(otroData.estado)) {
       update.estado = "pendiente";
       console.log("WEBHOOK OTRO VUELVE_PENDIENTE", order.id, shippingStatus);
     }

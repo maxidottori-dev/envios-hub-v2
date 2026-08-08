@@ -6159,7 +6159,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
     const nums=srch.replace(/\D/g,"");
     // Helper: busca contra colectas pendientes (ML, circuito separado) — SIN filtro de fecha,
     // porque Maxi puede cargar colectas para el día siguiente con anticipación.
-    const buscarOtro=()=>otrosPedidos.filter(p=>p.estado==="por_preparar"&&(String(p.nroOrdenTN)===srch||String(p.id)===srch||String(p.nroOrdenTN).includes(srch)));
+    const buscarOtro=()=>otrosPedidos.filter(p=>["en_expedicion","por_preparar"].includes(p.estado)&&(String(p.nroOrdenTN)===srch||String(p.id)===srch||String(p.nroOrdenTN).includes(srch)));
     const buscarColecta=()=>colectas
       .map(c=>({c,score:scoreBusqueda(c,srch,nums)}))
       .filter(x=>x.score>0)
@@ -6522,7 +6522,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
             const pctNoFlex=deFecha.length>0?Math.round(prepNoflex/deFecha.length*100):0;
             const pctCol=colTotal>0?Math.round(colArm/colTotal*100):0;
             const hoyStr=new Date().toISOString().split("T")[0];
-            const otrPendStat=otrosPedidos.filter(p=>p.estado==="por_preparar");
+            const otrPendStat=otrosPedidos.filter(p=>["en_expedicion","por_preparar"].includes(p.estado));
             const otrPrepStat=otrosPedidos.filter(p=>p.estado==="preparado"&&p.armadoTs&&p.armadoTs.startsWith(hoyStr));
             const otrTotal=otrPendStat.length+otrPrepStat.length;
             const pctOtr=otrTotal>0?Math.round(otrPrepStat.length/otrTotal*100):0;
@@ -6816,8 +6816,10 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
             if(filTipo==="FLEX")return null;
             if(filLog!=="TODOS"&&filLog!=="__OTROS__")return null;
             const hoyStr2=new Date().toISOString().split("T")[0];
-            const otrPend=otrosPedidos.filter(p=>p.estado==="por_preparar");
-            const otrPrep=otrosPedidos.filter(p=>p.estado==="preparado"&&p.armadoTs&&p.armadoTs.startsWith(hoyStr2));
+            const bqL2=busqueda?norm(busqueda):"";
+            const otrMatch=p=>!bqL2||(norm(p.clienteNombre||"").includes(bqL2)||norm(p.direccion||"").includes(bqL2)||(p.nroOrdenTN||"").includes(bqL2)||norm((p.carrier&&p.carrier!=="Otro")?p.carrier:(p.metodEnvio||"")).includes(bqL2));
+            const otrPend=otrosPedidos.filter(p=>["en_expedicion","por_preparar"].includes(p.estado)&&otrMatch(p));
+            const otrPrep=otrosPedidos.filter(p=>p.estado==="preparado"&&p.armadoTs&&p.armadoTs.startsWith(hoyStr2)&&otrMatch(p));
             if(otrPend.length===0&&otrPrep.length===0)return null;
             const items=[...otrPend,...otrPrep];
             const TIPO_C={retiro_deposito:"#1D9E75",courier:"#378ADD",a_convenir:"#BA7517"};
@@ -6843,7 +6845,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
                             <div style={{display:"flex",gap:"4px",flexWrap:"wrap",marginBottom:"3px",alignItems:"center"}}>
                               <span style={{background:`${tipoC}22`,color:tipoC,border:`1px solid ${tipoC}44`,padding:"1px 5px",borderRadius:"4px",fontSize:"0.6rem",fontWeight:700,flexShrink:0}}>{TIPO_L[p.tipoOtro]||p.tipoOtro||"Otro"}</span>
                               {p.nroOrdenTN&&<span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.8rem"}}>#{p.nroOrdenTN}</span>}
-                              {p.carrier&&<span style={{color:"#9ca3af",fontSize:"0.68rem"}}>{p.carrier}</span>}
+                              {p.tipoOtro==="courier"&&<span style={{color:"#9ca3af",fontSize:"0.68rem"}}>{(p.carrier&&p.carrier!=="Otro")?p.carrier:(p.metodEnvio||"Courier")}</span>}
                               {esPrepared&&<Bdg label={"✓ "+(p.armadorNombre||"")} bg="#0c1a10" t="#1D9E75"/>}
                             </div>
                             <div style={{color:"#e5e7eb",fontSize:"0.85rem",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.clienteNombre||p.direccion||"—"}</div>
@@ -7854,24 +7856,29 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false,configExpedicion=
   const TIPO_LABEL={retiro_deposito:"Retiro depósito",courier:"Courier",a_convenir:"A convenir"};
   const TIPO_COLOR={retiro_deposito:"#1D9E75",courier:"#378ADD",a_convenir:"#BA7517"};
   const TIPO_BG={retiro_deposito:"#0c2a10",courier:"#0c1a40",a_convenir:"#1a1506"};
-  const ESTADO_LABEL={pendiente:"Pendiente",por_preparar:"Por preparar",preparado:"Preparado",despachado:"Despachado",cancelado:"Cancelado",convertido_a_ump:"Convertido UMP"};
-  const ESTADO_COLOR={pendiente:"#6b7280",por_preparar:"#d97706",preparado:"#7c3aed",despachado:"#059669",cancelado:"#dc2626",convertido_a_ump:"#db2777"};
+  const ESTADO_LABEL={pendiente:"Por empaquetar",por_preparar:"En expedición",en_expedicion:"En expedición",preparado:"Preparado",enviado:"Enviado",archivado:"Archivado",despachado:"Archivado",cancelado:"Cancelado",convertido_a_ump:"Convertido UMP"};
+  const ESTADO_COLOR={pendiente:"#6b7280",por_preparar:"#d97706",en_expedicion:"#d97706",preparado:"#7c3aed",enviado:"#0ea5e9",archivado:"#059669",despachado:"#059669",cancelado:"#dc2626",convertido_a_ump:"#db2777"};
   const PAGO_COLOR={pagado:"#059669",pendiente:"#dc2626",cuenta_corriente:"#7c3aed"};
   const PAGO_LABEL={pagado:"Pagado",pendiente:"Sin pago",cuenta_corriente:"Cta. Cte."};
 
-  const activos=otrosPedidos.filter(p=>!["despachado","cancelado","convertido_a_ump"].includes(p.estado));
+  const activos=otrosPedidos.filter(p=>!["archivado","despachado","cancelado","convertido_a_ump"].includes(p.estado));
   const srchL=buscar.trim().toLowerCase();
   const visible=activos.filter(p=>{
     if(filterTipo!=="all"&&p.tipoOtro!==filterTipo)return false;
-    if(filterEstado!=="all"&&p.estado!==filterEstado)return false;
-    if(srchL&&![p.nroOrdenTN,p.clienteNombre,p.empresa,p.carrier,p.direccion].some(v=>String(v||"").toLowerCase().includes(srchL)))return false;
+    if(filterEstado!=="all"){
+      // backward compat: por_preparar y en_expedicion son el mismo filtro
+      if(filterEstado==="en_expedicion"&&!["en_expedicion","por_preparar"].includes(p.estado))return false;
+      else if(filterEstado!=="en_expedicion"&&p.estado!==filterEstado)return false;
+    }
+    const carrierDisplay=(p.carrier&&p.carrier!=="Otro")?p.carrier:(p.metodEnvio||"");
+    if(srchL&&![p.nroOrdenTN,p.clienteNombre,p.empresa,carrierDisplay,p.direccion].some(v=>String(v||"").toLowerCase().includes(srchL)))return false;
     return true;
   });
 
   // Batch por carrier (solo preparados)
   const carrierGroups={};
   activos.filter(p=>p.tipoOtro==="courier"&&p.estado==="preparado").forEach(p=>{
-    const c=p.carrier||"Otro";
+    const c=(p.carrier&&p.carrier!=="Otro")?p.carrier:(p.metodEnvio||"Courier");
     if(!carrierGroups[c])carrierGroups[c]=[];
     carrierGroups[c].push(p);
   });
@@ -7879,14 +7886,22 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false,configExpedicion=
 
   const avanzar=async(p)=>{
     if(working)return;
-    const next=p.estado==="por_preparar"?"preparado":p.estado==="preparado"?"despachado":null;
+    // Manual advance solo para en_expedicion/por_preparar → preparado
+    const next=(p.estado==="en_expedicion"||p.estado==="por_preparar")?"preparado":null;
     if(!next)return;
-    if(next==="despachado"&&p.pagoEstado==="pendiente"){alert("No se puede despachar: pedido sin pago.");return;}
     setWorking(p.id);
     try{
-      const u={estado:next};
-      if(next==="despachado")u.despachadoTs=new Date().toISOString();
-      await updateDoc(doc(db,"otrosPedidos",p.id),u);
+      await updateDoc(doc(db,"otrosPedidos",p.id),{estado:next});
+    }catch(e){console.error(e);}
+    setWorking(null);
+  };
+
+  const archivar=async(p)=>{
+    if(working)return;
+    if(!confirm(`¿Archivar pedido #${p.nroOrdenTN}? Desaparecerá de la lista.`))return;
+    setWorking(p.id);
+    try{
+      await updateDoc(doc(db,"otrosPedidos",p.id),{estado:"archivado",archivadoTs:new Date().toISOString()});
     }catch(e){console.error(e);}
     setWorking(null);
   };
@@ -7897,10 +7912,10 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false,configExpedicion=
   };
 
   const despacharCarrier=async(carrier,peds)=>{
-    if(!confirm(`¿Marcar ${peds.length} pedido${peds.length>1?"s":""} de ${carrier} como despachados?`))return;
+    if(!confirm(`¿Archivar ${peds.length} pedido${peds.length>1?"s":""} de ${carrier}? Se marcarán como archivados.`))return;
     const ts=new Date().toISOString();
     const batch=writeBatch(db);
-    peds.forEach(p=>batch.update(doc(db,"otrosPedidos",p.id),{estado:"despachado",despachadoTs:ts}));
+    peds.forEach(p=>batch.update(doc(db,"otrosPedidos",p.id),{estado:"archivado",archivadoTs:ts}));
     await batch.commit();
   };
 
@@ -7975,12 +7990,11 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false,configExpedicion=
   );
 
   const nextLabel=(p)=>{
-    if(p.estado==="pendiente")return null; // solo avanza via webhook TN (empaquetado)
-    if(p.estado==="por_preparar")return"Marcar preparado";
-    if(p.estado==="preparado")return p.pagoEstado==="pendiente"?"🔒 Despachar":"Despachar";
+    // en_expedicion/por_preparar → preparado (avance manual si Tab Expedición no lo hizo)
+    if(p.estado==="en_expedicion"||p.estado==="por_preparar")return"Marcar preparado";
     return null;
   };
-  const nextIsPrimary=(p)=>p.estado==="preparado"&&p.pagoEstado!=="pendiente";
+  const nextIsPrimary=()=>false;
 
   return(
     <div style={{padding:"1rem",maxWidth:"860px",margin:"0 auto"}}>
@@ -7991,7 +8005,7 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false,configExpedicion=
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"8px",marginBottom:"1rem"}}>
         {[
           {label:"Activos",val:activos.length,color:"#6b7280"},
-          {label:"Por preparar",val:activos.filter(p=>p.estado==="por_preparar").length,color:"#d97706"},
+          {label:"En expedición",val:activos.filter(p=>p.estado==="en_expedicion"||p.estado==="por_preparar").length,color:"#d97706"},
           {label:"Preparados",val:activos.filter(p=>p.estado==="preparado").length,color:"#7c3aed"},
           {label:"Sin pago",val:activos.filter(p=>p.pagoEstado==="pendiente").length,color:"#dc2626"},
         ].map(s=>(
@@ -8015,9 +8029,10 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false,configExpedicion=
       <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"1rem",alignItems:"center"}}>
         <span style={{fontSize:"0.7rem",color:"#6b7280",fontWeight:600,textTransform:"uppercase",letterSpacing:".05em"}}>Estado</span>
         {btnFiltro("Todos",filterEstado==="all",()=>setFilterEstado("all"),"#9ca3af")}
-        {btnFiltro("Pendiente",filterEstado==="pendiente",()=>setFilterEstado("pendiente"),"#6b7280")}
-        {btnFiltro("Por preparar",filterEstado==="por_preparar",()=>setFilterEstado("por_preparar"),"#d97706")}
+        {btnFiltro("Por empaquetar",filterEstado==="pendiente",()=>setFilterEstado("pendiente"),"#6b7280")}
+        {btnFiltro("En expedición",filterEstado==="en_expedicion",()=>setFilterEstado("en_expedicion"),"#d97706")}
         {btnFiltro("Preparado",filterEstado==="preparado",()=>setFilterEstado("preparado"),"#7c3aed")}
+        {btnFiltro("Enviado",filterEstado==="enviado",()=>setFilterEstado("enviado"),"#0ea5e9")}
       </div>
 
       {/* Batch bar couriers preparados */}
@@ -8043,7 +8058,7 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false,configExpedicion=
               <span style={{fontWeight:700,fontSize:"0.9rem"}}>#{p.nroOrdenTN}</span>
               <span style={{fontWeight:600,fontSize:"0.88rem",color:"#e5e7eb"}}>{p.clienteNombre}</span>
               {badgeTipo(p.tipoOtro)}
-              {p.carrier&&<span style={{padding:"2px 7px",borderRadius:"8px",fontSize:"0.68rem",background:"#1a1f2e",color:"#9ca3af",border:"1px solid #374151"}}>{p.carrier}</span>}
+              {p.tipoOtro==="courier"&&<span style={{padding:"2px 7px",borderRadius:"8px",fontSize:"0.68rem",background:"#1a1f2e",color:"#9ca3af",border:"1px solid #374151"}}>{(p.carrier&&p.carrier!=="Otro")?p.carrier:(p.metodEnvio||"Courier")}</span>}
               {p.empresa&&<span style={{padding:"2px 7px",borderRadius:"8px",fontSize:"0.68rem",background:"#1a1f2e",color:"#9ca3af",border:"1px solid #374151"}}>{p.empresa}</span>}
               {badgeEstado(p.estado)}
               {badgePago(p.pagoEstado)}
@@ -8074,10 +8089,16 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false,configExpedicion=
                   {nextLabel(p)}
                 </button>
               )}
-              {(p.tipoOtro==="retiro_deposito"||p.tipoOtro==="a_convenir")&&p.estado!=="despachado"&&converting!==p.id&&(
+              {(p.tipoOtro==="retiro_deposito"||p.tipoOtro==="a_convenir")&&!["archivado","cancelado","enviado"].includes(p.estado)&&converting!==p.id&&(
                 <button onClick={()=>iniciarConversion(p)} disabled={!!working}
                   style={{padding:"4px 12px",borderRadius:"8px",fontSize:"0.72rem",fontWeight:700,cursor:"pointer",background:"#2e1065",border:"1px solid #7c3aed",color:"#c4b5fd",opacity:working?0.5:1}}>
                   → Convertir a UMP
+                </button>
+              )}
+              {!["archivado","cancelado","enviado","convertido_a_ump"].includes(p.estado)&&(
+                <button onClick={()=>archivar(p)} disabled={!!working}
+                  style={{padding:"4px 10px",borderRadius:"8px",fontSize:"0.72rem",fontWeight:600,cursor:"pointer",background:"transparent",border:"1px solid #374151",color:"#6b7280",opacity:working?0.5:1}}>
+                  Archivar
                 </button>
               )}
               {p.estado==="pendiente"&&(
@@ -9447,7 +9468,7 @@ export default function App(){
   const [otrosPedidos,setOtrosPedidos]=useState([]);
   useEffect(()=>{
     // Solo activos (excluye despachado/cancelado/convertido) para no cargar histórico
-    const q=query(collection(db,"otrosPedidos"),where("estado","in",["pendiente","por_preparar","preparado"]));
+    const q=query(collection(db,"otrosPedidos"),where("estado","in",["pendiente","por_preparar","en_expedicion","preparado","enviado"]));
     const unsub=onSnapshot(q,snap=>{
       const docs=snap.docs.map(d=>({...d.data(),id:d.id}));
       docs.sort((a,b)=>(b.fechaVenta||"").localeCompare(a.fechaVenta||""));

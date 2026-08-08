@@ -59,12 +59,17 @@ export function clasificarOtro(shipping_option) {
   if (s.includes("A CONVENIR") || s.includes("CONVENIR")) {
     return { tipoOtro: "a_convenir", carrier: null };
   }
-  // courier — detectar transportista
-  let carrier = "Otro";
-  if      (s.includes("OCA"))                                              carrier = "OCA";
-  else if (s.includes("ANDREANI"))                                          carrier = "Andreani";
+  // courier — detectar transportista; fallback = nombre real del método de envío
+  let carrier = null;
+  if      (s.includes("OCA"))                                                        carrier = "OCA";
+  else if (s.includes("ANDREANI"))                                                    carrier = "Andreani";
   else if (s.includes("RÁPIDA") || s.includes("RAPIDA") || s.includes("EPICK") || s.includes("E-PICK")) carrier = "E-pick";
-  else if (s.includes("CORREO"))                                            carrier = "Correo Arg.";
+  else if (s.includes("CORREO"))                                                      carrier = "Correo Arg.";
+  else if (s.includes("VIA CARGO") || s.includes("VIACARGO"))                        carrier = "Via Cargo";
+  else if (s.includes("URBANO"))                                                      carrier = "Urbano";
+  else if (s.includes("LIQEN"))                                                       carrier = "Liqen";
+  // Si no se detectó, usar el nombre del método de envío directamente (sin "Otro")
+  if (!carrier) carrier = shipping_option || "Courier";
   return { tipoOtro: "courier", carrier };
 }
 
