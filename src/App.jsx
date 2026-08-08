@@ -59,6 +59,7 @@ const FEATURES=[
   {key:"tab_consultaarmado", grupo:"tabs",    label:"Consulta Armado",   desc:"Consultar pedidos armados por rango de fecha; busca por nro de seguimiento, orden, venta, pack id, dirección, usuario o nombre"},
   {key:"tab_salida",      grupo:"tabs",    label:"Salida",            desc:"Escanear pedidos al entregarlos a la logística: despacho controlado por logística"},
   {key:"tab_usuarios",    grupo:"tabs",    label:"Usuarios",          desc:"Administrar usuarios del sistema, sus roles, contraseñas y permisos"},
+  {key:"tab_pendientes",  grupo:"tabs",    label:"Pendientes",         desc:"Alertas operativas: retiros vencidos, fechas pasadas, devoluciones y pedidos sin pago"},
   // ── Acciones ─────────────────────────────────────────────────────
   {key:"accion_cargaexcel",   grupo:"acciones", label:"Cargar Excel",       desc:"Importar envíos desde un archivo Excel con fecha de entrega seleccionable"},
   {key:"accion_asignartN",    grupo:"acciones", label:"Asignar TN",         desc:"Asignar logística a pedidos de Tienda Nube que aún no tienen transportista"},
@@ -7840,6 +7841,252 @@ function ConfirmPage({token}){
 // ════════════════════════════════════════════════════════════════════
 // TAB OTROS PEDIDOS — retiro_deposito / courier / a_convenir
 // ════════════════════════════════════════════════════════════════════
+// TAB PENDIENTES — alertas operativas para colaboradores
+// ════════════════════════════════════════════════════════════════════
+function TabPendientes({envios=[],otrosPedidos=[],esAdmin=false,configExpedicion={},setConfigExpedicion=()=>{}}){
+  const diasUmbral=configExpedicion.pendientesDias||7;
+  const [expandidos,setExpandidos]=useState({});
+  const toggle=(k)=>setExpandidos(p=>({...p,[k]:!p[k]}));
+
+  const hoy=fechaHoy();
+  const diasAtras=(n)=>{const d=new Date(hoy+"T00:00:00");d.setDate(d.getDate()-n);return d.toISOString().split("T")[0];};
+  const umbralFecha=diasAtras(diasUmbral);
+  const diasDesde=(fv)=>{
+    if(!fv)return 0;
+    const d1=new Date(fv+"T00:00:00");const d2=new Date(hoy+"T00:00:00");
+    return Math.floor((d2-d1)/(1000*60*60*24));
+  };
+
+  // 1. Retiros vencidos en depósito
+  const retirosVencidos=otrosPedidos.filter(p=>
+    p.tipoOtro==="retiro_deposito"&&
+    !["archivado","cancelado","convertido_a_ump","despachado"].includes(p.estado)&&
+    (p.fechaVenta||"")<=umbralFecha
+  );
+
+  // 2. Envíos con fecha pasada sin despachar
+  const fechaPasada=envios.filter(e=>
+    e.fecha&&e.fecha<hoy&&e.trans&&!e.despachado&&e.estado!=="cancelado"
+  );
+
+  // 3. Sin asignar hace mucho
+  const sinAsignarViejos=envios.filter(e=>
+    !e.trans&&e.estado!=="cancelado"&&e.origen!=="ML"&&
+    (e.fechaVenta||e.fecha||"")<=umbralFecha
+  );
+
+  // 4. Otros pedidos sin empaquetar hace mucho (estado pendiente)
+  const otrosSinEmpaquetar=otrosPedidos.filter(p=>
+    p.estado==="pendiente"&&(p.fechaVenta||"")<=umbralFecha
+  );
+
+  // 5. Devoluciones pendientes
+  const devoluciones=envios.filter(e=>e.devolucionPendiente===true);
+
+  // 6. Sin pago (preparados/asignados)
+  const sinPagoEnvios=envios.filter(e=>
+    e.pagoEstado==="pendiente"&&e.trans&&!e.despachado&&e.estado!=="cancelado"
+  );
+  const sinPagoOtros=otrosPedidos.filter(p=>
+    p.pagoEstado==="pendiente"&&["en_expedicion","por_preparar","preparado"].includes(p.estado)
+  );
+  const sinPago=[...sinPagoEnvios,...sinPagoOtros.map(p=>({...p,_isOtro:true}))];
+
+  // 7. Enviados sin pago (otrosPedidos en estado enviado con deuda)
+  const enviadosSinPago=otrosPedidos.filter(p=>
+    p.estado==="enviado"&&p.pagoEstado==="pendiente"
+  );
+
+  const totalAlertas=retirosVencidos.length+fechaPasada.length+sinAsignarViejos.length+
+    otrosSinEmpaquetar.length+devoluciones.length+sinPago.length+enviadosSinPago.length;
+
+  const S2={
+    card:{background:"#0f1420",border:"1px solid #1a1f2e",borderRadius:"12px",marginBottom:"10px",overflow:"hidden"},
+    header:{display:"flex",alignItems:"center",gap:"10px",padding:"12px 16px",cursor:"pointer",userSelect:"none"},
+    icon:{width:"32px",height:"32px",borderRadius:"8px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:"15px"},
+    body:{borderTop:"1px solid #1a1f2e"},
+    row:{display:"flex",alignItems:"center",gap:"8px",padding:"9px 16px",borderBottom:"1px solid #0f1420",flexWrap:"wrap"},
+    nro:{fontWeight:700,fontSize:"0.82rem",color:"#7dd3fc",whiteSpace:"nowrap"},
+    nombre:{flex:1,fontSize:"0.8rem",color:"#e5e7eb",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0},
+    meta:{fontSize:"0.72rem",color:"#6b7280",whiteSpace:"nowrap"},
+    tag:(bg,c)=>({padding:"2px 7px",borderRadius:"4px",fontSize:"0.68rem",fontWeight:600,background:bg,color:c,whiteSpace:"nowrap"}),
+    link:{fontSize:"0.7rem",color:"#6b7280",textDecoration:"none",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:"2px"},
+    empty:{padding:"12px 16px",fontSize:"0.78rem",color:"#374151",fontStyle:"italic"},
+  };
+
+  const badgeRojo=(n)=>n>0?<span style={{background:"#450a0a",color:"#f87171",borderRadius:"10px",padding:"1px 8px",fontSize:"0.68rem",fontWeight:700}}>{n}</span>:<span style={{background:"#1a1f2e",color:"#4b5563",borderRadius:"10px",padding:"1px 8px",fontSize:"0.68rem",fontWeight:600}}>0</span>;
+  const badgeAmbar=(n)=>n>0?<span style={{background:"#1c1500",color:"#fbbf24",borderRadius:"10px",padding:"1px 8px",fontSize:"0.68rem",fontWeight:700}}>{n}</span>:<span style={{background:"#1a1f2e",color:"#4b5563",borderRadius:"10px",padding:"1px 8px",fontSize:"0.68rem",fontWeight:600}}>0</span>;
+  const chevron=(k)=><span style={{color:"#4b5563",fontSize:"11px",marginLeft:"auto",transition:"transform .15s",display:"inline-block",transform:expandidos[k]?"rotate(180deg)":"none"}}>▼</span>;
+
+  const CardHeader=({id,icon,iconBg,title,subtitle,badge})=>(
+    <div style={S2.header} onClick={()=>toggle(id)}>
+      <div style={{...S2.icon,background:iconBg}}>{icon}</div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:"0.88rem",fontWeight:700,color:"#e5e7eb"}}>{title}</div>
+        <div style={{fontSize:"0.7rem",color:"#6b7280",marginTop:"1px"}}>{subtitle}</div>
+      </div>
+      {badge}
+      {chevron(id)}
+    </div>
+  );
+
+  const LinkTN=({url})=>url?<a href={url} target="_blank" rel="noreferrer" style={S2.link}>TN ↗</a>:null;
+
+  return(
+    <div style={{padding:"1rem",maxWidth:"860px",margin:"0 auto"}}>
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"1rem",flexWrap:"wrap"}}>
+        <span style={{fontWeight:800,fontSize:"1rem",color:"#e5e7eb"}}>⚠️ Pendientes</span>
+        {totalAlertas>0
+          ?<span style={{background:"#450a0a",color:"#f87171",borderRadius:"12px",padding:"2px 10px",fontSize:"0.75rem",fontWeight:700}}>{totalAlertas} alertas</span>
+          :<span style={{background:"#041f14",color:"#34d399",borderRadius:"12px",padding:"2px 10px",fontSize:"0.75rem",fontWeight:700}}>✓ Sin alertas</span>
+        }
+        <span style={{marginLeft:"auto",fontSize:"0.72rem",color:"#6b7280"}}>
+          Umbral: <strong style={{color:"#9ca3af"}}>{diasUmbral} días</strong>
+          {esAdmin&&<>
+            {" "}·{" "}
+            <input type="number" min="1" max="60" value={diasUmbral}
+              onChange={e=>{const v=Math.max(1,parseInt(e.target.value)||7);setConfigExpedicion(p=>({...p,pendientesDias:v}));}}
+              style={{width:"44px",background:"#0f1420",border:"1px solid #374151",borderRadius:"5px",color:"#e5e7eb",fontSize:"0.72rem",padding:"1px 5px",textAlign:"center"}}/>
+            {" "}días
+          </>}
+        </span>
+      </div>
+
+      {/* 1. Retiros vencidos */}
+      <div style={S2.card}>
+        <CardHeader id="retiros" icon="🏪" iconBg="#1c0a0a" title="Retiros vencidos en depósito"
+          subtitle={`Sin retirar hace más de ${diasUmbral} días`} badge={badgeRojo(retirosVencidos.length)}/>
+        {expandidos.retiros&&<div style={S2.body}>
+          {retirosVencidos.length===0?<div style={S2.empty}>Sin retiros vencidos.</div>
+            :retirosVencidos.map(p=>(
+              <div key={p.id} style={S2.row}>
+                <span style={S2.nro}>#{p.nroOrdenTN}</span>
+                <span style={S2.nombre}>{p.clienteNombre}</span>
+                <span style={S2.tag(p.pagoEstado==="pagado"?"#041f14":"#1c0505",p.pagoEstado==="pagado"?"#34d399":"#f87171")}>{p.pagoEstado==="pagado"?"Pagado":"Sin pago"}</span>
+                <span style={S2.meta}>hace {diasDesde(p.fechaVenta)}d</span>
+                <LinkTN url={p.linkTN}/>
+              </div>
+            ))}
+        </div>}
+      </div>
+
+      {/* 2. Fecha pasada sin despachar */}
+      <div style={S2.card}>
+        <CardHeader id="fechapasada" icon="📅" iconBg="#1c0a0a" title="Fecha pasada sin despachar"
+          subtitle="Asignados cuya fecha de entrega ya venció" badge={badgeRojo(fechaPasada.length)}/>
+        {expandidos.fechapasada&&<div style={S2.body}>
+          {fechaPasada.length===0?<div style={S2.empty}>Sin envíos con fecha vencida.</div>
+            :fechaPasada.map(e=>(
+              <div key={e.id} style={S2.row}>
+                <span style={S2.nro}>#{e.nroOrdenTN||e.id.slice(-6)}</span>
+                <span style={S2.nombre}>{e.clienteNombre||e.direccion}</span>
+                <span style={S2.tag("#1a1f2e","#9ca3af")}>{e.trans}</span>
+                <span style={S2.meta}>vencido: {e.fecha}</span>
+                {e.linkTN&&<LinkTN url={e.linkTN}/>}
+              </div>
+            ))}
+        </div>}
+      </div>
+
+      {/* 3. Sin asignar hace mucho */}
+      <div style={S2.card}>
+        <CardHeader id="sinasignar" icon="⏳" iconBg="#1c1500" title="Sin asignar logística"
+          subtitle={`Entraron hace más de ${diasUmbral} días sin logística`} badge={badgeAmbar(sinAsignarViejos.length)}/>
+        {expandidos.sinasignar&&<div style={S2.body}>
+          {sinAsignarViejos.length===0?<div style={S2.empty}>Sin envíos sin asignar viejos.</div>
+            :sinAsignarViejos.map(e=>(
+              <div key={e.id} style={S2.row}>
+                <span style={S2.nro}>#{e.nroOrdenTN||e.id.slice(-6)}</span>
+                <span style={S2.nombre}>{e.clienteNombre||e.direccion}</span>
+                <span style={S2.tag("#1a1f2e","#9ca3af")}>{e.origen}</span>
+                <span style={S2.meta}>hace {diasDesde(e.fechaVenta||e.fecha)}d</span>
+                {e.linkTN&&<LinkTN url={e.linkTN}/>}
+              </div>
+            ))}
+        </div>}
+      </div>
+
+      {/* 4. Otros sin empaquetar */}
+      <div style={S2.card}>
+        <CardHeader id="sinempaquetar" icon="📦" iconBg="#1c1500" title="Otros pedidos sin empaquetar"
+          subtitle={`TN no los empaquetó en más de ${diasUmbral} días`} badge={badgeAmbar(otrosSinEmpaquetar.length)}/>
+        {expandidos.sinempaquetar&&<div style={S2.body}>
+          {otrosSinEmpaquetar.length===0?<div style={S2.empty}>Sin pedidos en espera.</div>
+            :otrosSinEmpaquetar.map(p=>(
+              <div key={p.id} style={S2.row}>
+                <span style={S2.nro}>#{p.nroOrdenTN}</span>
+                <span style={S2.nombre}>{p.clienteNombre}</span>
+                <span style={S2.tag("#1a1f2e","#9ca3af")}>{p.tipoOtro==="retiro_deposito"?"Retiro":p.tipoOtro==="a_convenir"?"A convenir":"Courier"}</span>
+                <span style={S2.meta}>hace {diasDesde(p.fechaVenta)}d</span>
+                <LinkTN url={p.linkTN}/>
+              </div>
+            ))}
+        </div>}
+      </div>
+
+      {/* 5. Devoluciones pendientes */}
+      <div style={S2.card}>
+        <CardHeader id="devoluciones" icon="↩" iconBg="#1c0a0a" title="Devoluciones pendientes"
+          subtitle="Cancelados post-despacho sin registrar devolución" badge={badgeRojo(devoluciones.length)}/>
+        {expandidos.devoluciones&&<div style={S2.body}>
+          {devoluciones.length===0?<div style={S2.empty}>Sin devoluciones pendientes.</div>
+            :devoluciones.map(e=>(
+              <div key={e.id} style={S2.row}>
+                <span style={S2.nro}>#{e.nroOrdenTN||e.id.slice(-6)}</span>
+                <span style={S2.nombre}>{e.clienteNombre||e.direccion}</span>
+                <span style={S2.tag("#1a1f2e","#9ca3af")}>{e.trans}</span>
+                <span style={S2.meta}>{e.despachoTs?e.despachoTs.slice(0,10):""}</span>
+                {e.linkTN&&<LinkTN url={e.linkTN}/>}
+              </div>
+            ))}
+        </div>}
+      </div>
+
+      {/* 6. Sin pago (preparados/asignados) */}
+      <div style={S2.card}>
+        <CardHeader id="sinpago" icon="💸" iconBg="#1c1500" title="Sin pago — preparados/asignados"
+          subtitle="Listos para despachar pero sin pago confirmado" badge={badgeAmbar(sinPago.length)}/>
+        {expandidos.sinpago&&<div style={S2.body}>
+          {sinPago.length===0?<div style={S2.empty}>Sin pedidos con pago pendiente.</div>
+            :sinPago.map(e=>(
+              <div key={e.id} style={S2.row}>
+                <span style={S2.nro}>#{e.nroOrdenTN||e.id.slice(-6)}</span>
+                <span style={S2.nombre}>{e.clienteNombre||e.direccion}</span>
+                {e._isOtro
+                  ?<span style={S2.tag("#0c1a40","#7dd3fc")}>Otro</span>
+                  :<span style={S2.tag("#1a1f2e","#9ca3af")}>{e.trans}</span>
+                }
+                {e.importeOrden>0&&<span style={S2.meta}>${Number(e.importeOrden||e.importe||0).toLocaleString("es-AR")}</span>}
+                {e.linkTN&&<LinkTN url={e.linkTN}/>}
+              </div>
+            ))}
+        </div>}
+      </div>
+
+      {/* 7. Enviados sin pago */}
+      <div style={S2.card}>
+        <CardHeader id="enviadossinpago" icon="🚚" iconBg="#0c1a40" title="Enviados sin pago"
+          subtitle="Ya despachados por TN pero falta cobrar" badge={badgeAmbar(enviadosSinPago.length)}/>
+        {expandidos.enviadossinpago&&<div style={S2.body}>
+          {enviadosSinPago.length===0?<div style={S2.empty}>Sin enviados con pago pendiente.</div>
+            :enviadosSinPago.map(p=>(
+              <div key={p.id} style={S2.row}>
+                <span style={S2.nro}>#{p.nroOrdenTN}</span>
+                <span style={S2.nombre}>{p.clienteNombre}</span>
+                <span style={S2.tag("#1a1f2e","#9ca3af")}>{(p.carrier&&p.carrier!=="Otro")?p.carrier:(p.metodEnvio||"Courier")}</span>
+                {p.importeOrden>0&&<span style={S2.meta}>${Number(p.importeOrden).toLocaleString("es-AR")}</span>}
+                <LinkTN url={p.linkTN}/>
+              </div>
+            ))}
+        </div>}
+      </div>
+
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
 function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false,configExpedicion={}}){
   const [filterTipo,setFilterTipo]=useState("all");
   const [filterEstado,setFilterEstado]=useState("all");
@@ -9723,7 +9970,7 @@ export default function App(){
     imprimir:"tab_despacho",manual:"tab_manual",tarifas:"tab_tarifas",
     informe:"tab_informe",liquidacion:"tab_cobranzaslog",
     ctasctes:"tab_ctasctes",
-    localidades:"tab_localidades",expedicion:"tab_expedicion",statsarmado:"tab_statsarmado",consultaarmado:"tab_consultaarmado",salida:"tab_salida",usuarios:"tab_usuarios",
+    localidades:"tab_localidades",expedicion:"tab_expedicion",statsarmado:"tab_statsarmado",consultaarmado:"tab_consultaarmado",salida:"tab_salida",usuarios:"tab_usuarios",pendientes:"tab_pendientes",
   };
   const TABS=[
     {id:"tablero",l:"📊 Tablero"},
@@ -9741,6 +9988,7 @@ export default function App(){
     {id:"statsarmado",l:"📊 Stats Armado"},
     {id:"consultaarmado",l:"🔍 Consulta Armado"},
     {id:"salida",l:"🚚 Salida"},
+    {id:"pendientes",l:"⚠️ Pendientes"},
     {id:"otros",l:"🏪 Otros Pedidos"},
     {id:"usuarios",l:"Usuarios"},
   ].filter(t=>{
@@ -9985,6 +10233,7 @@ export default function App(){
         {tab==="statsarmado"   &&<TabStatsArmado configExpedicion={configExpedicion} setConfigExpedicion={setConfigExpedicion} esAdmin={esAdmin}/>}
         {tab==="consultaarmado"&&<TabConsultaArmado esAdmin={esAdmin}/>}
         {tab==="salida"        &&<TabSalida envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>}
+        {tab==="pendientes"    &&<TabPendientes envios={envios} otrosPedidos={otrosPedidos} esAdmin={esAdmin} configExpedicion={configExpedicion} setConfigExpedicion={setConfigExpedicion}/>}
         {tab==="otros"         &&<TabOtrosPedidos otrosPedidos={otrosPedidos} sesion={sesion} esAdmin={esAdmin} configExpedicion={configExpedicion}/>}
       </div>
     </div>
