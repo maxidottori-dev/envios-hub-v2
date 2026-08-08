@@ -5,7 +5,7 @@ import { initDb } from "./_firebase.js";
 const HOY = new Date().toISOString().split("T")[0]; // "2026-08-08"
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Use POST" });
+  if (!["GET","POST"].includes(req.method)) return res.status(405).json({ error: "Use GET or POST" });
   if (req.query.confirm !== "SI_FORZAR_DESPACHO") {
     return res.status(400).json({ error: "Falta ?confirm=SI_FORZAR_DESPACHO" });
   }
