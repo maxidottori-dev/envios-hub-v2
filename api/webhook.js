@@ -164,8 +164,23 @@ export default async function handler(req, res) {
 
     const otroData = otroExisting.data();
 
+    // Convertido a UMP: redirigir actualización de pago al doc de envios (mismo ID)
+    if (otroData.estado === "convertido_a_ump") {
+      const envioRef = db.collection("envios").doc(String(order.id));
+      const envioSnap = await envioRef.get();
+      if (envioSnap.exists && order.payment_status === "paid") {
+        const envioData = envioSnap.data();
+        if (envioData.pagoEstado !== "pagado" && envioData.pagoEstado !== "cuenta_corriente") {
+          await envioRef.update({ pagoEstado: "pagado" });
+          console.log("WEBHOOK OTRO→UMP PAGO ACTUALIZADO", order.id);
+          return res.status(200).json({ ok: true, action: "ump_pago_actualizado" });
+        }
+      }
+      return res.status(200).json({ ok: true, skipped: "convertido_a_ump", envioExists: envioSnap.exists });
+    }
+
     // Estados terminales: no tocar
-    if (["cancelado", "archivado", "despachado", "convertido_a_ump"].includes(otroData.estado)) {
+    if (["cancelado", "archivado", "despachado"].includes(otroData.estado)) {
       return res.status(200).json({ ok: true, skipped: "otro terminal state", estado: otroData.estado });
     }
 
