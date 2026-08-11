@@ -8135,6 +8135,9 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false,configExpedicion=
   const [convArmadorId,setConvArmadorId]=useState("");
   const [convCtrlId,setConvCtrlId]=useState("");
   const [convBultos,setConvBultos]=useState(1);
+  const [convDireccion,setConvDireccion]=useState("");
+  const [convPartido,setConvPartido]=useState("");
+  const [convCp,setConvCp]=useState("");
   const armadoresConfig=configExpedicion.armadores||[];
 
   const TIPO_LABEL={retiro_deposito:"Retiro depósito",courier:"Courier",a_convenir:"A convenir"};
@@ -8205,10 +8208,12 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false,configExpedicion=
 
   const iniciarConversion=(p)=>{
     setConvFecha("");setConvTurno("AM");
-    // Pre-cargar datos del armado si el pedido ya estaba preparado
     setConvArmadorId(p.armadorId||"");
     setConvCtrlId(p.controladorId||"");
     setConvBultos(p.bultos||1);
+    setConvDireccion(p.direccion||"");
+    setConvPartido(p.partido||"");
+    setConvCp(p.cp||"");
     setConverting(p.id);
   };
 
@@ -8220,20 +8225,24 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false,configExpedicion=
       const armador=armadoresConfig.find(a=>a.id===convArmadorId)||null;
       const ctrl=armadoresConfig.find(a=>a.id===convCtrlId)||null;
       const nowTs=new Date().toISOString();
-      // Si el pedido ya tenía armado registrado, preservar esos datos y timestamps
+      // Armado: si se eligió uno nuevo usarlo; si no, preservar el existente del pedido
       const armadorFinal=armador
         ?{id:armador.id,nombre:armador.nombre}
-        :p.armadorId?{id:p.armadorId,nombre:p.armadorNombre}:null;
+        :p.armadorId?{id:p.armadorId,nombre:p.armadorNombre||p.armadorId}:null;
       const ctrlFinal=ctrl
         ?{id:ctrl.id,nombre:ctrl.nombre}
-        :p.controladorId?{id:p.controladorId,nombre:p.controladorNombre}:null;
+        :p.controladorId?{id:p.controladorId,nombre:p.controladorNombre||p.controladorId}:null;
       const armadoTsFinal=armadorFinal?(p.armadoTs||nowTs):null;
+      // Dirección: usar la editada en el panel
+      const dirFinal=convDireccion.trim()||p.direccion;
+      const partidoFinal=convPartido.trim()||p.partido;
+      const cpFinal=convCp.trim()||p.cp;
       const envioData={
         id:p.id,origen:"Tienda Nube",idTN:p.idTN,nroOrdenTN:p.nroOrdenTN,
         nroSeguimiento:"",linkTN:p.linkTN,linkML:"",
         clienteNombre:p.clienteNombre,telefono:p.telefono,
-        direccion:p.direccion,ciudad:p.ciudad,localidad:p.localidad,
-        cp:p.cp,partido:p.partido,provincia:p.provincia,alertaDireccion:p.alertaDireccion,
+        direccion:dirFinal,ciudad:p.ciudad,localidad:p.localidad,
+        cp:cpFinal,partido:partidoFinal,provincia:p.provincia,alertaDireccion:!dirFinal||!cpFinal,
         formaPago:p.formaPago,importeOrden:p.importeOrden,cobranza:null,
         notasOrden:p.notasOrden,notasCliente:p.notasCliente,datepickerRaw:"",
         fechaVenta:p.fechaVenta,fecha:convFecha,turno:convTurno,
@@ -8398,41 +8407,74 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false,configExpedicion=
             </div>
             {/* Panel convertir a UMP */}
             {converting===p.id&&(
-              <div style={{marginTop:"10px",padding:"10px 12px",background:"#12102a",border:"1px solid #4c1d95",borderRadius:"10px",display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}}>
-                <span style={{fontSize:"0.78rem",color:"#c4b5fd",fontWeight:600,width:"100%"}}>→ Convertir a UMP</span>
-                <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>Fecha entrega</label>
-                <input type="date" value={convFecha} onChange={e=>setConvFecha(e.target.value)}
-                  style={{padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #4c1d95",color:"#e5e7eb",fontSize:"0.78rem"}}/>
-                <select value={convTurno} onChange={e=>setConvTurno(e.target.value)}
-                  style={{padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #4c1d95",color:"#e5e7eb",fontSize:"0.78rem"}}>
-                  <option value="AM">AM</option>
-                  <option value="PM">PM</option>
-                </select>
-                <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>Bultos</label>
-                <input type="number" min="1" value={convBultos} onChange={e=>setConvBultos(Number(e.target.value)||1)}
-                  style={{width:"52px",padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #4c1d95",color:"#e5e7eb",fontSize:"0.78rem"}}/>
-                {armadoresConfig.length>0&&(<>
-                  <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>Armador</label>
-                  <select value={convArmadorId} onChange={e=>setConvArmadorId(e.target.value)}
+              <div style={{marginTop:"10px",padding:"12px 14px",background:"#12102a",border:"1px solid #4c1d95",borderRadius:"10px",display:"flex",flexDirection:"column",gap:"10px"}}>
+                <span style={{fontSize:"0.82rem",color:"#c4b5fd",fontWeight:700}}>→ Convertir a Logística UMP</span>
+
+                {/* Fila 1: Fecha + Turno + Bultos */}
+                <div style={{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}}>
+                  <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>Fecha entrega</label>
+                  <input type="date" value={convFecha} onChange={e=>setConvFecha(e.target.value)}
+                    style={{padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #4c1d95",color:"#e5e7eb",fontSize:"0.78rem"}}/>
+                  <select value={convTurno} onChange={e=>setConvTurno(e.target.value)}
                     style={{padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #4c1d95",color:"#e5e7eb",fontSize:"0.78rem"}}>
-                    <option value="">— sin armador —</option>
-                    {armadoresConfig.map(a=><option key={a.id} value={a.id}>{a.nombre}</option>)}
+                    <option value="AM">AM</option>
+                    <option value="PM">PM</option>
                   </select>
-                  <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>Controlador</label>
-                  <select value={convCtrlId} onChange={e=>setConvCtrlId(e.target.value)}
-                    style={{padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #4c1d95",color:"#e5e7eb",fontSize:"0.78rem"}}>
-                    <option value="">— sin controlador —</option>
-                    {armadoresConfig.filter(a=>a.id!==convArmadorId).map(a=><option key={a.id} value={a.id}>{a.nombre}</option>)}
-                  </select>
-                </>)}
-                <button onClick={()=>confirmarConversion(p)} disabled={!!working}
-                  style={{padding:"4px 14px",borderRadius:"8px",fontSize:"0.75rem",fontWeight:700,cursor:"pointer",background:"#4c1d95",border:"none",color:"#fff",marginLeft:"auto"}}>
-                  Confirmar
-                </button>
-                <button onClick={()=>setConverting(null)}
-                  style={{padding:"4px 10px",borderRadius:"8px",fontSize:"0.75rem",cursor:"pointer",background:"transparent",border:"1px solid #374151",color:"#6b7280"}}>
-                  Cancelar
-                </button>
+                  <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>Bultos</label>
+                  <input type="number" min="1" value={convBultos} onChange={e=>setConvBultos(Number(e.target.value)||1)}
+                    style={{width:"52px",padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #4c1d95",color:"#e5e7eb",fontSize:"0.78rem"}}/>
+                </div>
+
+                {/* Fila 2: Dirección editable */}
+                <div style={{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}}>
+                  <label style={{fontSize:"0.72rem",color:"#9ca3af",whiteSpace:"nowrap"}}>Dirección</label>
+                  <input value={convDireccion} onChange={e=>setConvDireccion(e.target.value)}
+                    placeholder="Calle y número"
+                    style={{flex:2,minWidth:"160px",padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #4c1d95",color:"#e5e7eb",fontSize:"0.78rem"}}/>
+                  <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>Partido</label>
+                  <input value={convPartido} onChange={e=>setConvPartido(e.target.value)}
+                    placeholder="Partido/Zona"
+                    style={{flex:1,minWidth:"100px",padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #4c1d95",color:"#e5e7eb",fontSize:"0.78rem"}}/>
+                  <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>CP</label>
+                  <input value={convCp} onChange={e=>setConvCp(e.target.value)}
+                    placeholder="CP"
+                    style={{width:"64px",padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #4c1d95",color:"#e5e7eb",fontSize:"0.78rem"}}/>
+                </div>
+
+                {/* Fila 3: Armado */}
+                <div style={{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}}>
+                  {p.armadoTs&&<span style={{fontSize:"0.7rem",background:"#052e16",color:"#86efac",borderRadius:"6px",padding:"2px 8px",border:"1px solid #166534"}}>✅ Armado {fmtHora(p.armadoTs)}</span>}
+                  {armadoresConfig.length>0&&(<>
+                    <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>{p.armadorId?"Cambiar armador":"Armador"}</label>
+                    <select value={convArmadorId} onChange={e=>setConvArmadorId(e.target.value)}
+                      style={{padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #4c1d95",color:"#e5e7eb",fontSize:"0.78rem"}}>
+                      <option value="">{p.armadorNombre?"— mantener actual —":"— sin armador —"}</option>
+                      {armadoresConfig.map(a=><option key={a.id} value={a.id}>{a.nombre}</option>)}
+                    </select>
+                    <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>{p.controladorId?"Cambiar ctrl":"Controlador"}</label>
+                    <select value={convCtrlId} onChange={e=>setConvCtrlId(e.target.value)}
+                      style={{padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #4c1d95",color:"#e5e7eb",fontSize:"0.78rem"}}>
+                      <option value="">{p.controladorNombre?"— mantener actual —":"— sin controlador —"}</option>
+                      {armadoresConfig.filter(a=>a.id!==convArmadorId).map(a=><option key={a.id} value={a.id}>{a.nombre}</option>)}
+                    </select>
+                  </>)}
+                  {/* Mostrar quién armó si no hay selector */}
+                  {armadoresConfig.length===0&&p.armadorNombre&&(
+                    <span style={{fontSize:"0.72rem",color:"#9ca3af"}}>Armador: <strong style={{color:"#e5e7eb"}}>{p.armadorNombre}</strong>{p.controladorNombre&&<> · Ctrl: <strong style={{color:"#e5e7eb"}}>{p.controladorNombre}</strong></>}</span>
+                  )}
+                </div>
+
+                {/* Acciones */}
+                <div style={{display:"flex",gap:"8px"}}>
+                  <button onClick={()=>confirmarConversion(p)} disabled={!!working}
+                    style={{padding:"5px 16px",borderRadius:"8px",fontSize:"0.78rem",fontWeight:700,cursor:"pointer",background:"#4c1d95",border:"none",color:"#fff"}}>
+                    {working===p.id?"…":"Confirmar conversión"}
+                  </button>
+                  <button onClick={()=>setConverting(null)}
+                    style={{padding:"5px 12px",borderRadius:"8px",fontSize:"0.75rem",cursor:"pointer",background:"transparent",border:"1px solid #374151",color:"#6b7280"}}>
+                    Cancelar
+                  </button>
+                </div>
               </div>
             )}
           </div>
