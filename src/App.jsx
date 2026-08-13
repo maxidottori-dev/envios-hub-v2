@@ -1266,6 +1266,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
   const [renvioBultos,setRenvioBultos]=useState(1);
   const [reenvioNota,setReenvioNota]=useState("");
   const [reenvioTrans,setReenvioTrans]=useState("");
+  const [reenvioWorking,setReenvioWorking]=useState(false);
   const [modoSel,setModoSel]=useState(false);
   const tmap=buildTarifaMap(zc);
   const getImp=e=>calcImp(e,tmap,lc,zc);
@@ -1331,12 +1332,15 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
 
   const confirmarReenvio=async()=>{
     if(!reenvioFecha){alert("Ingresá la fecha de entrega.");return;}
+    if(reenvioWorking)return;
+    setReenvioWorking(true);
     const orig=reenvioBase;
-    // Generar ID: ${orig.id}-R, luego -R2, -R3, etc.
-    const baseId=String(orig.id)+"-R";
+    // Generar ID usando nroOrdenTN (número visible), no el ID interno de Firestore
+    const baseId=String(orig.nroOrdenTN||orig.id)+"-R";
     let newId=baseId;
     let suffix=2;
-    while(envios.some(x=>x.id===newId)){newId=baseId+suffix;suffix++;}
+    // Verificar también en Firestore para evitar duplicados si el estado local no se actualizó
+    while(envios.some(x=>x.id===newId)||(await getDoc(doc(db,"envios",newId))).exists()){newId=baseId+suffix;suffix++;}
     const envioNuevo={
       id:newId,
       origen:"2da_visita",
@@ -1383,6 +1387,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
       setEnvios(p=>[envioNuevo,...p]);
       setReenvioBase(null);
     }catch(err){console.error(err);alert("Error: "+err.message);}
+    finally{setReenvioWorking(false);}
   };
   const [accionMasiva,setAccionMasiva]=useState(null); // {tipo:"fecha"|"turno", valor:""}
   const aplicarAccionMasiva=()=>{
@@ -1769,9 +1774,9 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                   </div>
                   {/* Acciones */}
                   <div style={{display:"flex",gap:"8px"}}>
-                    <button onClick={confirmarReenvio}
-                      style={{padding:"5px 16px",borderRadius:"8px",fontSize:"0.78rem",fontWeight:700,cursor:"pointer",background:"#fb923c",border:"none",color:"#0f0900"}}>
-                      Confirmar
+                    <button onClick={confirmarReenvio} disabled={reenvioWorking}
+                      style={{padding:"5px 16px",borderRadius:"8px",fontSize:"0.78rem",fontWeight:700,cursor:reenvioWorking?"not-allowed":"pointer",background:"#fb923c",border:"none",color:"#0f0900",opacity:reenvioWorking?0.6:1}}>
+                      {reenvioWorking?"…":"Confirmar"}
                     </button>
                     <button onClick={()=>setReenvioBase(null)}
                       style={{padding:"5px 12px",borderRadius:"8px",fontSize:"0.75rem",cursor:"pointer",background:"transparent",border:"1px solid #374151",color:"#6b7280"}}>
