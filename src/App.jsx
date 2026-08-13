@@ -8382,7 +8382,7 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false,configExpedicion=
                   {nextLabel(p)}
                 </button>
               )}
-              {(p.tipoOtro==="retiro_deposito"||p.tipoOtro==="a_convenir")&&!["archivado","cancelado","enviado"].includes(p.estado)&&converting!==p.id&&(
+              {(p.tipoOtro==="retiro_deposito"||p.tipoOtro==="a_convenir"||p.tipoOtro==="courier")&&!["archivado","cancelado","enviado","convertido_a_ump"].includes(p.estado)&&converting!==p.id&&(
                 <button onClick={()=>iniciarConversion(p)} disabled={!!working}
                   style={{padding:"4px 12px",borderRadius:"8px",fontSize:"0.72rem",fontWeight:700,cursor:"pointer",background:"#2e1065",border:"1px solid #7c3aed",color:"#c4b5fd",opacity:working?0.5:1}}>
                   → Convertir a UMP
