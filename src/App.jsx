@@ -1669,9 +1669,15 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
               <div style={{...S.card,padding:"0.55rem 0.75rem",display:"flex",alignItems:"flex-start",gap:"0.5rem",opacity:getEstado(e)==="cancelado"?0.45:1,borderColor:isEdit||isSel?"#6366f1":e.alertaDireccion||!e.partido?"#f59e0b":"#252d40",background:isSel?"#12172a":"#1a1f2e",minWidth:0,overflow:"hidden"}}>
                 {modoSel
                   ?<div style={{paddingTop:"2px"}}><Chk checked={isSel} onChange={()=>toggleSel(e.id)}/></div>
-                  :puedeVer(sesion,"accion_editarenvio")
-                    ?<button onClick={ev=>{ev.stopPropagation();setEditId(isEdit?null:e.id);}} style={{flexShrink:0,width:"36px",height:"36px",borderRadius:"7px",border:"1px solid "+(isEdit?"#6366f1":"#252d40"),background:isEdit?"#13102a":"#0f1420",color:isEdit?"#a78bfa":"#6b7280",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.85rem"}}>✏️</button>
-                    :<span style={{color:"#374151",fontSize:"0.65rem",minWidth:"20px",textAlign:"right",paddingTop:"3px"}}>{i+1}</span>
+                  :<div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:"4px",flexShrink:0}}>
+                    {puedeVer(sesion,"accion_editarenvio")
+                      ?<button onClick={ev=>{ev.stopPropagation();setEditId(isEdit?null:e.id);}} style={{width:"36px",height:"36px",borderRadius:"7px",border:"1px solid "+(isEdit?"#6366f1":"#252d40"),background:isEdit?"#13102a":"#0f1420",color:isEdit?"#a78bfa":"#6b7280",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.85rem"}}>✏️</button>
+                      :<span style={{color:"#374151",fontSize:"0.65rem",minWidth:"20px",textAlign:"right",paddingTop:"3px"}}>{i+1}</span>
+                    }
+                    {e.despachado&&puedeVer(sesion,"accion_crear_reenvio")&&reenvioBase?.id!==e.id&&(
+                      <button onClick={ev=>{ev.stopPropagation();iniciarReenvio(e);}} style={{width:"36px",padding:"3px 0",borderRadius:"6px",fontSize:"0.6rem",fontWeight:700,cursor:"pointer",background:"#1c0f00",border:"1px solid #fb923c",color:"#fb923c",textAlign:"center",lineHeight:1.2}}>↩<br/>2da</button>
+                    )}
+                  </div>
                 }
                 <div style={{flex:1,minWidth:0}} onClick={()=>{if(modoSel)toggleSel(e.id);}}>
                   <div style={{display:"flex",gap:"3px",flexWrap:"wrap",alignItems:"center",marginBottom:"3px"}}>
@@ -1720,9 +1726,6 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                   <span style={{color:"#60a5fa",fontSize:"0.68rem",fontWeight:700}}>{e.bultos||1} bulto{(e.bultos||1)===1?"":"s"}</span>
                   {e.preparado&&e.armadorNombre&&<span style={{color:"#10b981",fontSize:"0.68rem",fontWeight:700}}>📦 {e.armadorNombre}</span>}
                   {e.despachado&&e.despachoTs&&<span style={{color:"#10b981",fontSize:"0.68rem",fontWeight:700}}>🚚 {fmtHora(e.despachoTs)}{e.despachoPor?" · "+e.despachoPor:""}</span>}
-                  {e.despachado&&puedeVer(sesion,"accion_crear_reenvio")&&reenvioBase?.id!==e.id&&(
-                    <button onClick={ev=>{ev.stopPropagation();iniciarReenvio(e);}} style={{padding:"2px 7px",borderRadius:"6px",fontSize:"0.65rem",fontWeight:700,cursor:"pointer",background:"#1c0f00",border:"1px solid #fb923c",color:"#fb923c",marginTop:"2px"}}>↩ 2da visita</button>
-                  )}
                   {imp>0&&puedeVer(sesion,"accion_verimportes")&&<span style={{color:e.importeOverride>0?"#fbbf24":"#10b981",fontWeight:700,fontSize:"0.82rem"}}>{fmt(imp)}{e.importeOverride>0&&<span style={{fontSize:"0.62rem",opacity:.65,marginLeft:"2px"}}>*</span>}</span>}
                   {esTN&&e.importeOrden>0&&puedeVer(sesion,"accion_verimportes")&&<span style={{color:"#6b7280",fontSize:"0.7rem"}}>{fmt(e.importeOrden)}</span>}
                   {e.origen==="ML"&&ML_FINAL[e.partido]&&<span style={{color:"#64748b",fontSize:"0.68rem",marginTop:"1px"}}>ML {fmt(ML_FINAL[e.partido])}</span>}
