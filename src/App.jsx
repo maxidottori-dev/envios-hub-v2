@@ -1383,7 +1383,9 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
       creadoPor:sesion?.nombre||sesion?.email||"",
     };
     try{
-      await setDoc(doc(db,"envios",newId),envioNuevo);
+      const resp=await fetch("/api/crear-reenvio",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({envioData:envioNuevo})});
+      const data=await resp.json();
+      if(!resp.ok||!data.ok) throw new Error(data.error||"Error al crear reenvío");
       setEnvios(p=>[envioNuevo,...p]);
       setReenvioBase(null);
     }catch(err){console.error(err);alert("Error: "+err.message);}
