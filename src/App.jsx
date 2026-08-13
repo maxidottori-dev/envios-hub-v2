@@ -70,6 +70,7 @@ const FEATURES=[
   {key:"accion_imprimir",     grupo:"acciones", label:"Imprimir etiquetas", desc:"Imprimir etiquetas de envíos individuales con código QR y datos de entrega"},
   {key:"accion_autorizarcc",  grupo:"acciones", label:"Autorizar Cta. Corriente", desc:"Autorizar que un pedido de Tienda Nube con pago pendiente de acreditación pase a Cuenta Corriente, para poder asignarlo a una logística sin esperar el pago"},
   {key:"accion_verhistorialdespacho", grupo:"acciones", label:"Ver historial de despacho", desc:"Ver el registro histórico de envíos despachados, agrupado por fecha y logística"},
+  {key:"accion_crear_reenvio",        grupo:"acciones", label:"Crear 2da visita",           desc:"Crear un reenvío o cambio a partir de un envío ya despachado"},
 ];
 
 // Devuelve true si la sesión puede usar esa feature
@@ -1258,6 +1259,13 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
   const [busqueda,setBusqueda]=useState("");
   const [editId,setEditId]=useState(null);
   const [seleccionados,setSeleccionados]=useState(new Set());
+  const [reenvioBase,setReenvioBase]=useState(null); // envío original del que se deriva
+  const [reenvioTipo,setReenvioTipo]=useState("reenvio"); // "reenvio"|"cambio"
+  const [reenvioFecha,setReenvioFecha]=useState("");
+  const [reenvioTurno,setReenvioTurno]=useState("AM");
+  const [renvioBultos,setRenvioBultos]=useState(1);
+  const [reenvioNota,setReenvioNota]=useState("");
+  const [reenvioTrans,setReenvioTrans]=useState("");
   const [modoSel,setModoSel]=useState(false);
   const tmap=buildTarifaMap(zc);
   const getImp=e=>calcImp(e,tmap,lc,zc);
@@ -1310,6 +1318,72 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
     setEditId(null);
   };
   const saveMultipleEnvios=updates=>{setEnvios(p=>p.map(e=>{const u=updates.find(x=>x.id===e.id);return u?{...u,estado:getEstado(u)}:e;}));};
+
+  const iniciarReenvio=(e)=>{
+    setReenvioTipo("reenvio");
+    setReenvioFecha(fechaHoy());
+    setReenvioTurno(e.turno||"AM");
+    setRenvioBultos(1);
+    setReenvioNota("");
+    setReenvioTrans(e.trans||"");
+    setReenvioBase(e);
+  };
+
+  const confirmarReenvio=async()=>{
+    if(!reenvioFecha){alert("Ingresá la fecha de entrega.");return;}
+    const orig=reenvioBase;
+    // Generar ID: ${orig.id}-R, luego -R2, -R3, etc.
+    const baseId=String(orig.id)+"-R";
+    let newId=baseId;
+    let suffix=2;
+    while(envios.some(x=>x.id===newId)){newId=baseId+suffix;suffix++;}
+    const envioNuevo={
+      id:newId,
+      origen:"2da_visita",
+      reenvioDeId:String(orig.id),
+      tipoReenvio:reenvioTipo,
+      idTN:orig.idTN||null,
+      nroOrdenTN:orig.nroOrdenTN||null,
+      nroSeguimiento:"",
+      linkTN:orig.linkTN||"",
+      linkML:"",
+      clienteNombre:orig.clienteNombre||"",
+      telefono:orig.telefono||"",
+      direccion:orig.direccion||"",
+      ciudad:orig.ciudad||"",
+      localidad:orig.localidad||"",
+      cp:orig.cp||"",
+      partido:orig.partido||"",
+      provincia:orig.provincia||"",
+      alertaDireccion:!orig.direccion||!orig.cp,
+      formaPago:orig.formaPago||"",
+      importeOrden:0,
+      cobranza:null,
+      notasOrden:"",
+      notasCliente:"",
+      datepickerRaw:"",
+      fechaVenta:orig.fechaVenta||"",
+      fecha:reenvioFecha,
+      turno:reenvioTurno,
+      trans:reenvioTrans||"",
+      pagoEstado:"sin_pago",
+      estado:reenvioTrans?"asignado":"sin_asignar",
+      importe:0,
+      bultos:renvioBultos||1,
+      cambio:null,
+      retiro:null,
+      despachado:false,
+      preparado:false,
+      observaciones:reenvioNota||`${reenvioTipo==="cambio"?"Cambio":"Reenvío"} de #${orig.nroOrdenTN||orig.id}`,
+      creadoTs:new Date().toISOString(),
+      creadoPor:sesion?.nombre||sesion?.email||"",
+    };
+    try{
+      await setDoc(doc(db,"envios",newId),envioNuevo);
+      setEnvios(p=>[envioNuevo,...p]);
+      setReenvioBase(null);
+    }catch(err){console.error(err);alert("Error: "+err.message);}
+  };
   const [accionMasiva,setAccionMasiva]=useState(null); // {tipo:"fecha"|"turno", valor:""}
   const aplicarAccionMasiva=()=>{
     if(!accionMasiva?.valor)return;
@@ -1359,9 +1433,10 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
     "Tienda Nube":{label:"TN",bg:"#0d1c2e",t:"#38bdf8",border:"#38bdf8"},
     "ML":{label:"FLEX",bg:"#0d1c04",t:"#84cc16",border:"#84cc16"},
     "Manual":{label:"Manual",bg:"#1c1400",t:"#f59e0b",border:"#f59e0b"},
+    "2da_visita":{label:"2da visita",bg:"#1c0f00",t:"#fb923c",border:"#fb923c"},
   };
   function origenBadge(e){
-    const o=e.origen==="Tienda Nube"?"Tienda Nube":e.origen==="ML"?"ML":"Manual";
+    const o=e.origen==="Tienda Nube"?"Tienda Nube":e.origen==="ML"?"ML":e.origen==="2da_visita"?"2da_visita":"Manual";
     const c=ORIGEN_C[o]||{label:o,bg:"#1a1f2e",t:"#6b7280",border:"#252d40"};
     return <span style={{padding:"1px 7px",background:c.bg,color:c.t,borderRadius:"5px",fontSize:"0.65rem",fontWeight:700,border:"1px solid "+c.border,flexShrink:0}}>{c.label}</span>;
   }
@@ -1640,12 +1715,71 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                   <span style={{color:"#60a5fa",fontSize:"0.68rem",fontWeight:700}}>{e.bultos||1} bulto{(e.bultos||1)===1?"":"s"}</span>
                   {e.preparado&&e.armadorNombre&&<span style={{color:"#10b981",fontSize:"0.68rem",fontWeight:700}}>📦 {e.armadorNombre}</span>}
                   {e.despachado&&e.despachoTs&&<span style={{color:"#10b981",fontSize:"0.68rem",fontWeight:700}}>🚚 {fmtHora(e.despachoTs)}{e.despachoPor?" · "+e.despachoPor:""}</span>}
+                  {e.despachado&&puedeVer(sesion,"accion_crear_reenvio")&&reenvioBase?.id!==e.id&&(
+                    <button onClick={ev=>{ev.stopPropagation();iniciarReenvio(e);}} style={{padding:"2px 7px",borderRadius:"6px",fontSize:"0.65rem",fontWeight:700,cursor:"pointer",background:"#1c0f00",border:"1px solid #fb923c",color:"#fb923c",marginTop:"2px"}}>↩ 2da visita</button>
+                  )}
                   {imp>0&&puedeVer(sesion,"accion_verimportes")&&<span style={{color:e.importeOverride>0?"#fbbf24":"#10b981",fontWeight:700,fontSize:"0.82rem"}}>{fmt(imp)}{e.importeOverride>0&&<span style={{fontSize:"0.62rem",opacity:.65,marginLeft:"2px"}}>*</span>}</span>}
                   {esTN&&e.importeOrden>0&&puedeVer(sesion,"accion_verimportes")&&<span style={{color:"#6b7280",fontSize:"0.7rem"}}>{fmt(e.importeOrden)}</span>}
                   {e.origen==="ML"&&ML_FINAL[e.partido]&&<span style={{color:"#64748b",fontSize:"0.68rem",marginTop:"1px"}}>ML {fmt(ML_FINAL[e.partido])}</span>}
                 </div>
               </div>
               {isEdit&&!modoSel&&puedeVer(sesion,"accion_editarenvio")&&<PanelEdit envio={e} onSave={saveEnvio} onSaveMultiple={saveMultipleEnvios} onClose={()=>setEditId(null)} lc={lc} envios={envios} getImp={getImp} esAdmin={esAdmin} sesion={sesion}/>}
+              {reenvioBase?.id===e.id&&(
+                <div style={{marginTop:"8px",padding:"12px 14px",background:"#120a00",border:"1px solid #fb923c",borderRadius:"10px",display:"flex",flexDirection:"column",gap:"10px"}}>
+                  <span style={{fontSize:"0.82rem",color:"#fb923c",fontWeight:700}}>↩ Nueva 2da visita a partir de #{e.nroOrdenTN||e.id}</span>
+                  {/* Tipo */}
+                  <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
+                    <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>Tipo</label>
+                    <label style={{fontSize:"0.75rem",color:"#e5e7eb",display:"flex",gap:"4px",alignItems:"center",cursor:"pointer"}}>
+                      <input type="radio" name={"rt"+e.id} value="reenvio" checked={reenvioTipo==="reenvio"} onChange={()=>setReenvioTipo("reenvio")} style={{accentColor:"#fb923c"}}/> Reenvío (faltó mercadería)
+                    </label>
+                    <label style={{fontSize:"0.75rem",color:"#e5e7eb",display:"flex",gap:"4px",alignItems:"center",cursor:"pointer"}}>
+                      <input type="radio" name={"rt"+e.id} value="cambio" checked={reenvioTipo==="cambio"} onChange={()=>setReenvioTipo("cambio")} style={{accentColor:"#fb923c"}}/> Cambio
+                    </label>
+                  </div>
+                  {/* Fecha + Turno + Bultos */}
+                  <div style={{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}}>
+                    <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>Fecha</label>
+                    <input type="date" value={reenvioFecha} onChange={ev=>setReenvioFecha(ev.target.value)}
+                      style={{padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #fb923c",color:"#e5e7eb",fontSize:"0.78rem"}}/>
+                    <select value={reenvioTurno} onChange={ev=>setReenvioTurno(ev.target.value)}
+                      style={{padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #fb923c",color:"#e5e7eb",fontSize:"0.78rem"}}>
+                      <option value="AM">AM</option>
+                      <option value="PM">PM</option>
+                    </select>
+                    <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>Bultos</label>
+                    <input type="number" min="1" value={renvioBultos} onChange={ev=>setRenvioBultos(Number(ev.target.value)||1)}
+                      style={{width:"52px",padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #fb923c",color:"#e5e7eb",fontSize:"0.78rem"}}/>
+                  </div>
+                  {/* Logística */}
+                  <div style={{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}}>
+                    <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>Logística</label>
+                    <select value={reenvioTrans} onChange={ev=>setReenvioTrans(ev.target.value)}
+                      style={{padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #fb923c",color:"#e5e7eb",fontSize:"0.78rem"}}>
+                      <option value="">— sin asignar —</option>
+                      {Object.entries(lc).filter(([,v])=>v.activa).map(([k,v])=><option key={k} value={k}>{k}</option>)}
+                    </select>
+                  </div>
+                  {/* Nota */}
+                  <div style={{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}}>
+                    <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>Nota</label>
+                    <input value={reenvioNota} onChange={ev=>setReenvioNota(ev.target.value)}
+                      placeholder={reenvioTipo==="cambio"?"Detalle del cambio":"Qué faltó"}
+                      style={{flex:1,minWidth:"180px",padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #fb923c",color:"#e5e7eb",fontSize:"0.78rem"}}/>
+                  </div>
+                  {/* Acciones */}
+                  <div style={{display:"flex",gap:"8px"}}>
+                    <button onClick={confirmarReenvio}
+                      style={{padding:"5px 16px",borderRadius:"8px",fontSize:"0.78rem",fontWeight:700,cursor:"pointer",background:"#fb923c",border:"none",color:"#0f0900"}}>
+                      Confirmar
+                    </button>
+                    <button onClick={()=>setReenvioBase(null)}
+                      style={{padding:"5px 12px",borderRadius:"8px",fontSize:"0.75rem",cursor:"pointer",background:"transparent",border:"1px solid #374151",color:"#6b7280"}}>
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
