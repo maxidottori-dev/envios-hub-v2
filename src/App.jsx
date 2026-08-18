@@ -1339,8 +1339,12 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
     const baseId=String(orig.nroOrdenTN||orig.id)+"-R";
     let newId=baseId;
     let suffix=2;
-    // Verificar también en Firestore para evitar duplicados si el estado local no se actualizó
-    while(envios.some(x=>x.id===newId)||(await getDoc(doc(db,"envios",newId))).exists()){newId=baseId+suffix;suffix++;}
+    const MAX_SUFFIX=20;
+    // Verificar en estado local y Firestore para evitar duplicados
+    while(suffix<=MAX_SUFFIX&&(envios.some(x=>x.id===newId)||(await getDoc(doc(db,"envios",newId))).exists())){
+      newId=baseId+suffix;suffix++;
+    }
+    if(suffix>MAX_SUFFIX) throw new Error("No se pudo generar un ID único para el reenvío (máximo 20 intentos).");
     const envioNuevo={
       id:newId,
       origen:"2da_visita",
@@ -7986,7 +7990,7 @@ function ConfirmPage({token}){
 // ════════════════════════════════════════════════════════════════════
 // TAB PENDIENTES — alertas operativas para colaboradores
 // ════════════════════════════════════════════════════════════════════
-function TabPendientes({envios=[],otrosPedidos=[],esAdmin=false,configExpedicion={},setConfigExpedicion=()=>{}}){
+function TabPendientes({envios=[],otrosPedidos=[],esAdmin=false,configExpedicion={},setConfigExpedicion=()=>{},setEnvios=()=>{}}){
   const cfg=configExpedicion.pendientesDiasConfig||{};
   const diasRetiros    =cfg.retiros     ??7;
   const diasFechaPasada=cfg.fechaPasada ??7;
@@ -8057,11 +8061,14 @@ function TabPendientes({envios=[],otrosPedidos=[],esAdmin=false,configExpedicion
     if(!confirm(`¿Forzar despacho del envío #${e.nroOrdenTN||e.id.slice(-6)} (${e.clienteNombre||e.direccion})?\nSe marcará como despachado sin pasar por Tab Salida.`))return;
     setForzando(e.id);
     try{
+      const ts=new Date().toISOString();
       await updateDoc(doc(db,"envios",e.id),{
         despachado:true,
-        despachoTs:new Date().toISOString(),
+        despachoTs:ts,
         despachado_forzado:true,
       });
+      // Actualización optimista: refleja el cambio de inmediato sin esperar al onSnapshot
+      setEnvios(p=>p.map(x=>x.id===e.id?{...x,despachado:true,despachoTs:ts,despachado_forzado:true}:x));
     }catch(err){console.error("forzarDespacho",err);alert("Error al forzar despacho");}
     setForzando(null);
   };
@@ -9946,9 +9953,11 @@ export default function App(){
     return()=>unsub();
   },[]);
   useEffect(()=>{
-    const unsub=onSnapshot(query(collection(db,"colectas"),where("estado","==","pendiente")),snap=>{
-      setColectas(snap.docs.map(d=>({...d.data(),id:d.id})));
-    });
+    const unsub=onSnapshot(
+      query(collection(db,"colectas"),where("estado","==","pendiente")),
+      snap=>{setColectas(snap.docs.map(d=>({...d.data(),id:d.id})));},
+      err=>console.error("colectas listener error:",err)
+    );
     return()=>unsub();
   },[]);
   const [zc,setZc]=useState(ZONAS_INIT);
@@ -10031,10 +10040,17 @@ export default function App(){
     });
     return()=>unsub();
   },[]);
+  const cfgSaveTimerRef=useRef(null);
+  const cfgPendingRef=useRef(null);
   const setConfigExpedicion=useCallback((updater)=>{
     setConfigExpedicionLocal(prev=>{
       const next=typeof updater==="function"?updater(prev):updater;
-      setDoc(doc(db,"config","expedicion"),next).catch(console.error);
+      // Debounce: actualiza React state inmediatamente, escribe a Firestore después de 600ms de inactividad
+      cfgPendingRef.current=next;
+      if(cfgSaveTimerRef.current)clearTimeout(cfgSaveTimerRef.current);
+      cfgSaveTimerRef.current=setTimeout(()=>{
+        if(cfgPendingRef.current)setDoc(doc(db,"config","expedicion"),cfgPendingRef.current).catch(console.error);
+      },600);
       return next;
     });
   },[]);
@@ -10094,15 +10110,16 @@ export default function App(){
     const toSave=[...saveQueue.current.values()];
     const toDel=[...deleteQueue.current];
     if(!toSave.length&&!toDel.length)return;
-    saveQueue.current.clear();
-    deleteQueue.current.clear();
     try{
       const batch=writeBatch(db);
       toSave.forEach(e=>batch.set(doc(db,"envios",e.id),e));
       toDel.forEach(id=>batch.delete(doc(db,"envios",id)));
       await batch.commit();
+      // Limpiar DESPUÉS del commit: si falla, el próximo flush reintentará
+      saveQueue.current.clear();
+      deleteQueue.current.clear();
     }catch(err){console.error("Error guardando envios:",err);}
-    finally{setPendingSaves(p=>Math.max(0,p-1));} // un solo decremento por batch
+    finally{setPendingSaves(p=>Math.max(0,p-1));}
   },[]);
 
   // Encola un envío; sube el contador solo cuando la cola estaba vacía
@@ -10455,7 +10472,7 @@ export default function App(){
         {tab==="statsarmado"   &&<TabStatsArmado configExpedicion={configExpedicion} setConfigExpedicion={setConfigExpedicion} esAdmin={esAdmin}/>}
         {tab==="consultaarmado"&&<TabConsultaArmado esAdmin={esAdmin}/>}
         {tab==="salida"        &&<TabSalida envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>}
-        {tab==="pendientes"    &&<TabPendientes envios={envios} otrosPedidos={otrosPedidos} esAdmin={esAdmin} configExpedicion={configExpedicion} setConfigExpedicion={setConfigExpedicion}/>}
+        {tab==="pendientes"    &&<TabPendientes envios={envios} otrosPedidos={otrosPedidos} esAdmin={esAdmin} configExpedicion={configExpedicion} setConfigExpedicion={setConfigExpedicion} setEnvios={setEnvios}/>}
         {tab==="otros"         &&<TabOtrosPedidos otrosPedidos={otrosPedidos} sesion={sesion} esAdmin={esAdmin} configExpedicion={configExpedicion}/>}
       </div>
     </div>
