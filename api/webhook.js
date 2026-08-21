@@ -121,6 +121,34 @@ export default async function handler(req, res) {
 
       await docRef.update(update);
       console.log("WEBHOOK UPDATED", order.id);
+
+      // Si el pedido era CC y TN lo marca como pagado, registrar en pagosCC
+      if (order.payment_status === "paid" && (data.pagoEstado === "cuenta_corriente" || data.esCC === true)) {
+        const monto = data.cobranza > 0 ? data.cobranza
+          : data.importeCC > 0 ? data.importeCC
+          : data.importeOrden || parseFloat(order.total) || 0;
+        const clienteKey = (data.clienteNombre || "").toLowerCase().trim().replace(/\s+/g, "_") || null;
+        if (monto > 0 && clienteKey) {
+          const existing = await db.collection("pagosCC")
+            .where("envioIds", "array-contains", String(order.id))
+            .limit(1).get();
+          if (existing.empty) {
+            await db.collection("pagosCC").add({
+              clienteKey,
+              clienteNombre: data.clienteNombre || "",
+              monto,
+              nota: "Pago automático TN",
+              envioIds: [String(order.id)],
+              montosPorEnvio: { [String(order.id)]: monto },
+              fechaCobro: new Date().toISOString().split("T")[0],
+              creadoEn: new Date(),
+              autoSync: true,
+            });
+            console.log("WEBHOOK CC_PAGO_REGISTRADO", order.id, monto, clienteKey);
+          }
+        }
+      }
+
       return res.status(200).json({ ok: true, action: "updated", id: String(order.id) });
     }
 

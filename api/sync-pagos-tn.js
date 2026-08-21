@@ -77,7 +77,40 @@ export default async function handler(req, res) {
         if (orden.payment_status === "paid") {
           await docSnap.ref.update({ pagoEstado: "pagado" });
           actualizados++;
-          detalle.push({ nro: data.nroOrdenTN || idTN, cliente: data.clienteNombre, resultado: "pagado" });
+
+          // Si era CC (cuenta_corriente o esCC), registrar en pagosCC para bajar el saldo
+          const wasCC = data.pagoEstado === "cuenta_corriente" || data.esCC === true;
+          if (wasCC) {
+            const monto = data.cobranza > 0 ? data.cobranza
+              : data.importeCC > 0 ? data.importeCC
+              : data.importeOrden || 0;
+            const clienteKey = (data.clienteNombre || "").toLowerCase().trim().replace(/\s+/g, "_") || null;
+            if (monto > 0 && clienteKey) {
+              const existing = await db.collection("pagosCC")
+                .where("envioIds", "array-contains", docSnap.id)
+                .limit(1).get();
+              if (existing.empty) {
+                await db.collection("pagosCC").add({
+                  clienteKey,
+                  clienteNombre: data.clienteNombre || "",
+                  monto,
+                  nota: "Pago automático TN",
+                  envioIds: [docSnap.id],
+                  montosPorEnvio: { [docSnap.id]: monto },
+                  fechaCobro: new Date().toISOString().split("T")[0],
+                  creadoEn: new Date(),
+                  autoSync: true,
+                });
+                detalle.push({ nro: data.nroOrdenTN || idTN, cliente: data.clienteNombre, resultado: "pagado+cc_registrado" });
+              } else {
+                detalle.push({ nro: data.nroOrdenTN || idTN, cliente: data.clienteNombre, resultado: "pagado" });
+              }
+            } else {
+              detalle.push({ nro: data.nroOrdenTN || idTN, cliente: data.clienteNombre, resultado: "pagado" });
+            }
+          } else {
+            detalle.push({ nro: data.nroOrdenTN || idTN, cliente: data.clienteNombre, resultado: "pagado" });
+          }
         } else {
           pendientes++;
           detalle.push({ nro: data.nroOrdenTN || idTN, cliente: data.clienteNombre, resultado: orden.payment_status });
