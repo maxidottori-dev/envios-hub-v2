@@ -173,6 +173,21 @@ export default async function handler(req, res) {
   }
 
   if (topicFinal === "order/updated") {
+    // El pedido actualizó su método de envío a LOGISTICA UMP → moverlo a envios
+    if (metodo.includes("LOGISTICA UMP")) {
+      const envioRef = db.collection("envios").doc(String(order.id));
+      const envioExisting = await envioRef.get();
+      if (!envioExisting.exists) {
+        const envio = ordenAEnvio(order);
+        await envioRef.set(envio);
+        console.log("WEBHOOK OTRO→UMP MIGRADO", order.id);
+      }
+      if (otroExisting.exists) {
+        await otroRef.update({ estado: "convertido_a_ump" });
+      }
+      return res.status(200).json({ ok: true, action: "otro_migrado_a_ump" });
+    }
+
     if (!otroExisting.exists) {
       // Llegó un updated antes que el created — crear el documento
       const otro = ordenAOtroPedido(order);
