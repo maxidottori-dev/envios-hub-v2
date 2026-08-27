@@ -7235,7 +7235,7 @@ function TabConsultaArmado({esAdmin=false}){
                     {a.direccion&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Dirección</div><div style={{color:"#e5e7eb"}}>{a.direccion}</div></div>}
                     <div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Armador</div><div style={{color:"#e5e7eb"}}>{a.armadorNombre||"—"}</div></div>
                     {a.controladorNombre&&<div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>Controlador</div><div style={{color:"#6366f1"}}>{a.controladorNombre}</div></div>}
-                    <div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>TS completo</div><div style={{color:"#374151",fontFamily:"monospace"}}>{a.ts||"—"}</div></div>
+                    <div><div style={{color:"#374151",textTransform:"uppercase",fontSize:"0.56rem",fontWeight:700,marginBottom:"1px"}}>TS completo</div><div style={{color:"#374151",fontFamily:"monospace"}}>{a.ts?new Date(a.ts).toLocaleString("es-AR",{timeZone:"America/Argentina/Buenos_Aires",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"}):"—"}</div></div>
                   </div>
                   {esAdmin&&a.esColecta&&(
                     <div style={{marginTop:"8px",borderTop:"1px solid #1a1f2e",paddingTop:"8px"}}>
