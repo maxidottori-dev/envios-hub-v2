@@ -6233,6 +6233,13 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
       esFlex:envio.origen==="ML",
       esEdicion:esEdit,
     }).catch(err=>console.error("Error guardando armado:",err));
+    // Persistir preparado en Firestore para que el check "Ya preparado" funcione
+    // entre sesiones y evitar dobles armados por re-escaneo accidental
+    updateDoc(doc(db,"envios",envio.id),{
+      preparado:true,bultos,
+      armadorId:armador.id,armadorNombre:armador.nombre,
+      armadoTs:ts,
+    }).catch(err=>console.error("Error persistiendo preparado:",err));
     if(bultos>1&&impresionHabilitada&&envio.origen!=="ML")imprimirEtiquetasExtra({...envio,bultos},lc);
   },[setEnvios,lc,impresionHabilitada]);
 
