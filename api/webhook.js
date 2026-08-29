@@ -157,9 +157,9 @@ export default async function handler(req, res) {
 
   // ── NO UMP → solo "retiro_deposito" entra a otrosPedidos ────────────────
   const { tipoOtro: tipoOtroPreview } = clasificarOtro(order.shipping_option);
-  if (tipoOtroPreview !== "retiro_deposito") {
-    console.log("WEBHOOK OTRO SKIPPED (no retiro_deposito)", order.id, order.shipping_option?.slice(0, 60));
-    return res.status(200).json({ ok: true, skipped: "no_retiro_deposito", tipoOtro: tipoOtroPreview });
+  if (tipoOtroPreview !== "retiro_deposito" && tipoOtroPreview !== "a_convenir") {
+    console.log("WEBHOOK OTRO SKIPPED (courier)", order.id, order.shipping_option?.slice(0, 60));
+    return res.status(200).json({ ok: true, skipped: "courier", tipoOtro: tipoOtroPreview });
   }
 
   const otroRef     = db.collection("otrosPedidos").doc(String(order.id));
