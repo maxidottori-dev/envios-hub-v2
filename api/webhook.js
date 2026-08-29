@@ -1,5 +1,5 @@
 import { initDb } from "./_firebase.js";
-import { ordenAEnvio, ordenAOtroPedido, parsearDatepicker, getPagoEstadoInicial } from "./_tn.js";
+import { ordenAEnvio, ordenAOtroPedido, parsearDatepicker, getPagoEstadoInicial, clasificarOtro } from "./_tn.js";
 
 const TN_TOKEN   = process.env.TN_ACCESS_TOKEN;
 const TN_STOREID = process.env.TN_STORE_ID;
@@ -155,14 +155,18 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, skipped: "unhandled topic", topic: topicFinal });
   }
 
-  // ── NO UMP → colección "otrosPedidos" ────────────────────────────────────
+  // ── NO UMP → solo "retiro_deposito" entra a otrosPedidos ────────────────
+  const { tipoOtro: tipoOtroPreview } = clasificarOtro(order.shipping_option);
+  if (tipoOtroPreview !== "retiro_deposito") {
+    console.log("WEBHOOK OTRO SKIPPED (no retiro_deposito)", order.id, order.shipping_option?.slice(0, 60));
+    return res.status(200).json({ ok: true, skipped: "no_retiro_deposito", tipoOtro: tipoOtroPreview });
+  }
+
   const otroRef     = db.collection("otrosPedidos").doc(String(order.id));
   const otroExisting = await otroRef.get();
   const fulfillStatus = order.fulfillments?.[0]?.status || "";
 
   console.log("WEBHOOK OTRO", JSON.stringify({ orderId: order.id, metodo: metodo.slice(0, 60), fulfillStatus, topic: topicFinal }));
-  console.log("WEBHOOK OTRO FULFILLMENTS", JSON.stringify(order.fulfillments || []));
-  console.log("WEBHOOK OTRO ORDER_STATUS", JSON.stringify({ status: order.status, payment_status: order.payment_status, shipping_status: order.shipping_status || "" }));
 
   if (topicFinal === "order/created") {
     if (otroExisting.exists) return res.status(200).json({ ok: true, skipped: "otro already exists" });
