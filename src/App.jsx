@@ -4473,13 +4473,25 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{},esAdmin=
   const [permsOpenId,setPermsOpenId]=useState(null);
   const [tooltipKey,setTooltipKey]=useState(null);
   const [nuevoArmador,setNuevoArmador]=useState("");
+  const [editingArmId,setEditingArmId]=useState(null);
+  const [editingArmNombre,setEditingArmNombre]=useState("");
   const armadoresConfig=configExpedicion.armadores||[];
   const impresionHabilitada=configExpedicion.impresionHabilitada||false;
+
+  const confirmarRenombre=(armId)=>{
+    const nombre=editingArmNombre.trim();
+    if(!nombre){setEditingArmId(null);return;}
+    setConfigExpedicion(p=>({...p,armadores:p.armadores.map(a=>a.id===armId?{...a,nombre}:a)}));
+    setEditingArmId(null);setEditingArmNombre("");
+  };
+
+  const toggleActivoArmador=(armId,actual)=>{
+    setConfigExpedicion(p=>({...p,armadores:p.armadores.map(a=>a.id===armId?{...a,activo:!actual}:a)}));
+  };
 
   const agregarArmador=()=>{
     const nombre=nuevoArmador.trim();
     if(!nombre)return;
-    if(armadoresConfig.some(a=>a.nombre.toLowerCase()===nombre.toLowerCase())){mostrarToast("Ya existe un armador con ese nombre");return;}
     const id="arm_"+Date.now();
     const color=ARM_COLORS[armadoresConfig.length%ARM_COLORS.length];
     setConfigExpedicion(p=>({...p,armadores:[...(p.armadores||[]),{id,nombre,color}]}));
@@ -4733,31 +4745,50 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{},esAdmin=
             </div>
           </div>
           {/* Lista armadores */}
-          <div style={{fontSize:"0.65rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"8px"}}>Armadores ({armadoresConfig.length})</div>
+          <div style={{fontSize:"0.65rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"8px"}}>Armadores ({armadoresConfig.filter(a=>a.activo!==false).length} activos)</div>
           {armadoresConfig.length===0&&<div style={{padding:"0.75rem",background:"#12172a",borderRadius:"8px",color:"#4b5563",fontSize:"0.8rem",marginBottom:"8px"}}>Sin armadores. Agregá los nombres del equipo de preparación.</div>}
           <div style={{display:"grid",gap:"6px",marginBottom:"0.75rem"}}>
-            {armadoresConfig.map((arm,i)=>(
-              <div key={arm.id} style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 12px",background:"#12172a",borderRadius:"8px",border:"1px solid #252d40"}}>
+            {armadoresConfig.map((arm,i)=>{
+              const inactivo=arm.activo===false;
+              const editando=editingArmId===arm.id;
+              return(
+              <div key={arm.id} style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 12px",background:inactivo?"#0c0e14":"#12172a",borderRadius:"8px",border:"1px solid "+(inactivo?"#1e2535":"#252d40"),opacity:inactivo?0.6:1}}>
                 <span style={{fontSize:"0.8rem",fontWeight:800,color:"#374151",minWidth:"18px"}}>{i+1}</span>
-                <span style={{flex:1,fontSize:"0.9rem",fontWeight:600,color:arm.color||"#e5e7eb"}}>{arm.nombre}</span>
+                {editando
+                  ?<input autoFocus value={editingArmNombre} onChange={e=>setEditingArmNombre(e.target.value)}
+                      onKeyDown={e=>{if(e.key==="Enter")confirmarRenombre(arm.id);if(e.key==="Escape"){setEditingArmId(null);}}}
+                      style={{...S.input,flex:1,padding:"3px 8px",fontSize:"0.85rem"}}/>
+                  :<span style={{flex:1,fontSize:"0.9rem",fontWeight:600,color:inactivo?"#6b7280":arm.color||"#e5e7eb"}}>
+                    {arm.nombre}{inactivo&&<span style={{marginLeft:"6px",fontSize:"0.62rem",background:"#374151",color:"#9ca3af",padding:"1px 5px",borderRadius:"4px",fontWeight:700}}>INACTIVO</span>}
+                  </span>
+                }
+                {editando
+                  ?<button onClick={()=>confirmarRenombre(arm.id)} style={{padding:"3px 8px",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700,cursor:"pointer",background:"#0a2a1c",border:"1px solid #10b981",color:"#34d399"}}>✓</button>
+                  :<button onClick={()=>{setEditingArmId(arm.id);setEditingArmNombre(arm.nombre);}} title="Renombrar"
+                      style={{background:"none",border:"1px solid #374151",borderRadius:"5px",color:"#9ca3af",cursor:"pointer",fontSize:"0.7rem",padding:"2px 6px",flexShrink:0}}>✏️</button>
+                }
+                {/* Toggle activo */}
+                <button onClick={()=>toggleActivoArmador(arm.id,arm.activo!==false)} title={inactivo?"Reactivar":"Desactivar"}
+                  style={{padding:"3px 8px",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700,cursor:"pointer",flexShrink:0,
+                    background:inactivo?"#12172a":"#1c0a0a",border:"1px solid "+(inactivo?"#374151":"#b91c1c"),color:inactivo?"#6b7280":"#f87171"}}>
+                  {inactivo?"Reactivar":"Desactivar"}
+                </button>
                 {/* Toggle controlador */}
-                <button onClick={()=>setConfigExpedicion(p=>({...p,armadores:p.armadores.map(a=>a.id===arm.id?{...a,puedeControlar:!a.puedeControlar}:a)}))}
+                {!inactivo&&<button onClick={()=>setConfigExpedicion(p=>({...p,armadores:p.armadores.map(a=>a.id===arm.id?{...a,puedeControlar:!a.puedeControlar}:a)}))}
                   style={{padding:"3px 8px",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700,cursor:"pointer",flexShrink:0,
                     background:arm.puedeControlar?"#0a2a1c":"#12172a",
                     border:"1px solid "+(arm.puedeControlar?"#10b981":"#374151"),
                     color:arm.puedeControlar?"#34d399":"#4b5563"}}>
                   🔍 {arm.puedeControlar?"Control: ON":"Control: OFF"}
-                </button>
-                <div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>
+                </button>}
+                {!inactivo&&<div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>
                   {ARM_COLORS.map(c=>(
                     <button key={c} onClick={()=>setConfigExpedicion(p=>({...p,armadores:p.armadores.map(a=>a.id===arm.id?{...a,color:c}:a)}))}
                       style={{width:"16px",height:"16px",borderRadius:"50%",background:c,border:arm.color===c?"2px solid #fff":"2px solid transparent",cursor:"pointer",padding:0,flexShrink:0}}/>
                   ))}
-                </div>
-                <button onClick={()=>setConfigExpedicion(p=>({...p,armadores:p.armadores.filter(a=>a.id!==arm.id)}))}
-                  style={{background:"none",border:"none",color:"#f87171",cursor:"pointer",fontSize:"1.1rem",padding:"0 4px",lineHeight:1,flexShrink:0}}>✕</button>
+                </div>}
               </div>
-            ))}
+            );})}
           </div>
           <div style={{display:"flex",gap:"8px"}}>
             <input value={nuevoArmador} onChange={e=>setNuevoArmador(e.target.value)}
@@ -6074,8 +6105,10 @@ function TabTablero({envios,lc,zc,pagosCC=[]}){
 
 function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,configExpedicion={},esAdmin=false,otrosPedidos=[]}){
   const {impresionHabilitada=false,armadores=[]}=configExpedicion;
+  // Solo activos para selección (los inactivos se preservan en historial pero no aparecen en pickers)
+  const armadoresActivos=armadores.filter(a=>a.activo!==false);
   // Lista efectiva de controladores: armadores con puedeControlar=true; fallback a todos si ninguno lo tiene
-  const listaControladores=armadores.some(a=>a.puedeControlar)?armadores.filter(a=>a.puedeControlar):armadores;
+  const listaControladores=armadoresActivos.some(a=>a.puedeControlar)?armadoresActivos.filter(a=>a.puedeControlar):armadoresActivos;
   const hoy=fechaHoy();
   const [subTab,setSubTab]=useState("escaneo");
   const [fecha,setFecha]=useState(hoy);
@@ -6494,9 +6527,9 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
         // Modo disambiguation: seleccionar candidato
         const cand=matchesPendientes[n-1];
         if(cand)abrirPanelArmador(cand,!!cand.preparado);
-      }else if(scanPendiente&&n<=armadores.length){
+      }else if(scanPendiente&&n<=armadoresActivos.length){
         // Modo armador: seleccionar armador
-        confirmarArmado(armadores[n-1]);
+        confirmarArmado(armadoresActivos[n-1]);
       }
     };
     window.addEventListener("keydown",h);
@@ -6607,10 +6640,10 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
               {/* Botonera armadores */}
               <div style={{marginBottom:"0.85rem"}}>
                 <div style={{fontSize:"0.62rem",color:"#6b7280",textTransform:"uppercase",fontWeight:700,marginBottom:"8px"}}>¿Quién armó este pedido? <span style={{color:"#374151",fontWeight:400,textTransform:"none"}}>— o presioná el número</span></div>
-                {armadores.length===0
+                {armadoresActivos.length===0
                   ?<div style={{padding:"1rem",background:"#12172a",borderRadius:"8px",color:"#4b5563",fontSize:"0.8rem",textAlign:"center"}}>Sin armadores configurados. Configurá en Usuarios (admin).</div>
                   :<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(120px,1fr))",gap:"8px"}}>
-                    {armadores.map((arm,i)=>{
+                    {armadoresActivos.map((arm,i)=>{
                       const esUlt=ultimoArmador?.id===arm.id;
                       const esActual=modoEdicion&&scanPendiente.armadorId===arm.id;
                       return(
@@ -6766,13 +6799,13 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
             </div>
 
             {/* Sección armadores */}
-            {armadores.length>0&&(
+            {armadoresActivos.length>0&&(
               <div style={{padding:"0.6rem 1rem",borderBottom:"1px solid #1a1f2e"}}>
                 {armadorActivo?(
                   <div>
                     <div style={{fontSize:"0.58rem",color:"#4b5563",textTransform:"uppercase",fontWeight:700,marginBottom:"5px"}}>Cambiar armador:</div>
                     <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
-                      {armadores.filter(a=>a.id!==armadorActivo.id).map(arm=>(
+                      {armadoresActivos.filter(a=>a.id!==armadorActivo.id).map(arm=>(
                         <button key={arm.id} onClick={()=>{setArmadorActivo(arm);setSesionContador(0);resetArmadorTimer();if(inputRef.current)inputRef.current.focus();}}
                           style={{padding:"5px 12px",borderRadius:"8px",background:"#12172a",border:"1px solid #252d40",color:arm.color||"#9ca3af",cursor:"pointer",fontSize:"0.78rem",fontWeight:600}}>
                           {arm.nombre}
@@ -6784,7 +6817,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
                   <div>
                     <div style={{fontSize:"0.58rem",color:"#6b7280",textTransform:"uppercase",fontWeight:700,marginBottom:"6px"}}>¿Quién va a escanear? — tocá tu nombre</div>
                     <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
-                      {armadores.map((arm,i)=>(
+                      {armadoresActivos.map((arm,i)=>(
                         <button key={arm.id}
                           onClick={()=>{setArmadorActivo(arm);setSesionContador(0);resetArmadorTimer();if(inputRef.current)inputRef.current.focus();}}
                           style={{padding:"8px 14px",borderRadius:"8px",background:"#12172a",border:"2px solid "+(ultimoArmador?.id===arm.id?"#6366f1":"#252d40"),
@@ -10202,7 +10235,7 @@ export default function App(){
   if(sesion.rol==="expedicion")return<VistaExpedicion envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} configExpedicion={configExpedicion} otrosPedidos={otrosPedidos}/>;
   if(sesion.rol==="armador"){
     const arm=(configExpedicion.armadores||[]).find(a=>a.id===sesion.armadorId);
-    return<VistaArmador envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} armador={arm} armadores={configExpedicion.armadores||[]} gapUmbralMin={configExpedicion.gapUmbralMin||5}/>;
+    return<VistaArmador envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} armador={arm} armadores={(configExpedicion.armadores||[]).filter(a=>a.activo!==false)} gapUmbralMin={configExpedicion.gapUmbralMin||5}/>;
   }
 
   if(pantalla==="asignacion"){return<PantallaAsignacion borrador={borrador} fileName={fileName} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc} envios={envios} sesion={sesion}/>;}
