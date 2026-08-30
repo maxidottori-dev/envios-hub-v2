@@ -318,7 +318,7 @@ const norm=s=>s?String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase():
 function generarHTMLDespacho({logistica,fecha,envios:lista,pdfOrient="landscape",pdfFontSize:fs=14,pdfVersion="completa"}){
   const ahora=new Date();
   const ts=ahora.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+" "+ahora.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false});
-  const totalImp=lista.reduce((s,e)=>s+(e.importe||0),0);
+  const totalImp=lista.reduce((s,e)=>s+(getTarifaLog(e)),0);
   const cobTotal=lista.filter(e=>e.cobranza>0).reduce((s,e)=>s+(e.cobranza||0),0);
   const hayCobro=lista.some(e=>e.cobranza>0);
   const esSimple=pdfVersion==="simple";
@@ -451,7 +451,7 @@ function parsearExcel(file) {
             const fechaVenta=parseFechaES(r[iFecha])||fechaHoy();
             const orden=nroSeguimiento;
             envios.push({id:orden,direccion:dir,ciudad,cp,fechaVenta,
-              fecha:"",turno:"",trans:"",partido,importe:0,estado:"sin_asignar",
+              fecha:"",turno:"",trans:"",partido,tarifaLog:0,estado:"sin_asignar",
               nroSeguimiento,linkML:"https://www.mercadolibre.com.ar/ventas/"+orden+"/detalle",
               cobranza:null,cambio:null,retiro:null,observaciones:"",bultos:1,origen:"ML"});
           }
@@ -470,7 +470,7 @@ function parsearExcel(file) {
             const partido=cpAPartido(cp)||String(r[iCiudad]||"").trim();
             const nroSeguimiento=String(r[iSeg]||"").trim();
             envios.push({id:orden,direccion:dir,ciudad:String(r[iCiudad]||"").trim(),cp,fechaVenta,
-              fecha:"",turno:"",trans:"",partido,importe:0,estado:"sin_asignar",
+              fecha:"",turno:"",trans:"",partido,tarifaLog:0,estado:"sin_asignar",
               nroSeguimiento,linkML:"https://www.mercadolibre.com.ar/ventas/"+orden+"/detalle",
               cobranza:null,cambio:null,retiro:null,observaciones:"",bultos:1,origen:"ML"});
           }
@@ -533,6 +533,9 @@ function getMatrizVigente(cfg,fechaEnvio){
   const v=versiones.find(v=>v.desde<=fecha);
   return v?.matrix||cfg.tarifaMatrix||null;
 }
+
+// Compat: docs viejos tienen "importe", nuevos tienen "tarifaLog"
+const getTarifaLog=e=>e.tarifaLog??e.importe??0;
 
 function calcImp(e,tmap,lc,zc){
   if(!e.trans)return 0;
@@ -1017,8 +1020,7 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
           {e.notasCliente&&<div style={{marginTop:"6px",padding:"5px 8px",background:"#12172a",borderRadius:"6px",fontSize:"0.75rem",color:"#9ca3af",fontStyle:"italic"}}>
             <span style={{color:"#6b7280",fontStyle:"normal",fontWeight:700,fontSize:"0.62rem",textTransform:"uppercase"}}>Notas del cliente: </span>{e.notasCliente}
           </div>}
-          {e.datepickerRaw&&<div style={{marginTop:"4px",fontSize:"0.7rem",color:"#4b5563"}}>📅 {e.datepickerRaw}</div>}
-          {e.linkTN&&<a href={e.linkTN} target="_blank" rel="noreferrer" style={{display:"inline-block",marginTop:"6px",fontSize:"0.7rem",color:"#6366f1",textDecoration:"none"}}>Ver orden en Tienda Nube →</a>}
+              {e.linkTN&&<a href={e.linkTN} target="_blank" rel="noreferrer" style={{display:"inline-block",marginTop:"6px",fontSize:"0.7rem",color:"#6366f1",textDecoration:"none"}}>Ver orden en Tienda Nube →</a>}
         </div>
       )}
 
@@ -1126,7 +1128,7 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
           <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
             <input type="number" min="1" value={e.bultos||""} onChange={ev=>{
               const v=parseInt(ev.target.value);
-              set("bultos",v>0?v:null);
+              set("bultos",v>0?v:0);
               // Auto-preparado solo si NO FLEX y el usuario está ingresando el valor por primera vez
               if(v>0&&e.origen!=="ML"&&!e.preparado) set("preparado",true);
             }} placeholder="Ingresá cantidad..." style={{...S.input,width:"140px",padding:"4px 10px"}}/>
@@ -1376,7 +1378,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
       trans:reenvioTrans||"",
       pagoEstado:"sin_pago",
       estado:reenvioTrans?"asignado":"sin_asignar",
-      importe:0,
+      tarifaLog:0,
       bultos:renvioBultos||1,
       cambio:null,
       retiro:null,
@@ -1884,7 +1886,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
           cp:e.cp||"",
           bultos:e.bultos||1,
           cobranza:e.cobranza||0,
-          importe:getImp(e),
+          tarifaLog:getImp(e),
           origen:e.origen||"",
           loteImportacion:e.loteImportacion||"",
           turno:e.turno||"",
@@ -1932,7 +1934,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
           partido:e.partido||"",
           bultos:e.bultos||1,
           cobranza:e.cobranza||0,
-          importe:getImp(e),
+          tarifaLog:getImp(e),
         })),
         confirmado:false,
         confirmadoAt:null,
@@ -2188,7 +2190,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
 
 function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
   const hoy=fechaHoy();
-  const vacio={id:"",nroSeguimiento:"",linkML:"",direccion:"",ciudad:"",cp:"",origen:"Manual",trans:"",fecha:hoy,turno:"",estado:"sin_asignar",cobranza:null,cambio:null,retiro:null,observaciones:"",bultos:null,partido:"",importe:0,fechaVenta:hoy,clienteNombre:"",telefono:"",esCC:false,importeCC:0,nroFactura:""};
+  const vacio={id:"",nroSeguimiento:"",linkML:"",direccion:"",ciudad:"",cp:"",origen:"Manual",trans:"",fecha:hoy,turno:"",estado:"sin_asignar",cobranza:null,cambio:null,retiro:null,observaciones:"",bultos:0,partido:"",tarifaLog:0,fechaVenta:hoy,clienteNombre:"",telefono:"",esCC:false,importeCC:0,nroFactura:""};
   const [f,setF]=useState(vacio);
   const [err,setErr]=useState("");
   const [dupWarn,setDupWarn]=useState("");
@@ -4925,7 +4927,7 @@ function VistaLogistica({envios,sesion,lc}){
             <div style={{color:"#6b7280",fontSize:"0.62rem",marginTop:"2px"}}>A cobrar</div>
           </div>}
           {mostrarImporte&&<div style={{...S.card,padding:"0.75rem 1rem",flex:1}}>
-            <div style={{color:"#10b981",fontWeight:800,fontSize:"0.95rem"}}>{fmt(filtrados.reduce((s,e)=>s+(e.importe||0),0))}</div>
+            <div style={{color:"#10b981",fontWeight:800,fontSize:"0.95rem"}}>{fmt(filtrados.reduce((s,e)=>s+(getTarifaLog(e)),0))}</div>
             <div style={{color:"#6b7280",fontSize:"0.62rem",marginTop:"2px"}}>Total</div>
           </div>}
         </div>
@@ -4987,7 +4989,7 @@ function VistaLogistica({envios,sesion,lc}){
                     </div>
                     <div style={{color:e.formaPago==="Efectivo"?"#fbbf24":"#9ca3af",fontSize:"0.75rem"}}>{e.formaPago||"Efectivo"}</div>
                   </div>}
-                  {mostrarImporte&&e.importe>0&&<div style={{color:"#10b981",fontWeight:700,fontSize:"0.82rem",paddingTop:"2px"}}>Tarifa: {fmt(e.importe)}</div>}
+                  {mostrarImporte&&getTarifaLog(e)>0&&<div style={{color:"#10b981",fontWeight:700,fontSize:"0.82rem",paddingTop:"2px"}}>Tarifa: {fmt(getTarifaLog(e))}</div>}
                 </div>}
               </div>
             );
@@ -7757,7 +7759,7 @@ function DespachoPage({token}){
       const {jsPDF}=window.jspdf;
       const doc=new jsPDF({orientation:orient,unit:"mm",format:"a4"});
       const hayCobro=lista.some(e=>e.cobranza>0);
-      const totalImp=lista.reduce((s,e)=>s+(e.importe||0),0);
+      const totalImp=lista.reduce((s,e)=>s+(getTarifaLog(e)),0);
       const cobTotal=lista.filter(e=>e.cobranza>0).reduce((s,e)=>s+(e.cobranza||0),0);
       const ahora=new Date();
       const ts=ahora.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+" "+ahora.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false});
@@ -7958,7 +7960,7 @@ function ConfirmPage({token}){
               <div style={{fontSize:"0.72rem",color:muted,marginTop:"1px"}}>{[e.localidad,e.partido].filter(Boolean).join(" · ")}{e.bultos>1?" · "+e.bultos+" bultos":""}</div>
             </div>
             <div style={{textAlign:"right",flexShrink:0}}>
-              <div style={{fontSize:"0.82rem",fontWeight:700,color:green}}>{fmtP(e.importe)}</div>
+              <div style={{fontSize:"0.82rem",fontWeight:700,color:green}}>{fmtP(getTarifaLog(e))}</div>
               {e.cobranza>0&&<div style={{fontSize:"0.7rem",color:yellow}}>COB {fmtP(e.cobranza)}</div>}
             </div>
           </div>
@@ -8284,7 +8286,7 @@ function TabPendientes({envios=[],otrosPedidos=[],esAdmin=false,configExpedicion
                   ?<span style={S2.tag("#0c1a40","#7dd3fc")}>Otro</span>
                   :<span style={S2.tag("#1a1f2e","#9ca3af")}>{e.trans}</span>
                 }
-                {e.importeOrden>0&&<span style={S2.meta}>${Number(e.importeOrden||e.importe||0).toLocaleString("es-AR")}</span>}
+                {e.importeOrden>0&&<span style={S2.meta}>${Number(e.importeOrden||getTarifaLog(e)).toLocaleString("es-AR")}</span>}
                 {e.linkTN&&<LinkTN url={e.linkTN}/>}
               </div>
             ))}
@@ -8438,7 +8440,7 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false,configExpedicion=
         fechaVenta:p.fechaVenta,fecha:convFecha,turno:convTurno,
         trans:"",pagoEstado:p.pagoEstado,
         estado:armadorFinal?"preparado":"sin_asignar",
-        importe:0,bultos:convBultos||1,cambio:null,retiro:null,
+        tarifaLog:0,bultos:convBultos||1,cambio:null,retiro:null,
         observaciones:`Convertido de ${TIPO_LABEL[p.tipoOtro]||p.tipoOtro} #${p.nroOrdenTN}`,
         metodEnvio:p.metodEnvio,fulfillmentId:p.fulfillmentId||null,
         convertidoDesde:p.tipoOtro,
@@ -10367,12 +10369,12 @@ export default function App(){
                         fechaVenta:hoy,
                         turno:"",
                         trans:"",
-                        bultos:null,
+                        bultos:0,
                         cobranza:null,
                         cambio:null,
                         retiro:null,
                         observaciones:"",
-                        importe:0,
+                        tarifaLog:0,
                         destinatario:et.destinatario||"",
                         referencia:et.referencia||"",
                         tipoEntrega:et.tipoEntrega||"",
