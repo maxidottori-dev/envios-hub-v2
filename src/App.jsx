@@ -1730,7 +1730,10 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                     {e.linkML&&<a href={e.linkML} target="_blank" rel="noreferrer" onClick={ev=>ev.stopPropagation()} title="Ver en ML" style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:"26px",height:"26px",borderRadius:"6px",background:"#0f1420",border:"1px solid #252d40",textDecoration:"none",flexShrink:0}}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>}
                     {!modoSel&&esAdmin&&<button onClick={ev=>{ev.stopPropagation();eliminar(e.id);}} style={{...S.btnSm(false),padding:"1px 6px",fontSize:"0.68rem",color:"#f87171"}}>x</button>}
                   </div>
-                  <span style={{color:"#60a5fa",fontSize:"0.68rem",fontWeight:700}}>{e.bultos||1} bulto{(e.bultos||1)===1?"":"s"}</span>
+                  {(e.bultos>0)
+                    ?<span style={{color:"#60a5fa",fontSize:"0.68rem",fontWeight:700}}>{e.bultos} bulto{e.bultos===1?"":"s"}</span>
+                    :<span style={{color:"#374151",fontSize:"0.68rem",fontWeight:600}}>bultos: —</span>
+                  }
                   {e.preparado&&e.armadorNombre&&<span style={{color:"#10b981",fontSize:"0.68rem",fontWeight:700}}>📦 {e.armadorNombre}</span>}
                   {e.despachado&&e.despachoTs&&<span style={{color:"#10b981",fontSize:"0.68rem",fontWeight:700}}>🚚 {fmtHora(e.despachoTs)}{e.despachoPor?" · "+e.despachoPor:""}</span>}
                   {imp>0&&puedeVer(sesion,"accion_verimportes")&&<span style={{color:e.importeOverride>0?"#fbbf24":"#10b981",fontWeight:700,fontSize:"0.82rem"}}>{fmt(imp)}{e.importeOverride>0&&<span style={{fontSize:"0.62rem",opacity:.65,marginLeft:"2px"}}>*</span>}</span>}
