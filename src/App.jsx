@@ -1732,7 +1732,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                   </div>
                   {(e.bultos>0)
                     ?<span style={{color:"#60a5fa",fontSize:"0.68rem",fontWeight:700}}>{e.bultos} bulto{e.bultos===1?"":"s"}</span>
-                    :<span style={{color:"#374151",fontSize:"0.68rem",fontWeight:600}}>bultos: —</span>
+                    :<span style={{color:"#374151",fontSize:"0.68rem",fontWeight:600}}>No Preparado</span>
                   }
                   {e.preparado&&e.armadorNombre&&<span style={{color:"#10b981",fontSize:"0.68rem",fontWeight:700}}>📦 {e.armadorNombre}</span>}
                   {e.despachado&&e.despachoTs&&<span style={{color:"#10b981",fontSize:"0.68rem",fontWeight:700}}>🚚 {fmtHora(e.despachoTs)}{e.despachoPor?" · "+e.despachoPor:""}</span>}
