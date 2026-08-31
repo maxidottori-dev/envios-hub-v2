@@ -3042,15 +3042,15 @@ function TabTarifas({zc,setZc,lc,setLc,mlTarifas=ML_TARIFAS_INIT,setMlTarifas}){
                         onBlur={()=>{setTarifaML(partido,editML.val);setEditML(null);}}
                         onKeyDown={ev=>{if(ev.key==="Enter"){setTarifaML(partido,editML.val);setEditML(null);}if(ev.key==="Escape")setEditML(null);}}
                         style={{...S.input,width:"90px",textAlign:"right",fontSize:"0.75rem",border:"1px solid #f59e0b"}}/>
-                    :<span onDoubleClick={()=>setEditML({partido,val:String(precio)})}
-                        style={{color:"#fbbf24",fontWeight:700,fontSize:"0.8rem",cursor:"pointer",padding:"2px 8px",borderRadius:"4px",minWidth:"70px",textAlign:"right"}}>
+                    :<span onClick={()=>setEditML({partido,val:String(precio)})}
+                        style={{color:"#fbbf24",fontWeight:700,fontSize:"0.8rem",cursor:"text",padding:"2px 8px",borderRadius:"4px",minWidth:"70px",textAlign:"right",border:"1px solid transparent"}}>
                         {fmt(precio)}
                       </span>
                   }
                 </div>
               ))}
             </div>
-            <div style={{color:"#4b5563",fontSize:"0.65rem",marginTop:"8px"}}>Doble click en un valor para editarlo · Tab Guardar aplica a todas las secciones</div>
+            <div style={{color:"#4b5563",fontSize:"0.65rem",marginTop:"8px"}}>Click en un valor para editarlo · Enter o click afuera para confirmar · Esc para cancelar · Se guarda automáticamente</div>
           </div>
           {/* Historial */}
           {historial.length>0&&(
