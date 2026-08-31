@@ -2944,15 +2944,22 @@ function TabTarifas({zc,setZc,lc,setLc,mlTarifas=ML_TARIFAS_INIT,setMlTarifas}){
                 <div style={{display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}}>
                   <span style={{color:"#4b5563",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase"}}>Vigente desde:</span>
                   <span style={{color:vigDesde?"#10b981":"#f59e0b",fontWeight:700,fontSize:"0.82rem"}}>{vigDesde||"Sin fecha definida"}</span>
-                  <button onClick={crearNuevaVigencia} style={{...S.btnSm(false),color:"#6366f1",border:"1px solid #6366f1",padding:"2px 10px",fontSize:"0.7rem"}}>+ Nueva vigencia</button>
+                  {tipoMx==="noflex"&&<button onClick={crearNuevaVigencia} style={{...S.btnSm(false),color:"#6366f1",border:"1px solid #6366f1",padding:"2px 10px",fontSize:"0.7rem"}}>+ Nueva vigencia</button>}
+                  {tipoMx==="flex"&&<span style={{color:"#4b5563",fontSize:"0.68rem",fontStyle:"italic"}}>Las vigencias aplican solo a NO FLEX</span>}
                 </div>
                 <div style={{color:"#f59e0b",fontSize:"0.7rem",marginTop:"4px"}}>⚠ 4-10 bultos usa precio de "10 bultos" · 11+ usa "11 bultos"</div>
               </div>
-              {historial.length>0&&<div style={{minWidth:"180px"}}>
-                <div style={{color:"#4b5563",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Historial</div>
+              {historial.length>0&&<div style={{minWidth:"220px"}}>
+                <div style={{color:"#4b5563",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Historial NO FLEX</div>
                 {[...historial].sort((a,b)=>b.vigenciaDesde.localeCompare(a.vigenciaDesde)).map((h,i)=>(
-                  <div key={i} style={{fontSize:"0.72rem",color:"#6b7280",padding:"2px 0",borderBottom:"1px solid #1a1f2e"}}>
-                    Desde {h.vigenciaDesde} · {Object.keys(h.tarifaMatrix||{}).length} zonas
+                  <div key={i} style={{fontSize:"0.72rem",color:"#6b7280",padding:"4px 0",borderBottom:"1px solid #1a1f2e",display:"flex",alignItems:"center",gap:"6px"}}>
+                    <span style={{flex:1}}>Desde {h.vigenciaDesde} · {Object.keys(h.tarifaMatrix||{}).length} zonas</span>
+                    <button onClick={()=>{
+                      if(!window.confirm(`¿Restaurar los valores de NO FLEX del ${h.vigenciaDesde} como activos?`))return;
+                      const newHist=(lc[logSel]?.tarifaHistorial||[]).filter(x=>x.vigenciaDesde!==h.vigenciaDesde);
+                      setLc(p=>({...p,[logSel]:{...p[logSel],tarifaMatrix:{...h.tarifaMatrix},tarifaVigenciaDesde:h.vigenciaDesde,tarifaHistorial:newHist}}));
+                    }}
+                      style={{...S.btnSm(false),color:"#f59e0b",borderColor:"#78350f",fontSize:"0.65rem",padding:"1px 6px",flexShrink:0}}>↩ Restaurar</button>
                   </div>
                 ))}
               </div>}
