@@ -2320,22 +2320,22 @@ function imprimirNotaPV(caso){
 }
 
 function TabPostVenta({envios=[],sesion=null}){
-  const [casos,setCasos]=React.useState([]);
-  const [loading,setLoading]=React.useState(true);
-  const [modo,setModo]=React.useState("lista");
-  const [filtroEstado,setFiltroEstado]=React.useState("todos");
-  const [filtroTipo,setFiltroTipo]=React.useState("todos");
-  const [saving,setSaving]=React.useState(false);
-  const [err,setErr]=React.useState("");
+  const [casos,setCasos]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [modo,setModo]=useState("lista");
+  const [filtroEstado,setFiltroEstado]=useState("todos");
+  const [filtroTipo,setFiltroTipo]=useState("todos");
+  const [saving,setSaving]=useState(false);
+  const [err,setErr]=useState("");
 
   const VACIO={ordenOriginal:"",clienteNombre:"",telefono:"",direccion:"",localidad:"",partido:"",cp:"",
     tipoIncidente:"",descripcion:"",resolucion:"",costoResolucion:0,
     envioId:"",envioTrans:"",envioFecha:"",envioTurno:"",estado:"pendiente"};
-  const [f,setF]=React.useState(VACIO);
+  const [f,setF]=useState(VACIO);
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
 
   // Cargar desde Firestore
-  React.useEffect(()=>{
+  useEffect(()=>{
     const unsub=onSnapshot(
       query(collection(db,"postventa"),orderBy("fechaCreacion","desc")),
       snap=>{setCasos(snap.docs.map(d=>({id:d.id,...d.data()})));setLoading(false);},
@@ -2345,7 +2345,7 @@ function TabPostVenta({envios=[],sesion=null}){
   },[]);
 
   // Auto-fill cliente desde orden original
-  React.useEffect(()=>{
+  useEffect(()=>{
     const id=f.ordenOriginal.trim();
     if(!id)return;
     const found=envios.find(e=>e.id===id||(e.nroOrdenTN&&String(e.nroOrdenTN)===id));
@@ -2362,7 +2362,7 @@ function TabPostVenta({envios=[],sesion=null}){
   },[f.ordenOriginal]);
 
   // Auto-fill logística/fecha/turno desde envío vinculado
-  React.useEffect(()=>{
+  useEffect(()=>{
     const id=f.envioId.trim();
     if(!id)return;
     const found=envios.find(e=>e.id===id);
