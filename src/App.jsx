@@ -3007,7 +3007,9 @@ function TabTarifas({zc,setZc,lc,setLc,mlTarifas=ML_TARIFAS_INIT,setMlTarifas}){
         const crearNuevaVigenciaML=()=>{
           const nuevaFecha=window.prompt("Vigencia desde (YYYY-MM-DD):",fechaHoy());
           if(!nuevaFecha||!setMlTarifas)return;
-          setMlTarifas(p=>({...p,vigenciaDesde:nuevaFecha,historial:[...(p.historial||[]),{vigenciaDesde:vigDesde,grupos:grupos.map(g=>({...g,partidos:[...(g.partidos||[])]}))}}));
+          const snap=grupos.map(g=>({...g,partidos:[...(g.partidos||[])]}));
+          const hist=[...(mlTarifas?.historial||[]),{vigenciaDesde:vigDesde,grupos:snap}];
+          setMlTarifas(p=>({...p,vigenciaDesde:nuevaFecha,historial:hist}));
         };
         const guardarPrecioGrupo=(id,val)=>updGruposML(gs=>gs.map(g=>g.id===id?{...g,precio:parseInt(val)||0}:g));
         return(<div>
