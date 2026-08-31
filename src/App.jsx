@@ -2193,15 +2193,27 @@ function TabImprimir({envios,setEnvios,zc,lc}){
 
 function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
   const hoy=fechaHoy();
-  const vacio={id:"",nroSeguimiento:"",linkML:"",direccion:"",ciudad:"",cp:"",origen:"Manual",trans:"",fecha:hoy,turno:"",estado:"sin_asignar",cobranza:null,cambio:null,retiro:null,observaciones:"",bultos:0,partido:"",tarifaLog:0,fechaVenta:hoy,clienteNombre:"",telefono:"",esCC:false,importeCC:0,nroFactura:""};
+  const vacio={
+    id:"",tipo:"Manual",origen:"Manual",
+    nroSeguimiento:"",linkML:"",
+    clienteNombre:"",telefono:"",
+    direccion:"",ciudad:"",cp:"",partido:"",provincia:"",
+    fecha:hoy,fechaVenta:hoy,turno:"",
+    trans:"",estado:"sin_asignar",tarifaLog:0,
+    bultos:0,
+    cobranza:null,retiro:null,
+    esCC:false,importeCC:0,nroFactura:"",
+    observaciones:"",
+  };
   const [f,setF]=useState(vacio);
   const [err,setErr]=useState("");
-  const [dupWarn,setDupWarn]=useState("");
+  const [saving,setSaving]=useState(false);
   const [sugsVisible,setSugsVisible]=useState(false);
-  const [dirsCliente,setDirsCliente]=useState([]); // direcciones del cliente seleccionado para elegir
+  const [dirsCliente,setDirsCliente]=useState([]);
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
+  const esML=f.origen==="ML";
 
-  // Mapa de clientes con teléfono y direcciones únicas de pedidos anteriores
+  // Mapa de clientes con teléfono y direcciones únicas
   const clientesData=useMemo(()=>{
     const map={};
     (enviosExistentes||[]).sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||"")).forEach(e=>{
@@ -2211,127 +2223,214 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
       if(e.telefono&&!map[nombre].telefono)map[nombre].telefono=e.telefono;
       if(e.direccion){
         const normD=e.direccion.toLowerCase().trim();
-        if(!map[nombre].direcciones.find(d=>d.norm===normD)){
+        if(!map[nombre].direcciones.find(d=>d.norm===normD))
           map[nombre].direcciones.push({direccion:e.direccion,cp:e.cp||"",ciudad:e.ciudad||"",partido:e.partido||"",norm:normD});
-        }
       }
     });
     return map;
   },[enviosExistentes]);
 
-  // Seleccionar cliente: autocompleta todos los campos
   const seleccionarCliente=(nombre)=>{
-    set("clienteNombre",nombre);
     setSugsVisible(false);
     const data=clientesData[nombre];
-    if(!data)return;
-    if(data.telefono)set("telefono",data.telefono);
+    if(!data){set("clienteNombre",nombre);return;}
     if(data.direcciones.length===1){
       const d=data.direcciones[0];
       setF(p=>({...p,clienteNombre:nombre,telefono:data.telefono||p.telefono,
         direccion:d.direccion,cp:d.cp,ciudad:d.ciudad,partido:d.partido||cpAPartido(d.cp)||""}));
       setDirsCliente([]);
-    } else if(data.direcciones.length>1){
-      setDirsCliente(data.direcciones);
     } else {
-      setDirsCliente([]);
+      setF(p=>({...p,clienteNombre:nombre,telefono:data.telefono||p.telefono}));
+      setDirsCliente(data.direcciones.length>1?data.direcciones:[]);
     }
   };
 
-  // Lista de clientes únicos para el dropdown
   const clientesExistentes=useMemo(()=>Object.keys(clientesData).sort((a,b)=>a.localeCompare(b)),[clientesData]);
   const sugerencias=sugsVisible&&f.clienteNombre.length>=2
     ?clientesExistentes.filter(n=>norm(n).includes(norm(f.clienteNombre))&&norm(n)!==norm(f.clienteNombre)).slice(0,8)
     :[];
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
+
   useEffect(()=>{const p=cpAPartido(f.cp);if(p)set("partido",p);},[f.cp]);
-  useEffect(()=>{if(f.nroSeguimiento&&(enviosExistentes||[]).some(e=>e.nroSeguimiento===f.nroSeguimiento)){setDupWarn("Ya existe un envio con este numero de seguimiento.");}else{setDupWarn("");};},[f.nroSeguimiento]);
+
+  // Validación de ID único
+  const idDuplicado=useMemo(()=>{
+    const id=f.id.trim();
+    if(!id)return false;
+    return (enviosExistentes||[]).some(e=>e.id===id);
+  },[f.id,enviosExistentes]);
+
   const handleTrans=l=>{const t=f.trans===l?"":l;setF(p=>({...p,trans:t,estado:t?"asignado":"sin_asignar"}));};
-  const guardar=()=>{
-    if(!f.id.trim()){setErr("El numero de venta es obligatorio.");return;}
-    if(!f.direccion.trim()){setErr("La direccion es obligatoria.");return;}
+
+  const guardar=async()=>{
+    const id=f.id.trim();
+    if(!id){setErr(esML?"El nro de venta es obligatorio.":"El nro de pedido es obligatorio.");return;}
+    if(idDuplicado){setErr(esML?"Ya existe un envio con ese nro de venta.":"Ya existe un envio con ese nro de pedido ("+id+").");return;}
+    if(esML&&!f.nroSeguimiento.trim()){setErr("El nro de seguimiento es obligatorio para pedidos ML.");return;}
+    if(!f.clienteNombre.trim()){setErr("El nombre del cliente es obligatorio.");return;}
+    if(!f.direccion.trim()){setErr("La dirección es obligatoria.");return;}
     if(!f.fecha){setErr("La fecha es obligatoria.");return;}
-    if(dupWarn){setErr(dupWarn);return;}
+    const partido=f.partido||(cpAPartido(f.cp)||f.ciudad)||"";
     const audit=mkAudit(sesion);
-    setEnvios(p=>[{...f,id:f.id.trim(),partido:f.partido||(cpAPartido(f.cp)||f.ciudad),...(audit?{creadoPor:audit}:{})},...p]);
-    setF(vacio);setErr("");setDupWarn("");onSuccess();
+    const data={
+      ...f,id,
+      tipo:esML?"ML":"Manual",
+      origen:esML?"ML":"Manual",
+      linkML:esML?`https://www.mercadolibre.com.ar/ventas/${id}/detalle`:"",
+      partido,
+      creadoTs:new Date().toISOString(),
+      ...(audit?{creadoPor:audit}:{}),
+    };
+    try{
+      setSaving(true);
+      await setDoc(doc(db,"envios",id),data);
+      setEnvios(p=>[data,...p]);
+      setF(vacio);setErr("");setDirsCliente([]);
+      onSuccess();
+    }catch(e){
+      console.error("TabManual guardar",e);
+      setErr("Error al guardar: "+e.message);
+    }finally{setSaving(false);}
   };
+
+  const Lbl=({children})=><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>{children}</label>;
+  const SecH=({children})=><div style={{fontSize:"0.6rem",color:"#4b5563",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",padding:"0.55rem 0 0.4rem",borderBottom:"1px solid #1e2535",marginBottom:"0.7rem"}}>{children}</div>;
+
   return(
     <div style={{maxWidth:"620px"}}>
       {err&&<div style={{...S.card,padding:"0.6rem 1rem",marginBottom:"0.75rem",background:"#1c0a0a",border:"1px solid #7f1d1d",color:"#fca5a5",fontSize:"0.82rem"}}>{err}</div>}
-      {dupWarn&&!err&&<div style={{...S.card,padding:"0.6rem 1rem",marginBottom:"0.75rem",background:"#1c1500",border:"1px solid #78350f",color:"#fbbf24",fontSize:"0.82rem"}}>Advertencia: {dupWarn}</div>}
       <div style={{...S.card,padding:"1rem 1.1rem"}}>
-        <h3 style={{margin:"0 0 0.9rem",fontWeight:800,fontSize:"0.95rem",color:"#e5e7eb"}}>Nuevo envio manual</h3>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.7rem",marginBottom:"0.7rem"}}>
-          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. venta / referencia</label><input value={f.id} onChange={e=>set("id",e.target.value)} style={{...S.input,width:"100%"}} placeholder="ej. 2000012345"/></div>
-          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. seguimiento</label><input value={f.nroSeguimiento} onChange={e=>set("nroSeguimiento",e.target.value)} style={{...S.input,width:"100%",borderColor:dupWarn?"#f59e0b":"#252d40"}} placeholder="ej. 46669555629"/></div>
-          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. Factura</label><input value={f.nroFactura||""} onChange={e=>set("nroFactura",e.target.value)} style={{...S.input,width:"100%"}} placeholder="ej. FA-00001"/></div>
-          <div style={{position:"relative",gridColumn:"1/-1"}}><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nombre cliente</label>
-            <input value={f.clienteNombre} onChange={e=>{set("clienteNombre",e.target.value);setSugsVisible(true);setDirsCliente([]);}} onFocus={()=>setSugsVisible(true)} onBlur={()=>setTimeout(()=>setSugsVisible(false),150)} style={{...S.input,width:"100%"}} placeholder="Nombre completo o buscar existente"/>
-            {sugerencias.length>0&&(
-              <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:200,background:"#1a1f2e",border:"1px solid #6366f1",borderRadius:"6px",marginTop:"2px",boxShadow:"0 6px 16px rgba(0,0,0,0.5)",overflow:"hidden"}}>
-                {sugerencias.map(n=>{
-                  const d=clientesData[n];
-                  return(
-                    <div key={n} onMouseDown={()=>seleccionarCliente(n)} style={{padding:"0.45rem 0.75rem",cursor:"pointer",borderBottom:"1px solid #252d40",transition:"background 0.1s"}} onMouseEnter={e=>e.currentTarget.style.background="#252d40"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                      <div style={{color:"#e5e7eb",fontSize:"0.82rem",fontWeight:600}}>{n}</div>
-                      <div style={{fontSize:"0.68rem",color:"#4b5563",marginTop:"1px",display:"flex",gap:"8px"}}>
-                        {d?.telefono&&<span>📞 {d.telefono}</span>}
-                        {d?.direcciones?.length===1&&<span>📍 {d.direcciones[0].direccion}</span>}
-                        {d?.direcciones?.length>1&&<span>📍 {d.direcciones.length} direcciones</span>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            {/* Picker de direcciones cuando hay más de una */}
-            {dirsCliente.length>1&&(
-              <div style={{marginTop:"6px",background:"#0f1420",border:"1px solid #6366f1",borderRadius:"6px",overflow:"hidden"}}>
-                <div style={{padding:"5px 10px",fontSize:"0.62rem",color:"#6366f1",fontWeight:700,textTransform:"uppercase",borderBottom:"1px solid #252d40"}}>Elegí una dirección</div>
-                {dirsCliente.map((d,i)=>(
-                  <div key={i} onMouseDown={()=>{
-                    setF(p=>({...p,direccion:d.direccion,cp:d.cp,ciudad:d.ciudad,partido:d.partido||cpAPartido(d.cp)||""}));
-                    setDirsCliente([]);
-                  }} style={{padding:"7px 10px",cursor:"pointer",borderBottom:i<dirsCliente.length-1?"1px solid #1a1f2e":"none",transition:"background 0.1s"}} onMouseEnter={e=>e.currentTarget.style.background="#1a1f2e"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                    <div style={{fontSize:"0.78rem",color:"#e2e8f0",fontWeight:600}}>{d.direccion}</div>
-                    <div style={{fontSize:"0.65rem",color:"#4b5563",marginTop:"1px",display:"flex",gap:"8px"}}>
-                      {d.ciudad&&<span>{d.ciudad}</span>}
-                      {d.partido&&<span>· {d.partido}</span>}
-                      {d.cp&&<span>· CP {d.cp}</span>}
+        <h3 style={{margin:"0 0 0.9rem",fontWeight:800,fontSize:"0.95rem",color:"#e5e7eb"}}>Nuevo envio</h3>
+
+        {/* ── CLIENTE ── */}
+        <SecH>Cliente</SecH>
+        <div style={{position:"relative",marginBottom:"0.7rem"}}>
+          <Lbl>Nombre *</Lbl>
+          <input value={f.clienteNombre}
+            onChange={e=>{set("clienteNombre",e.target.value);setSugsVisible(true);setDirsCliente([]);}}
+            onFocus={()=>setSugsVisible(true)} onBlur={()=>setTimeout(()=>setSugsVisible(false),150)}
+            style={{...S.input,width:"100%"}} placeholder="Nombre completo o buscar existente"/>
+          {sugerencias.length>0&&(
+            <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:200,background:"#1a1f2e",border:"1px solid #6366f1",borderRadius:"6px",marginTop:"2px",boxShadow:"0 6px 16px rgba(0,0,0,0.5)",overflow:"hidden"}}>
+              {sugerencias.map(n=>{
+                const d=clientesData[n];
+                return(
+                  <div key={n} onMouseDown={()=>seleccionarCliente(n)} style={{padding:"0.45rem 0.75rem",cursor:"pointer",borderBottom:"1px solid #252d40"}} onMouseEnter={e=>e.currentTarget.style.background="#252d40"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <div style={{color:"#e5e7eb",fontSize:"0.82rem",fontWeight:600}}>{n}</div>
+                    <div style={{fontSize:"0.68rem",color:"#4b5563",marginTop:"1px",display:"flex",gap:"8px"}}>
+                      {d?.telefono&&<span>📞 {d.telefono}</span>}
+                      {d?.direcciones?.length===1&&<span>📍 {d.direcciones[0].direccion}</span>}
+                      {d?.direcciones?.length>1&&<span>📍 {d.direcciones.length} direcciones</span>}
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+                );
+              })}
+            </div>
+          )}
+          {dirsCliente.length>1&&(
+            <div style={{marginTop:"6px",background:"#0f1420",border:"1px solid #6366f1",borderRadius:"6px",overflow:"hidden"}}>
+              <div style={{padding:"5px 10px",fontSize:"0.62rem",color:"#6366f1",fontWeight:700,textTransform:"uppercase",borderBottom:"1px solid #252d40"}}>Elegí una dirección</div>
+              {dirsCliente.map((d,i)=>(
+                <div key={i} onMouseDown={()=>{setF(p=>({...p,direccion:d.direccion,cp:d.cp,ciudad:d.ciudad,partido:d.partido||cpAPartido(d.cp)||""}));setDirsCliente([]);}}
+                  style={{padding:"7px 10px",cursor:"pointer",borderBottom:i<dirsCliente.length-1?"1px solid #1a1f2e":"none"}}
+                  onMouseEnter={e=>e.currentTarget.style.background="#1a1f2e"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <div style={{fontSize:"0.78rem",color:"#e2e8f0",fontWeight:600}}>{d.direccion}</div>
+                  <div style={{fontSize:"0.65rem",color:"#4b5563",marginTop:"1px",display:"flex",gap:"8px"}}>
+                    {d.ciudad&&<span>{d.ciudad}</span>}{d.partido&&<span>· {d.partido}</span>}{d.cp&&<span>· CP {d.cp}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div style={{marginBottom:"0.7rem"}}>
+          <Lbl>Teléfono</Lbl>
+          <input value={f.telefono} onChange={e=>set("telefono",e.target.value)} style={{...S.input,width:"100%"}} placeholder="ej. 1165432100"/>
+        </div>
+        <div style={{marginBottom:"0.7rem"}}>
+          <Lbl>Dirección *</Lbl>
+          <textarea value={f.direccion} onChange={e=>set("direccion",e.target.value)} style={{...S.input,width:"100%",height:"52px",resize:"vertical"}} placeholder="Calle, número, piso/dpto"/>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"0.7rem",marginBottom:"0.9rem"}}>
+          <div><Lbl>CP</Lbl><input value={f.cp} onChange={e=>set("cp",e.target.value)} style={{...S.input,width:"100%"}} placeholder="1642"/></div>
+          <div><Lbl>Ciudad</Lbl><input value={f.ciudad||""} onChange={e=>set("ciudad",e.target.value)} style={{...S.input,width:"100%"}} placeholder="ej. San Isidro"/></div>
+          <div><Lbl>Partido</Lbl><input value={f.partido} onChange={e=>set("partido",e.target.value)} style={{...S.input,width:"100%",color:f.partido?"#10b981":"#6b7280"}} placeholder="auto desde CP"/></div>
+        </div>
+
+        {/* ── CONTENIDO ── */}
+        <SecH>Contenido</SecH>
+        <div style={{marginBottom:"0.7rem"}}>
+          <Lbl>Origen</Lbl>
+          <div style={{display:"flex",gap:"4px"}}>
+            {["Manual","ML"].map(o=><button key={o} onClick={()=>{set("origen",o);set("tipo",o);}} style={S.btnSm(f.origen===o,"#6366f1")}>{o}</button>)}
           </div>
-          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Teléfono</label><input value={f.telefono} onChange={e=>set("telefono",e.target.value)} style={{...S.input,width:"100%"}} placeholder="ej. 1165432100"/></div>
-          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Origen</label><div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{["ML","Tienda Nube","Particular","Otro"].map(o =><button key={o} onClick={()=>set("origen",o)} style={S.btnSm(f.origen===o,"#6366f1")}>{o}</button>)}</div></div>
-          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Bultos</label><input type="number" min="1" value={f.bultos||""} onChange={ev=>{const v=parseInt(ev.target.value);set("bultos",v>0?v:"");}} placeholder="1" style={{...S.input,width:"120px",padding:"4px 10px"}}/></div>
         </div>
-        <div style={{marginBottom:"0.7rem"}}><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Direccion completa</label><textarea value={f.direccion} onChange={e=>set("direccion",e.target.value)} style={{...S.input,width:"100%",height:"56px",resize:"vertical"}} placeholder="Calle, numero..."/></div>
+        {!esML&&(
+          <div style={{marginBottom:"0.7rem"}}>
+            <Lbl>Nro de pedido * <span style={{color:idDuplicado?"#f87171":"#374151",fontSize:"0.6rem",fontWeight:400,textTransform:"none"}}>{idDuplicado?"— ya existe":""}</span></Lbl>
+            <input value={f.id} onChange={e=>set("id",e.target.value)} style={{...S.input,width:"100%",borderColor:idDuplicado?"#7f1d1d":"#252d40"}} placeholder="ej. PED-001"/>
+          </div>
+        )}
+        {esML&&(
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.7rem",marginBottom:"0.7rem"}}>
+            <div>
+              <Lbl>Nro de venta * <span style={{color:idDuplicado?"#f87171":"#374151",fontSize:"0.6rem",fontWeight:400,textTransform:"none"}}>{idDuplicado?"— ya existe":""}</span></Lbl>
+              <input value={f.id} onChange={e=>set("id",e.target.value)} style={{...S.input,width:"100%",borderColor:idDuplicado?"#7f1d1d":"#252d40"}} placeholder="ej. 2000012345"/>
+            </div>
+            <div>
+              <Lbl>Nro de seguimiento *</Lbl>
+              <input value={f.nroSeguimiento} onChange={e=>set("nroSeguimiento",e.target.value)} style={{...S.input,width:"100%"}} placeholder="ej. 46669555629"/>
+            </div>
+          </div>
+        )}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.7rem",marginBottom:"0.7rem"}}>
-          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>CP</label><input value={f.cp} onChange={e=>set("cp",e.target.value)} style={{...S.input,width:"100%"}} placeholder="1642"/></div>
-          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Ciudad</label><input value={f.ciudad||""} onChange={e=>set("ciudad",e.target.value)} style={{...S.input,width:"100%"}} placeholder="ej. Buenos Aires"/></div>
-          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Partido (auto)</label><input value={f.partido} onChange={e=>set("partido",e.target.value)} style={{...S.input,width:"100%",color:f.partido?"#10b981":"#6b7280"}} placeholder="Por CP"/></div>
-          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Zona ML</label><div style={{...S.input,padding:"0.45rem 0.6rem",color:ZONA_ML_COLOR[getZonaML(f.partido)]||"#6b7280",fontSize:"0.8rem",fontWeight:700}}>{getZonaML(f.partido)||"-"}</div></div>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.7rem",marginBottom:"0.7rem"}}>
-          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Logistica</label><div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{logActivas.map(l =><button key={l} onClick={()=>handleTrans(l)} style={S.btnSm(f.trans===l,lc[l]?.color||"#6366f1")}>{l}</button>)}</div></div>
-          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Turno</label><div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{TURNOS.map(t =><button key={t} onClick={()=>set("turno",f.turno===t?"":t)} style={S.btnSm(f.turno===t,"#8b5cf6")}>{t}</button>)}</div></div>
-          <div><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Fecha entrega</label><input type="date" value={f.fecha} onChange={e=>set("fecha",e.target.value)} style={{...S.input,width:"100%"}}/></div>
-        </div>
-        <div style={{marginBottom:"0.6rem"}}><label style={{display:"block",color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Observaciones</label><textarea value={f.observaciones} onChange={e=>set("observaciones",e.target.value)} style={{...S.input,display:"block",width:"100%",height:"44px",resize:"vertical",fontSize:"0.8rem"}} placeholder="Notas adicionales..."/></div>
-        <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.55rem",background:"#0f1420"}}><div style={{display:"flex",alignItems:"center",gap:"0.75rem"}}><button onClick={()=>set("cobranza",f.cobranza!==null?null:0)} style={S.btnSm(f.cobranza!==null,"#f59e0b")}>Cobranza</button>{f.cobranza!==null?<input type="number" placeholder="Monto" value={f.cobranza||""} onChange={e=>set("cobranza",parseFloat(e.target.value)||0)} style={{...S.input,width:"150px",padding:"4px 10px"}}/>:<span style={{color:"#374151",fontSize:"0.78rem"}}>Sin cobranza</span>}</div></div>
-        <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.9rem",background:"#0f1420"}}>
-          <div style={{fontSize:"0.62rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"8px"}}>Cambio / Retiro</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.7rem"}}>
-            <div><label style={{display:"block",color:"#ec4899",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Lo que se entrega</label><textarea value={f.cambio||""} onChange={e=>set("cambio",e.target.value||null)} placeholder="Qué dejamos..." style={{...S.input,display:"block",width:"100%",height:"56px",resize:"vertical",fontSize:"0.8rem"}}/></div>
-            <div><label style={{display:"block",color:"#f97316",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Lo que se retira</label><textarea value={f.retiro||""} onChange={e=>set("retiro",e.target.value||null)} placeholder="Qué buscamos..." style={{...S.input,display:"block",width:"100%",height:"56px",resize:"vertical",fontSize:"0.8rem"}}/></div>
+          <div><Lbl>Bultos</Lbl><input type="number" min="0" value={f.bultos===0?"0":f.bultos||""} onChange={ev=>{const v=parseInt(ev.target.value);set("bultos",isNaN(v)?0:v);}} style={{...S.input,width:"100%"}}/></div>
+          <div><Lbl>Cobranza ($)</Lbl>
+            <div style={{display:"flex",gap:"4px",alignItems:"center"}}>
+              <input type="number" min="0" value={f.cobranza===null?"":f.cobranza} onChange={e=>{const v=e.target.value;set("cobranza",v===""?null:parseFloat(v)||0);}} placeholder="— sin cobro" style={{...S.input,flex:1}}/>
+            </div>
           </div>
         </div>
-        <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.9rem",background:f.esCC?"#130d2a":"#0f1420",border:f.esCC?"1px solid #a78bfa":"1px solid #1e2535"}}><div style={{display:"flex",alignItems:"center",gap:"0.75rem"}}><button onClick={()=>set("esCC",!f.esCC)} style={S.btnSm(f.esCC,"#a78bfa")}>Cta. Corriente</button>{f.esCC?<><span style={{color:"#6b7280",fontSize:"0.78rem"}}>Importe:</span><input type="number" placeholder="Monto" value={f.importeCC||""} onChange={e=>set("importeCC",parseFloat(e.target.value)||0)} style={{...S.input,width:"150px",padding:"4px 10px"}}/><span style={{color:"#a78bfa",fontSize:"0.72rem"}}>El cliente te debe este monto</span></>:<span style={{color:"#374151",fontSize:"0.78rem"}}>Marcar como Cuenta Corriente</span>}</div></div>
-        <div style={{display:"flex",justifyContent:"flex-end",gap:"0.5rem"}}><button onClick={()=>{setF(vacio);setErr("");setDupWarn("");setDirsCliente([]);}} style={S.btn(false)}>Limpiar</button><button onClick={guardar} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.5rem 1.2rem"}}>Agregar envio</button></div>
+        <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.7rem",background:f.esCC?"#130d2a":"#0f1420",border:f.esCC?"1px solid #a78bfa":"1px solid #1e2535"}}>
+          <div style={{display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
+            <button onClick={()=>set("esCC",!f.esCC)} style={S.btnSm(f.esCC,"#a78bfa")}>Cta. Corriente</button>
+            {f.esCC&&<><input type="number" placeholder="Importe CC" value={f.importeCC||""} onChange={e=>set("importeCC",parseFloat(e.target.value)||0)} style={{...S.input,width:"130px",padding:"4px 10px"}}/><input value={f.nroFactura||""} onChange={e=>set("nroFactura",e.target.value)} placeholder="Nro. factura" style={{...S.input,width:"130px",padding:"4px 10px"}}/></>}
+            {!f.esCC&&<span style={{color:"#374151",fontSize:"0.78rem"}}>Marcar como Cuenta Corriente</span>}
+          </div>
+        </div>
+        <div style={{marginBottom:"0.9rem"}}>
+          <Lbl>Observaciones</Lbl>
+          <textarea value={f.observaciones} onChange={e=>set("observaciones",e.target.value)} style={{...S.input,display:"block",width:"100%",height:"44px",resize:"vertical",fontSize:"0.8rem"}} placeholder="Notas internas, alertas..."/>
+        </div>
+
+        {/* ── ENTREGA ── */}
+        <SecH>Entrega</SecH>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.7rem",marginBottom:"0.7rem"}}>
+          <div><Lbl>Fecha *</Lbl><input type="date" value={f.fecha} onChange={e=>set("fecha",e.target.value)} style={{...S.input,width:"100%"}}/></div>
+          <div><Lbl>Turno</Lbl><div style={{display:"flex",gap:"3px",flexWrap:"wrap",paddingTop:"2px"}}>{TURNOS.map(t=><button key={t} onClick={()=>set("turno",f.turno===t?"":t)} style={S.btnSm(f.turno===t,"#8b5cf6")}>{t}</button>)}</div></div>
+        </div>
+        <div style={{marginBottom:"0.7rem"}}>
+          <Lbl>Logística</Lbl>
+          <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{logActivas.map(l=><button key={l} onClick={()=>handleTrans(l)} style={S.btnSm(f.trans===l,lc[l]?.color||"#6366f1")}>{l}</button>)}</div>
+        </div>
+        <div style={{marginBottom:"0.7rem"}}>
+          <Lbl>Tarifa log. ($)</Lbl>
+          <input type="number" min="0" value={f.tarifaLog||""} onChange={e=>set("tarifaLog",parseFloat(e.target.value)||0)} placeholder="0" style={{...S.input,width:"160px"}}/>
+        </div>
+        <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.9rem",background:f.retiro!==null?"#1c1000":"#0f1420",border:f.retiro!==null?"1px solid #f97316":"1px solid #1e2535"}}>
+          <div style={{display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
+            <button onClick={()=>set("retiro",f.retiro!==null?null:"")} style={S.btnSm(f.retiro!==null,"#f97316")}>Retiro</button>
+            {f.retiro!==null&&<input value={f.retiro||""} onChange={e=>set("retiro",e.target.value||null)} placeholder="Qué se retira del cliente..." style={{...S.input,flex:1,padding:"4px 10px"}}/>}
+            {f.retiro===null&&<span style={{color:"#374151",fontSize:"0.78rem"}}>Marca si la logística retira algo en la entrega</span>}
+          </div>
+        </div>
+
+        <div style={{display:"flex",justifyContent:"flex-end",gap:"0.5rem"}}>
+          <button onClick={()=>{setF(vacio);setErr("");setDirsCliente([]);}} style={S.btn(false)}>Limpiar</button>
+          <button onClick={guardar} disabled={saving} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.5rem 1.2rem",opacity:saving?0.6:1}}>
+            {saving?"Guardando...":"Guardar envio"}
+          </button>
+        </div>
       </div>
     </div>
   );
