@@ -388,8 +388,16 @@ function generarHTMLDespacho({logistica,fecha,envios:lista,pdfOrient="landscape"
   <script>window.onload=function(){window.print();};<\/script>
   </body></html>`;
 }
-// Valor de referencia que paga ML por envío (por partido)
+// Valor de referencia que paga ML por envío (por partido) — fallback hardcodeado
 const ML_FINAL={"CABA":6490,"Lomas de Zamora":6490,"Avellaneda":4490,"Lanus":4490,"Quilmes":4490,"Almirante Brown":8490,"Berazategui":8490,"Berisso":8490,"Campana":8490,"Canuelas":8490,"Ensenada":8490,"Escobar":8490,"Esteban Echeverria":8490,"Ezeiza":8490,"Florencio Varela":8490,"Gral. Rodriguez":8490,"Hurlingham":8490,"Ituzaingo":8490,"Jose C Paz":8490,"La Matanza Norte":8490,"La Matanza Sur":8490,"La Plata":8490,"Lujan":8490,"Malvinas Argentinas":8490,"Marcos Paz":8490,"Merlo":8490,"Moreno":8490,"Moron":8490,"Pilar":8490,"Presidente Peron":8490,"San Fernando":8490,"San Isidro":8490,"San Martin":8490,"San Miguel":8490,"San Vicente":8490,"Tigre":8490,"Tres de Febrero":8490,"Vicente Lopez":8490,"Zarate":8490};
+const ML_TARIFAS_INIT={vigenciaDesde:"2026-03-12",tarifas:{...ML_FINAL},historial:[]};
+// getMLRate: usa Firestore si ya cargó, fallback a ML_FINAL hardcodeado
+function getMLRate(partido,mlTarifas){
+  if(!partido)return 0;
+  const t=mlTarifas?.tarifas;
+  if(t&&partido in t)return t[partido]||0;
+  return ML_FINAL[partido]||0;
+}
 const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
 function parseFechaES(str){const m=String(str||"").toLowerCase().match(/(\d+)\s+de\s+(\w+)\s+de\s+(\d{4})/);if(!m)return"";const mes=MESES[m[2]];if(!mes)return"";return m[3]+"-"+String(mes).padStart(2,"0")+"-"+String(m[1]).padStart(2,"0");}
 
@@ -1282,7 +1290,7 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
   );
 }
 
-function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null,mostrarResumenFlex=false,facturaClientes={}}){
+function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null,mostrarResumenFlex=false,facturaClientes={},mlTarifas={}}){
   const hoy=fechaHoy();
   const [modFecha,setModFecha]=useState("hoy");
   const [rangoD,setRangoD]=useState(hoy);
@@ -1774,7 +1782,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                   {e.despachado&&e.despachoTs&&<span style={{color:"#10b981",fontSize:"0.68rem",fontWeight:700}}>🚚 {fmtHora(e.despachoTs)}{e.despachoPor?" · "+e.despachoPor:""}</span>}
                   {imp>0&&puedeVer(sesion,"accion_verimportes")&&<span style={{color:e.importeOverride>0?"#fbbf24":"#10b981",fontWeight:700,fontSize:"0.82rem"}}>{fmt(imp)}{e.importeOverride>0&&<span style={{fontSize:"0.62rem",opacity:.65,marginLeft:"2px"}}>*</span>}</span>}
                   {esTN&&e.importeOrden>0&&puedeVer(sesion,"accion_verimportes")&&<span style={{color:"#6b7280",fontSize:"0.7rem"}}>{fmt(e.importeOrden)}</span>}
-                  {e.origen==="ML"&&ML_FINAL[e.partido]&&<span style={{color:"#64748b",fontSize:"0.68rem",marginTop:"1px"}}>ML {fmt(ML_FINAL[e.partido])}</span>}
+                  {e.origen==="ML"&&getMLRate(e.partido,mlTarifas)>0&&<span style={{color:"#64748b",fontSize:"0.68rem",marginTop:"1px"}}>ML {fmt(getMLRate(e.partido,mlTarifas))}</span>}
                 </div>
               </div>
               {isEdit&&!modoSel&&puedeVer(sesion,"accion_editarenvio")&&<PanelEdit envio={e} onSave={saveEnvio} onSaveMultiple={saveMultipleEnvios} onClose={()=>setEditId(null)} lc={lc} envios={envios} getImp={getImp} esAdmin={esAdmin} sesion={sesion}/>}
@@ -2811,7 +2819,7 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
   );
 }
 
-function TabTarifas({zc,setZc,lc,setLc}){
+function TabTarifas({zc,setZc,lc,setLc,mlTarifas=ML_TARIFAS_INIT,setMlTarifas}){
   const [subTab,setSubTab]=useState("zonas");
   const [logSel,setLogSel]=useState("");
   const [tipoMx,setTipoMx]=useState("noflex");
@@ -2851,12 +2859,16 @@ function TabTarifas({zc,setZc,lc,setLc}){
       <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"1rem",display:"flex",gap:"4px",flexWrap:"wrap",alignItems:"center"}}>
         <button onClick={()=>setSubTab("zonas")} style={S.btn(subTab==="zonas")}>Zonas y precios</button>
         <button onClick={()=>setSubTab("bultos")} style={S.btn(subTab==="bultos")}>Matriz de precios</button>
-        <button onClick={()=>setSubTab("logisticas")} style={S.btn(subTab==="logisticas")}>Logisticas</button>
-        {subTab!=="logisticas"&&<><span style={{color:"#374151",fontSize:"0.65rem",margin:"0 4px"}}>|</span>{Object.entries(lc).filter(([,v])=>v.activa).map(([k,v])=><button key={k} onClick={()=>setLogSel(k)} style={S.btn(logSel===k,v.color)}>{k}</button>)}</>}
+        <button onClick={()=>setSubTab("logisticas")} style={S.btn(subTab==="logisticas")}>Logísticas</button>
+        <button onClick={()=>setSubTab("mlTarifas")} style={{...S.btn(subTab==="mlTarifas","#f59e0b"),background:subTab==="mlTarifas"?"#1c1500":"transparent",color:subTab==="mlTarifas"?"#fbbf24":"#78350f",border:"1px solid "+(subTab==="mlTarifas"?"#f59e0b":"#1c1500")}}>Tarifas ML</button>
+        {subTab!=="logisticas"&&subTab!=="mlTarifas"&&<><span style={{color:"#374151",fontSize:"0.65rem",margin:"0 4px"}}>|</span>{Object.entries(lc).filter(([,v])=>v.activa).map(([k,v])=><button key={k} onClick={()=>setLogSel(k)} style={S.btn(logSel===k,v.color)}>{k}</button>)}</>}
         {guardado&&<span style={{color:"#10b981",fontSize:"0.72rem",marginLeft:"8px"}}>✓ Guardado</span>}
         <button onClick={()=>{setZc(p=>{const next={...p};setDoc(doc(db,"config","zonas"),next).catch(console.error);return next;});setLc(p=>{const next={...p};setDoc(doc(db,"config","logisticas"),next).catch(console.error);return next;});setGuardado(true);setTimeout(()=>setGuardado(false),2000);}} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.35rem 1rem",marginLeft:"auto",fontSize:"0.78rem"}}>Guardar</button>
       </div>
       {subTab==="zonas"&&<>
+        <div style={{background:"#0d1119",border:"1px solid #1e2535",borderRadius:"8px",padding:"0.6rem 1rem",marginBottom:"0.75rem",color:"#6b7280",fontSize:"0.75rem"}}>
+          Organizá los partidos de entrega en zonas para cada logística. El <strong style={{color:"#9ca3af"}}>precio base</strong> de cada zona se usa para envíos <strong style={{color:"#9ca3af"}}>NO FLEX de 1 bulto</strong> cuando no hay un precio específico en la Matriz de precios. Para FLEX, la Matriz de precios tiene prioridad.
+        </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(245px,1fr))",gap:"0.85rem",marginBottom:"0.9rem"}}>
           {cfg.zonas.map(zona=>(
             <div key={zona.id} style={{...S.card,borderTop:"3px solid "+zona.color,overflow:"hidden"}}>
@@ -2916,8 +2928,8 @@ function TabTarifas({zc,setZc,lc,setLc}){
                   <button onClick={()=>setTipoMx("flex")} style={tipoMx==="flex"?{...S.btn(true,"#84cc16"),background:"#0d1c04",color:"#84cc16",border:"1px solid #84cc16",padding:"3px 14px",fontSize:"0.75rem"}:{...S.btn(false),color:"#4b7a10",border:"1px solid #1a3008",padding:"3px 14px",fontSize:"0.75rem"}}>FLEX</button>
                   {tipoMx==="flex"&&<span style={{color:"#6b7280",fontSize:"0.7rem",alignSelf:"center"}}>Si una celda está en 0, usa el precio de la matriz NO FLEX</span>}
                 </div>
-                <div style={{color:"#6b7280",fontSize:"0.78rem",marginBottom:"4px"}}>
-                  Ingresá el precio para cada zona y cantidad de bultos. Dejá en 0 para usar el precio base de la zona.
+                <div style={{color:"#6b7280",fontSize:"0.75rem",marginBottom:"4px"}}>
+                  Precio exacto por zona × bultos. <strong style={{color:"#9ca3af"}}>Prioridad:</strong> FLEX matrix → NO FLEX matrix → precio base de zona. Si un valor está en 0, usa el siguiente nivel.
                 </div>
                 <div style={{display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}}>
                   <span style={{color:"#4b5563",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase"}}>Vigente desde:</span>
@@ -2974,7 +2986,97 @@ function TabTarifas({zc,setZc,lc,setLc}){
           </div>
         );
       })()}
+      {subTab==="mlTarifas"&&(()=>{
+        const tarifas=mlTarifas?.tarifas||{};
+        const vigDesde=mlTarifas?.vigenciaDesde||"";
+        const historial=mlTarifas?.historial||[];
+        const [editML,setEditML]=useState(null); // {partido, val}
+        const precios=[...new Set(Object.values(tarifas))].sort((a,b)=>a-b);
+        const crearNuevaVigenciaML=()=>{
+          const nuevaFecha=window.prompt("Vigencia desde (YYYY-MM-DD):",fechaHoy());
+          if(!nuevaFecha||!setMlTarifas)return;
+          const histActual=[...historial,{vigenciaDesde:vigDesde,tarifas:{...tarifas}}];
+          setMlTarifas(p=>({...p,vigenciaDesde:nuevaFecha,historial:histActual}));
+        };
+        const setTarifaML=(partido,val)=>{if(setMlTarifas)setMlTarifas(p=>({...p,tarifas:{...p.tarifas,[partido]:parseInt(val)||0}}));};
+        return(<div>
+          {/* Descripción */}
+          <div style={{background:"#0d1119",border:"1px solid #1e2535",borderRadius:"8px",padding:"0.6rem 1rem",marginBottom:"0.75rem",fontSize:"0.75rem",color:"#6b7280"}}>
+            Lo que <strong style={{color:"#fbbf24"}}>Mercado Libre te acredita</strong> por cada envío FLEX según el partido de entrega. Se muestra en cada envío (ML $X) y en el Informe para calcular el margen: lo que paga ML menos lo que pagás a la logística.
+          </div>
+          {/* Cabecera vigencia */}
+          <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.75rem",display:"flex",gap:"0.75rem",alignItems:"center",flexWrap:"wrap"}}>
+            <div>
+              <span style={{color:"#4b5563",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase"}}>Vigente desde: </span>
+              <span style={{color:vigDesde?"#10b981":"#f59e0b",fontWeight:700,fontSize:"0.88rem"}}>{vigDesde||"Sin fecha definida"}</span>
+            </div>
+            <button onClick={crearNuevaVigenciaML} style={{...S.btnSm(false),color:"#f59e0b",border:"1px solid #f59e0b",padding:"2px 10px",fontSize:"0.7rem"}}>+ Nueva vigencia</button>
+            {historial.length>0&&<span style={{marginLeft:"auto",fontSize:"0.7rem",color:"#4b5563"}}>{historial.length} vigencia{historial.length!==1?"s":""} anteriores</span>}
+          </div>
+          {/* Vista agrupada por precio */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(270px,1fr))",gap:"0.75rem",marginBottom:"0.75rem"}}>
+            {precios.map(precio=>{
+              const parts=Object.entries(tarifas).filter(([,v])=>v===precio).map(([k])=>k).sort();
+              return(<div key={precio} style={{...S.card,borderLeft:"3px solid #f59e0b"}}>
+                <div style={{padding:"0.4rem 0.9rem",borderBottom:"1px solid #1e2535",display:"flex",alignItems:"center",gap:"0.5rem"}}>
+                  <span style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase"}}>ML paga</span>
+                  <span style={{color:"#fbbf24",fontWeight:800,fontSize:"1rem"}}>{fmt(precio)}</span>
+                  <span style={{color:"#4b5563",fontSize:"0.62rem",marginLeft:"auto"}}>{parts.length} partidos</span>
+                </div>
+                <div style={{padding:"0.45rem 0.65rem",display:"flex",flexWrap:"wrap",gap:"0.25rem"}}>
+                  {parts.map(p=><span key={p} style={{padding:"2px 8px",background:"#0f1420",border:"1px solid #78350f44",borderRadius:"5px",color:"#fbbf24",fontSize:"0.7rem"}}>{p}</span>)}
+                </div>
+              </div>);
+            })}
+          </div>
+          {/* Tabla editable */}
+          <div style={{...S.card,padding:"0.75rem 1rem",marginBottom:"0.75rem"}}>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"8px",borderBottom:"1px solid #1e2535",paddingBottom:"4px"}}>Editar por partido</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:"4px 1rem"}}>
+              {Object.entries(tarifas).sort(([a],[b])=>a.localeCompare(b)).map(([partido,precio])=>(
+                <div key={partido} style={{display:"flex",alignItems:"center",gap:"6px",padding:"3px 0",borderBottom:"1px solid #0d1119"}}>
+                  <span style={{flex:1,color:"#9ca3af",fontSize:"0.72rem"}}>{partido}</span>
+                  {editML?.partido===partido
+                    ?<input autoFocus type="number" value={editML.val}
+                        onChange={ev=>setEditML({...editML,val:ev.target.value})}
+                        onBlur={()=>{setTarifaML(partido,editML.val);setEditML(null);}}
+                        onKeyDown={ev=>{if(ev.key==="Enter"){setTarifaML(partido,editML.val);setEditML(null);}if(ev.key==="Escape")setEditML(null);}}
+                        style={{...S.input,width:"90px",textAlign:"right",fontSize:"0.75rem",border:"1px solid #f59e0b"}}/>
+                    :<span onDoubleClick={()=>setEditML({partido,val:String(precio)})}
+                        style={{color:"#fbbf24",fontWeight:700,fontSize:"0.8rem",cursor:"pointer",padding:"2px 8px",borderRadius:"4px",minWidth:"70px",textAlign:"right"}}>
+                        {fmt(precio)}
+                      </span>
+                  }
+                </div>
+              ))}
+            </div>
+            <div style={{color:"#4b5563",fontSize:"0.65rem",marginTop:"8px"}}>Doble click en un valor para editarlo · Tab Guardar aplica a todas las secciones</div>
+          </div>
+          {/* Historial */}
+          {historial.length>0&&(
+            <div style={{...S.card,padding:"0.75rem 1rem"}}>
+              <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"8px",borderBottom:"1px solid #1e2535",paddingBottom:"4px"}}>Historial de vigencias</div>
+              {[...historial].sort((a,b)=>b.vigenciaDesde.localeCompare(a.vigenciaDesde)).map((h,i)=>(
+                <div key={i} style={{borderBottom:"1px solid #1e2535",paddingBottom:"8px",marginBottom:"8px"}}>
+                  <div style={{color:"#9ca3af",fontSize:"0.72rem",fontWeight:700,marginBottom:"5px"}}>Desde {h.vigenciaDesde}</div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:"2px 1rem"}}>
+                    {Object.entries(h.tarifas||{}).sort(([a],[b])=>a.localeCompare(b)).map(([p,v])=>(
+                      <div key={p} style={{display:"flex",justifyContent:"space-between",fontSize:"0.68rem"}}>
+                        <span style={{color:"#6b7280"}}>{p}</span>
+                        <span style={{color:"#78350f"}}>{fmt(v)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>);
+      })()}
       {subTab==="logisticas"&&<div>
+        <div style={{background:"#0d1119",border:"1px solid #1e2535",borderRadius:"8px",padding:"0.6rem 1rem",marginBottom:"0.75rem",color:"#6b7280",fontSize:"0.75rem"}}>
+          Alta, baja y configuración general de logísticas. Las logísticas <strong style={{color:"#9ca3af"}}>activas</strong> aparecen como opción al asignar envíos. El <strong style={{color:"#9ca3af"}}>nombre formal</strong> se usa en reportes y facturas.
+        </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:"0.85rem",marginBottom:"1rem"}}>
           {Object.entries(lc).map(([k,v])=>(
             <div key={k} style={{...S.card,borderTop:"3px solid "+(v.activa?v.color:"#374151"),overflow:"hidden",opacity:v.activa?1:0.6}}>
@@ -3026,7 +3128,7 @@ function TabTarifas({zc,setZc,lc,setLc}){
   );
 }
 
-function TabInforme({envios,zc,lc}){
+function TabInforme({envios,zc,lc,mlTarifas={}}){
   const initSem=()=>{
     const d=new Date();const day=d.getDay()||7;
     const lun=new Date(d);lun.setDate(d.getDate()-(day-1));
@@ -3056,14 +3158,14 @@ function TabInforme({envios,zc,lc}){
 
   // Análisis FLEX vs ML
   const envFlex=envSem.filter(e=>e.origen==="ML");
-  const flexCaros=envFlex.filter(e=>{const mlF=ML_FINAL[e.partido];return mlF&&getImp(e)>mlF;});
-  const totalMLPaga=envFlex.reduce((s,e)=>s+(ML_FINAL[e.partido]||0),0);
+  const flexCaros=envFlex.filter(e=>{const mlF=getMLRate(e.partido,mlTarifas);return mlF&&getImp(e)>mlF;});
+  const totalMLPaga=envFlex.reduce((s,e)=>s+getMLRate(e.partido,mlTarifas),0);
   const totalCostoFlex=envFlex.reduce((s,e)=>s+getImp(e),0);
   const porPartidoFlex=(()=>{
     const m={};
     envFlex.forEach(e=>{
       const p=e.partido||"Sin partido";
-      if(!m[p])m[p]={partido:p,mlFinal:ML_FINAL[e.partido]||0,count:0,costo:0,caros:[]};
+      if(!m[p])m[p]={partido:p,mlFinal:getMLRate(e.partido,mlTarifas),count:0,costo:0,caros:[]};
       const imp=getImp(e);m[p].count++;m[p].costo+=imp;
       if(m[p].mlFinal>0&&imp>m[p].mlFinal)m[p].caros.push(e);
     });
@@ -3096,7 +3198,7 @@ function TabInforme({envios,zc,lc}){
         <button onClick={()=>{
           const filas=envSem.map((e,i)=>{
             const tipo=getTipo(e);
-            const mlF=tipo==="FLEX"?(ML_FINAL[e.partido]||""):"";
+            const mlF=tipo==="FLEX"?(getMLRate(e.partido,mlTarifas)||""):"";
             const imp=getImp(e);
             const dif=tipo==="FLEX"&&mlF!==""?mlF-imp:"";
             return{
@@ -3160,7 +3262,7 @@ function TabInforme({envios,zc,lc}){
                       const imp=getImp(e);const vk=String(imp);
                       if(!porValor[vk])porValor[vk]={valor:imp,count:0,total:0,partidos:new Set(),tieneCaro:false};
                       porValor[vk].count++;porValor[vk].total+=imp;porValor[vk].partidos.add(e.partido);
-                      if(e.origen==="ML"&&ML_FINAL[e.partido]&&imp>ML_FINAL[e.partido])porValor[vk].tieneCaro=true;
+                      if(e.origen==="ML"&&getMLRate(e.partido,mlTarifas)&&imp>getMLRate(e.partido,mlTarifas))porValor[vk].tieneCaro=true;
                     });
                     const zonaTotal=zona.envios.reduce((s,e)=>s+getImp(e),0);
                     return([
@@ -3229,7 +3331,7 @@ function TabInforme({envios,zc,lc}){
               {flexCaros.length>0&&(
                 <div style={{background:"#1c0a00",borderRadius:"8px",padding:"0.65rem 0.85rem",border:"1px solid #92400e"}}>
                   <div style={{color:"#f59e0b",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Caros ({flexCaros.length})</div>
-                  <div style={{color:"#f87171",fontWeight:800,fontSize:"1.05rem"}}>{fmt(flexCaros.reduce((s,e)=>s+(getImp(e)-(ML_FINAL[e.partido]||0)),0))}</div>
+                  <div style={{color:"#f87171",fontWeight:800,fontSize:"1.05rem"}}>{fmt(flexCaros.reduce((s,e)=>s+(getImp(e)-getMLRate(e.partido,mlTarifas)),0))}</div>
                   <div style={{color:"#6b7280",fontSize:"0.6rem"}}>exceso sobre lo que paga ML</div>
                 </div>
               )}
@@ -3278,7 +3380,7 @@ function TabInforme({envios,zc,lc}){
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:"5px"}}>
                   {flexCaros.map(e=>{
-                    const imp=getImp(e);const mlF=ML_FINAL[e.partido]||0;const exceso=imp-mlF;
+                    const imp=getImp(e);const mlF=getMLRate(e.partido,mlTarifas);const exceso=imp-mlF;
                     const nroRef=e.nroSeguimiento||("#"+(e.nroOrdenTN||e.id.slice(-10)));
                     return(
                       <div key={e.id} style={{display:"flex",gap:"8px",alignItems:"center",padding:"6px 10px",background:"#1c0a00",borderRadius:"6px",border:"1px solid #92400e",flexWrap:"wrap"}}>
@@ -10481,6 +10583,7 @@ export default function App(){
   },[]);
   const [zc,setZc]=useState(ZONAS_INIT);
   const [lc,setLc]=useState(LOGISTICAS_INIT);
+  const [mlTarifas,setMlTarifas]=useState(ML_TARIFAS_INIT);
   const [cpExtra,setCpExtra]=useState({});
 
   // Cargar lc, zc y cpExtra desde Firebase al iniciar
@@ -10490,6 +10593,9 @@ export default function App(){
     });
     const unsubZc=onSnapshot(doc(db,"config","zonas"),snap=>{
       if(snap.exists()){setZc(snap.data());}
+    });
+    const unsubMl=onSnapshot(doc(db,"config","mlTarifas"),snap=>{
+      if(snap.exists()){setMlTarifas(snap.data());}
     });
     const unsubCp=onSnapshot(doc(db,"config","cp_extra"),snap=>{
       let data={};
@@ -10509,13 +10615,21 @@ export default function App(){
       Object.entries(data).forEach(([k,v])=>{CP_P[k]=v;});
       setCpExtra(data);
     });
-    return()=>{unsubLc();unsubZc();unsubCp();};
+    return()=>{unsubLc();unsubZc();unsubCp();unsubMl();};
   },[]);
 
   const setLcPersist=useCallback((updater)=>{
     setLc(prev=>{
       const next=typeof updater==="function"?updater(prev):updater;
       setDoc(doc(db,"config","logisticas"),next).catch(console.error);
+      return next;
+    });
+  },[]);
+
+  const setMlTarifasPersist=useCallback((updater)=>{
+    setMlTarifas(prev=>{
+      const next=typeof updater==="function"?updater(prev):updater;
+      setDoc(doc(db,"config","mlTarifas"),next).catch(console.error);
       return next;
     });
   },[]);
@@ -10977,13 +11091,13 @@ export default function App(){
       <div style={{padding:"0.85rem 1rem",maxWidth:"1400px",margin:"0 auto"}}>
         {error&&<div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.8rem",background:"#1c0a0a",border:"1px solid #7f1d1d",color:"#fca5a5",fontSize:"0.8rem"}}>{error}</div>}
         {tab==="tablero" &&<TabTablero envios={envios} lc={lc} zc={zc} pagosCC={pagosCC}/>}
-        {tab==="envios"  &&<TabEnvios   envios={envios.filter(e=>e.origen!=="ML")} setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin} sesion={sesion} facturaClientes={facturaClientes}/>}
-        {tab==="flex"    &&<TabEnvios   envios={envios.filter(e=>e.origen==="ML")}  setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin} sesion={sesion} mostrarResumenFlex={true} facturaClientes={facturaClientes}/>}
+        {tab==="envios"  &&<TabEnvios   envios={envios.filter(e=>e.origen!=="ML")} setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin} sesion={sesion} facturaClientes={facturaClientes} mlTarifas={mlTarifas}/>}
+        {tab==="flex"    &&<TabEnvios   envios={envios.filter(e=>e.origen==="ML")}  setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin} sesion={sesion} mostrarResumenFlex={true} facturaClientes={facturaClientes} mlTarifas={mlTarifas}/>}
         {tab==="imprimir"&&<TabImprimir envios={envios} setEnvios={setEnvios} zc={zc} lc={lc}/>}
         {tab==="manual"  &&<TabManual   setEnvios={setEnvios} onSuccess={()=>{mostrarToast("Envio agregado");}} lc={lc} enviosExistentes={envios} sesion={sesion}/>}
         {tab==="postventa"&&<TabPostVenta envios={envios} setEnvios={setEnvios} sesion={sesion}/>}
-        {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZcPersist} lc={lc} setLc={setLcPersist}/>}
-        {tab==="informe"     &&<TabInforme     envios={envios} zc={zc} lc={lc}/>}
+        {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZcPersist} lc={lc} setLc={setLcPersist} mlTarifas={mlTarifas} setMlTarifas={setMlTarifasPersist}/>}
+        {tab==="informe"     &&<TabInforme     envios={envios} zc={zc} lc={lc} mlTarifas={mlTarifas}/>}
         {tab==="liquidacion"    &&<TabLiquidacion    envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>}
         {tab==="ctasctes"       &&<TabCtasCtes       envios={envios} lc={lc} sesion={sesion} pagosInicial={pagosCC} facturaClientes={facturaClientes} setFacturaCliente={setFacturaCliente}/>}
         {tab==="clientes"       &&<TabClientes       envios={envios} lc={lc} pagosCC={pagosCC} facturaClientes={facturaClientes} setFacturaCliente={setFacturaCliente} sesion={sesion}/>}
