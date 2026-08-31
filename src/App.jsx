@@ -2227,6 +2227,323 @@ function TabImprimir({envios,setEnvios,zc,lc}){
   );
 }
 
+// ════════════════════════════════════════════════════════════════════
+// TAB POST VENTA
+// ════════════════════════════════════════════════════════════════════
+const TIPOS_PV=[
+  {k:"faltante",          l:"Faltante"},
+  {k:"cruce_etiqueta",    l:"Cruce de etiqueta"},
+  {k:"embalaje",          l:"Embalaje deficiente"},
+  {k:"producto_incorrecto",l:"Producto incorrecto"},
+];
+const TIPO_PV_C={
+  faltante:          {bg:"#1c1500",border:"#78350f",t:"#fbbf24"},
+  cruce_etiqueta:    {bg:"#0c1a40",border:"#1e3a8a",t:"#93c5fd"},
+  embalaje:          {bg:"#150d25",border:"#7e22ce",t:"#c4b5fd"},
+  producto_incorrecto:{bg:"#1c0a0a",border:"#7f1d1d",t:"#fca5a5"},
+};
+
+function imprimirNotaPV(caso){
+  const TIPO_L={faltante:"Faltante",cruce_etiqueta:"Cruce de etiqueta",embalaje:"Embalaje deficiente",producto_incorrecto:"Producto incorrecto"};
+  const pvId="PV-"+caso.id.slice(-6).toUpperCase();
+  const fecha=caso.fechaCreacion?new Date(caso.fechaCreacion).toLocaleDateString("es-AR"):"";
+  const tipoLabel=TIPO_L[caso.tipoIncidente]||caso.tipoIncidente||"";
+  const direccionFull=[caso.direccion,caso.localidad,caso.partido,caso.cp].filter(Boolean).join(" · ");
+  const fechaEntrega=caso.envioFecha?new Date(caso.envioFecha+"T12:00:00").toLocaleDateString("es-AR"):"—";
+
+  const copia=`
+    <div class="copia">
+      <div class="header">
+        <div><div class="sup-label">Nota de pedido</div><div class="title">Post Venta</div></div>
+        <div class="right"><div class="pvid">${pvId}</div><div class="fecha-hdr">${fecha}</div></div>
+      </div>
+      <div class="grid2" style="margin-bottom:4mm">
+        <div class="field"><div class="flabel">Orden original</div><div class="fval">#${caso.ordenOriginal||"—"}</div></div>
+        <div class="field"><div class="flabel">Tipo</div><div><span class="badge">${tipoLabel}</span></div></div>
+      </div>
+      <div style="margin-bottom:3mm">
+        <div class="section-label">Qué enviar</div>
+        <div class="text-box">${caso.descripcion||""}</div>
+      </div>
+      <div class="section-card" style="margin-bottom:3mm">
+        <div class="section-header">Entrega</div>
+        <div class="grid3" style="padding:2mm 3mm">
+          <div class="field"><div class="flabel">Logística</div><div class="fval">${caso.envioTrans||"—"}</div></div>
+          <div class="field"><div class="flabel">Fecha</div><div class="fval">${fechaEntrega}</div></div>
+          <div class="field"><div class="flabel">Turno</div><div class="fval">${caso.envioTurno||"—"}</div></div>
+        </div>
+      </div>
+      <div class="section-card" style="flex:1">
+        <div class="section-header">Destinatario</div>
+        <div class="grid2" style="padding:2mm 3mm">
+          <div class="field"><div class="flabel">Nombre</div><div class="fval">${caso.clienteNombre||"—"}</div></div>
+          <div class="field"><div class="flabel">Teléfono</div><div class="fval">${caso.telefono||"—"}</div></div>
+          <div class="field" style="grid-column:1/-1"><div class="flabel">Dirección</div><div class="fval">${direccionFull||"—"}</div></div>
+        </div>
+      </div>
+      <div class="footer">
+        <span>Envío: <strong>${caso.envioId||"—"}</strong></span>
+        <span>Umpapel Distribuidora · ${fecha}</span>
+      </div>
+    </div>`;
+
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Nota ${pvId}</title>
+  <style>
+    @page{size:A4;margin:12mm 15mm}
+    *{box-sizing:border-box}
+    body{font-family:Arial,sans-serif;color:#111;margin:0;padding:0}
+    .copia{height:118mm;display:flex;flex-direction:column;overflow:hidden;page-break-inside:avoid}
+    .copia+.copia{border-top:1.5px dashed #aaa;margin-top:6mm;padding-top:6mm}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4mm;padding-bottom:3mm;border-bottom:.5px solid #ccc}
+    .sup-label{font-size:7pt;color:#888;text-transform:uppercase;letter-spacing:.5px}
+    .title{font-size:13pt;font-weight:600}
+    .right{text-align:right}
+    .pvid{font-size:9pt;font-weight:600;color:#444}
+    .fecha-hdr{font-size:8pt;color:#888}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:2mm 8mm}
+    .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:2mm 6mm}
+    .flabel{font-size:7pt;color:#888}
+    .fval{font-size:8.5pt;font-weight:600;color:#111}
+    .badge{font-size:7pt;font-weight:600;background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:3px}
+    .section-label{font-size:7pt;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2mm}
+    .text-box{background:#f5f5f3;border:.5px solid #ddd;border-radius:4px;padding:3mm;font-size:9pt;line-height:1.4;min-height:10mm}
+    .section-card{border:.5px solid #ddd;border-radius:4px;overflow:hidden}
+    .section-header{background:#f0f0ee;padding:2mm 3mm;font-size:7pt;font-weight:600;color:#555;text-transform:uppercase;letter-spacing:.5px}
+    .footer{margin-top:auto;display:flex;justify-content:space-between;font-size:7pt;color:#aaa;border-top:.5px solid #eee;padding-top:2mm;margin-top:3mm}
+    .field{margin:0}
+  </style></head><body>${copia}${copia}</body></html>`;
+
+  const win=window.open("","_blank","width=820,height=1000");
+  win.document.write(html);
+  win.document.close();
+  win.onload=()=>win.print();
+}
+
+function TabPostVenta({envios=[],sesion=null}){
+  const [casos,setCasos]=React.useState([]);
+  const [loading,setLoading]=React.useState(true);
+  const [modo,setModo]=React.useState("lista");
+  const [filtroEstado,setFiltroEstado]=React.useState("todos");
+  const [filtroTipo,setFiltroTipo]=React.useState("todos");
+  const [saving,setSaving]=React.useState(false);
+  const [err,setErr]=React.useState("");
+
+  const VACIO={ordenOriginal:"",clienteNombre:"",telefono:"",direccion:"",localidad:"",partido:"",cp:"",
+    tipoIncidente:"",descripcion:"",resolucion:"",costoResolucion:0,
+    envioId:"",envioTrans:"",envioFecha:"",envioTurno:"",estado:"pendiente"};
+  const [f,setF]=React.useState(VACIO);
+  const set=(k,v)=>setF(p=>({...p,[k]:v}));
+
+  // Cargar desde Firestore
+  React.useEffect(()=>{
+    const unsub=onSnapshot(
+      query(collection(db,"postventa"),orderBy("fechaCreacion","desc")),
+      snap=>{setCasos(snap.docs.map(d=>({id:d.id,...d.data()})));setLoading(false);},
+      e=>{console.error("TabPostVenta",e);setLoading(false);}
+    );
+    return()=>unsub();
+  },[]);
+
+  // Auto-fill cliente desde orden original
+  React.useEffect(()=>{
+    const id=f.ordenOriginal.trim();
+    if(!id)return;
+    const found=envios.find(e=>e.id===id||(e.nroOrdenTN&&String(e.nroOrdenTN)===id));
+    if(found){
+      setF(p=>({...p,
+        clienteNombre:found.clienteNombre||p.clienteNombre,
+        telefono:found.telefono||p.telefono,
+        direccion:found.direccion||p.direccion,
+        localidad:found.localidad||p.localidad,
+        partido:found.partido||p.partido,
+        cp:found.cp||p.cp,
+      }));
+    }
+  },[f.ordenOriginal]);
+
+  // Auto-fill logística/fecha/turno desde envío vinculado
+  React.useEffect(()=>{
+    const id=f.envioId.trim();
+    if(!id)return;
+    const found=envios.find(e=>e.id===id);
+    if(found) setF(p=>({...p,envioTrans:found.trans||"",envioFecha:found.fecha||"",envioTurno:found.turno||""}));
+  },[f.envioId]);
+
+  const guardar=async()=>{
+    if(!f.ordenOriginal.trim()){setErr("La orden original es obligatoria.");return;}
+    if(!f.tipoIncidente){setErr("Seleccioná el tipo de incidente.");return;}
+    if(!f.descripcion.trim()){setErr("La descripción es obligatoria.");return;}
+    if(!f.resolucion){setErr("Seleccioná el tipo de resolución.");return;}
+    const audit=mkAudit(sesion);
+    const data={...f,fechaCreacion:new Date().toISOString(),...(audit?{creadoPor:audit}:{})};
+    try{
+      setSaving(true);
+      const ref=await addDoc(collection(db,"postventa"),data);
+      setCasos(p=>[{id:ref.id,...data},...p]);
+      setF(VACIO);setErr("");setModo("lista");
+    }catch(e){console.error("guardar PV",e);setErr("Error: "+e.message);}
+    finally{setSaving(false);}
+  };
+
+  const toggleEstado=async(caso)=>{
+    const next=caso.estado==="resuelto"?"pendiente":"resuelto";
+    await setDoc(doc(db,"postventa",caso.id),{estado:next},{merge:true});
+    setCasos(p=>p.map(c=>c.id===caso.id?{...c,estado:next}:c));
+  };
+
+  const casosFiltrados=casos.filter(c=>{
+    if(filtroEstado!=="todos"&&c.estado!==filtroEstado)return false;
+    if(filtroTipo!=="todos"&&c.tipoIncidente!==filtroTipo)return false;
+    return true;
+  });
+
+  return(
+    <div style={{maxWidth:"860px",margin:"0 auto",padding:"1rem"}}>
+      {/* Header */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
+        <div>
+          <div style={{fontSize:"1.1rem",fontWeight:700,color:"#e5e7eb"}}>Post Venta</div>
+          <div style={{fontSize:"0.72rem",color:"#6b7280",marginTop:"2px"}}>{casosFiltrados.length} caso{casosFiltrados.length!==1?"s":""}</div>
+        </div>
+        <button onClick={()=>{setModo(m=>m==="nuevo"?"lista":"nuevo");setErr("");}} style={{...S.btn(modo==="nuevo","#6366f1"),padding:"0.4rem 1rem",fontSize:"0.78rem"}}>
+          {modo==="nuevo"?"← Cancelar":"+ Nuevo caso"}
+        </button>
+      </div>
+
+      {/* Formulario nuevo */}
+      {modo==="nuevo"&&(
+        <div style={{...S.card,padding:"1rem",marginBottom:"1rem",border:"1px solid #6366f1"}}>
+
+          {/* A: Origen e incidente */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.6rem",marginBottom:"0.75rem"}}>
+            <div>
+              <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Orden original</div>
+              <input value={f.ordenOriginal} onChange={ev=>set("ordenOriginal",ev.target.value)}
+                placeholder="ID del envío..." style={{...S.input,width:"100%",fontSize:"0.8rem"}}/>
+              {f.clienteNombre&&<div style={{fontSize:"0.7rem",color:"#10b981",marginTop:"3px"}}>✓ {f.clienteNombre}</div>}
+            </div>
+            <div>
+              <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Tipo de incidente</div>
+              <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
+                {TIPOS_PV.map(t=>{const c=TIPO_PV_C[t.k];return(
+                  <button key={t.k} onClick={()=>set("tipoIncidente",t.k)}
+                    style={{...S.chip(f.tipoIncidente===t.k,c.t,c.bg),border:`1px solid ${f.tipoIncidente===t.k?c.t:c.border}`,fontSize:"0.68rem",padding:"2px 8px"}}>{t.l}</button>
+                );})}
+              </div>
+            </div>
+          </div>
+
+          {/* B: Incidente */}
+          <div style={{marginBottom:"0.75rem",background:"#0d1119",border:"1px solid #1e2535",borderRadius:"8px",padding:"0.75rem 0.9rem"}}>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"6px",borderBottom:"1px solid #1e2535",paddingBottom:"4px"}}>Incidente</div>
+            <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Qué enviar / descripción</div>
+            <textarea value={f.descripcion} onChange={ev=>set("descripcion",ev.target.value)}
+              placeholder="Describí qué faltó, qué salió mal y qué hay que enviar..." rows={3}
+              style={{...S.input,display:"block",width:"100%",resize:"vertical",fontSize:"0.8rem"}}/>
+          </div>
+
+          {/* C: Resolución */}
+          <div style={{background:"#0d1119",border:"1px solid #1e2535",borderRadius:"8px",padding:"0.75rem 0.9rem",marginBottom:"0.75rem"}}>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"6px",borderBottom:"1px solid #1e2535",paddingBottom:"4px"}}>Resolución</div>
+            <div style={{display:"flex",gap:"6px",marginBottom:"0.5rem"}}>
+              {[{k:"envio",l:"Envío",c:"#10b981"},{k:"reintegro",l:"Reintegro",c:"#f59e0b"},{k:"sin_costo",l:"Sin costo",c:"#6b7280"}].map(r=>(
+                <button key={r.k} onClick={()=>set("resolucion",r.k)} style={{...S.btnSm(f.resolucion===r.k,r.c),fontSize:"0.75rem"}}>{r.l}</button>
+              ))}
+            </div>
+            {f.resolucion==="envio"&&(
+              <div style={{marginTop:"0.5rem"}}>
+                <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>ID del envío creado</div>
+                <input value={f.envioId} onChange={ev=>set("envioId",ev.target.value)}
+                  placeholder="Ingresá el ID del envío manual creado..." style={{...S.input,width:"100%",fontSize:"0.8rem"}}/>
+                {f.envioTrans&&<div style={{fontSize:"0.7rem",color:"#10b981",marginTop:"3px"}}>✓ {f.envioTrans} · {f.envioFecha} · {f.envioTurno}</div>}
+              </div>
+            )}
+            {f.resolucion==="reintegro"&&(
+              <div style={{marginTop:"0.5rem"}}>
+                <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Monto reintegrado ($)</div>
+                <input type="number" value={f.costoResolucion||""} onChange={ev=>set("costoResolucion",parseFloat(ev.target.value)||0)}
+                  placeholder="0" style={{...S.input,width:"140px",fontSize:"0.8rem"}}/>
+              </div>
+            )}
+            <div style={{marginTop:"0.65rem"}}>
+              <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Estado</div>
+              <div style={{display:"flex",gap:"4px"}}>
+                {[{k:"pendiente",l:"Pendiente",c:"#f59e0b"},{k:"resuelto",l:"Resuelto",c:"#10b981"}].map(s=>(
+                  <button key={s.k} onClick={()=>set("estado",s.k)} style={{...S.btnSm(f.estado===s.k,s.c),fontSize:"0.72rem"}}>{s.l}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {err&&<div style={{color:"#fca5a5",fontSize:"0.78rem",marginBottom:"0.5rem"}}>{err}</div>}
+          <button onClick={guardar} disabled={saving} style={{...S.btn(true,"#6366f1"),padding:"0.4rem 1.2rem",fontSize:"0.8rem",opacity:saving?0.6:1}}>
+            {saving?"Guardando...":"Guardar caso"}
+          </button>
+        </div>
+      )}
+
+      {/* Filtros */}
+      {modo==="lista"&&(
+        <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"0.75rem"}}>
+          {[{k:"todos",l:"Todos"},{k:"pendiente",l:"Pendientes"},{k:"resuelto",l:"Resueltos"}].map(o=>(
+            <button key={o.k} onClick={()=>setFiltroEstado(o.k)} style={{...S.btnSm(filtroEstado===o.k,"#6366f1"),fontSize:"0.72rem"}}>{o.l}</button>
+          ))}
+          <span style={{margin:"0 4px",color:"#374151",alignSelf:"center"}}>|</span>
+          {[{k:"todos",l:"Todos"},...TIPOS_PV].map(t=>(
+            <button key={t.k} onClick={()=>setFiltroTipo(t.k)} style={{...S.btnSm(filtroTipo===t.k,"#6b7280"),fontSize:"0.68rem"}}>{t.l}</button>
+          ))}
+        </div>
+      )}
+
+      {/* Lista */}
+      {modo==="lista"&&(
+        <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
+          {loading&&<div style={{color:"#6b7280",fontSize:"0.8rem",padding:"2rem",textAlign:"center"}}>Cargando...</div>}
+          {!loading&&casosFiltrados.length===0&&(
+            <div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}>
+              <div style={{fontSize:"2rem"}}>📋</div>
+              <p style={{marginTop:"8px"}}>Sin casos de post venta</p>
+            </div>
+          )}
+          {casosFiltrados.map(caso=>{
+            const tc=TIPO_PV_C[caso.tipoIncidente]||{bg:"#1a1f2e",border:"#374151",t:"#9ca3af"};
+            const tipoLabel=TIPOS_PV.find(t=>t.k===caso.tipoIncidente)?.l||caso.tipoIncidente||"";
+            return(
+              <div key={caso.id} style={{...S.card,padding:"0.75rem 1rem",borderLeft:`3px solid ${tc.t}`}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"0.5rem"}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",gap:"6px",alignItems:"center",marginBottom:"4px",flexWrap:"wrap"}}>
+                      <span style={{fontSize:"0.75rem",fontWeight:700,color:"#e5e7eb"}}>#{caso.ordenOriginal}</span>
+                      {caso.clienteNombre&&<span style={{fontSize:"0.72rem",color:"#9ca3af"}}>{caso.clienteNombre}</span>}
+                      {tipoLabel&&<span style={{fontSize:"0.65rem",fontWeight:700,color:tc.t,background:tc.bg,border:`1px solid ${tc.border}`,borderRadius:"4px",padding:"1px 6px"}}>{tipoLabel}</span>}
+                      <span style={{fontSize:"0.65rem",color:caso.estado==="resuelto"?"#10b981":"#f59e0b",fontWeight:700}}>
+                        {caso.estado==="resuelto"?"✓ Resuelto":"⏳ Pendiente"}
+                      </span>
+                    </div>
+                    {caso.descripcion&&<div style={{fontSize:"0.75rem",color:"#9ca3af",marginBottom:"4px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{caso.descripcion}</div>}
+                    <div style={{display:"flex",gap:"12px",fontSize:"0.68rem",color:"#6b7280",flexWrap:"wrap"}}>
+                      {caso.fechaCreacion&&<span>{new Date(caso.fechaCreacion).toLocaleDateString("es-AR")}</span>}
+                      {caso.resolucion&&<span>{caso.resolucion==="envio"?"Envío"+(caso.envioId?" #"+caso.envioId:""):caso.resolucion==="reintegro"?"Reintegro $"+Number(caso.costoResolucion||0).toLocaleString("es-AR"):"Sin costo"}</span>}
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:"4px",flexShrink:0}}>
+                    {caso.resolucion==="envio"&&caso.envioId&&(
+                      <button onClick={()=>imprimirNotaPV(caso)} style={{...S.btnSm(false),color:"#6366f1",border:"1px solid #6366f1",fontSize:"0.68rem",padding:"3px 8px"}}>🖨 Imprimir</button>
+                    )}
+                    <button onClick={()=>toggleEstado(caso)} style={{...S.btnSm(caso.estado==="resuelto","#10b981"),fontSize:"0.68rem",padding:"3px 8px"}}>
+                      {caso.estado==="resuelto"?"↩ Reabrir":"✓ Resolver"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
   const hoy=fechaHoy();
   const vacio={
@@ -10395,6 +10712,7 @@ export default function App(){
     {id:"flex",l:"FLEX"},
     {id:"imprimir",l:"Despacho"},
     {id:"manual",l:"+ Manual"},
+    {id:"postventa",l:"Post Venta"},
     {id:"tarifas",l:"Tarifas / Log."},
     {id:"informe",l:"Informe"},
     {id:"liquidacion",l:"Cobranzas Log."},
@@ -10639,6 +10957,7 @@ export default function App(){
         {tab==="flex"    &&<TabEnvios   envios={envios.filter(e=>e.origen==="ML")}  setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin} sesion={sesion} mostrarResumenFlex={true} facturaClientes={facturaClientes}/>}
         {tab==="imprimir"&&<TabImprimir envios={envios} setEnvios={setEnvios} zc={zc} lc={lc}/>}
         {tab==="manual"  &&<TabManual   setEnvios={setEnvios} onSuccess={()=>{mostrarToast("Envio agregado");}} lc={lc} enviosExistentes={envios} sesion={sesion}/>}
+        {tab==="postventa"&&<TabPostVenta envios={envios} sesion={sesion}/>}
         {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZcPersist} lc={lc} setLc={setLcPersist}/>}
         {tab==="informe"     &&<TabInforme     envios={envios} zc={zc} lc={lc}/>}
         {tab==="liquidacion"    &&<TabLiquidacion    envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>}
