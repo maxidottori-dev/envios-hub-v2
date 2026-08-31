@@ -390,12 +390,20 @@ function generarHTMLDespacho({logistica,fecha,envios:lista,pdfOrient="landscape"
 }
 // Valor de referencia que paga ML por envío (por partido) — fallback hardcodeado
 const ML_FINAL={"CABA":6490,"Lomas de Zamora":6490,"Avellaneda":4490,"Lanus":4490,"Quilmes":4490,"Almirante Brown":8490,"Berazategui":8490,"Berisso":8490,"Campana":8490,"Canuelas":8490,"Ensenada":8490,"Escobar":8490,"Esteban Echeverria":8490,"Ezeiza":8490,"Florencio Varela":8490,"Gral. Rodriguez":8490,"Hurlingham":8490,"Ituzaingo":8490,"Jose C Paz":8490,"La Matanza Norte":8490,"La Matanza Sur":8490,"La Plata":8490,"Lujan":8490,"Malvinas Argentinas":8490,"Marcos Paz":8490,"Merlo":8490,"Moreno":8490,"Moron":8490,"Pilar":8490,"Presidente Peron":8490,"San Fernando":8490,"San Isidro":8490,"San Martin":8490,"San Miguel":8490,"San Vicente":8490,"Tigre":8490,"Tres de Febrero":8490,"Vicente Lopez":8490,"Zarate":8490};
-const ML_TARIFAS_INIT={vigenciaDesde:"2026-03-12",tarifas:{...ML_FINAL},historial:[]};
+const ML_TARIFAS_INIT={vigenciaDesde:"2026-03-12",grupos:[
+  {id:"ml_pl",nombre:"PL",precio:4490,color:"#10b981",partidos:["Avellaneda","Lanus","Quilmes"]},
+  {id:"ml_caba",nombre:"CABA / Lomas",precio:6490,color:"#6366f1",partidos:["CABA","Lomas de Zamora"]},
+  {id:"ml_gba",nombre:"GBA",precio:8490,color:"#f59e0b",partidos:Object.keys(ML_FINAL).filter(p=>ML_FINAL[p]===8490).sort()},
+],historial:[]};
 // getMLRate: usa Firestore si ya cargó, fallback a ML_FINAL hardcodeado
 function getMLRate(partido,mlTarifas){
   if(!partido)return 0;
-  const t=mlTarifas?.tarifas;
-  if(t&&partido in t)return t[partido]||0;
+  if(mlTarifas?.grupos){
+    const g=mlTarifas.grupos.find(g=>(g.partidos||[]).includes(partido));
+    if(g)return g.precio||0;
+  }
+  // fallback formato viejo (tarifas planas)
+  if(mlTarifas?.tarifas&&partido in mlTarifas.tarifas)return mlTarifas.tarifas[partido]||0;
   return ML_FINAL[partido]||0;
 }
 const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
@@ -2828,7 +2836,8 @@ function TabTarifas({zc,setZc,lc,setLc,mlTarifas=ML_TARIFAS_INIT,setMlTarifas}){
   const [moverModal,setMoverModal]=useState(null);
   const [addModal,setAddModal]=useState(false);
   const [newZona,setNewZona]=useState({nombre:"",color:"#6366f1",precio:0});
-  const [editML,setEditML]=useState(null);
+  const [editML,setEditML]=useState(null); // {id, campo:"precio"|"nombre", val}
+  const [moverPartidoML,setMoverPartidoML]=useState(null); // {partido, fromId}
   const elimLog=async(k,nombre)=>{
     if(!window.confirm(`¿Eliminar "${nombre}"? Esta acción no se puede deshacer.`))return;
     const newLc={...lc};
@@ -2988,21 +2997,23 @@ function TabTarifas({zc,setZc,lc,setLc,mlTarifas=ML_TARIFAS_INIT,setMlTarifas}){
         );
       })()}
       {subTab==="mlTarifas"&&(()=>{
-        const tarifas=mlTarifas?.tarifas||{};
+        const grupos=mlTarifas?.grupos||[];
         const vigDesde=mlTarifas?.vigenciaDesde||"";
         const historial=mlTarifas?.historial||[];
-        const precios=[...new Set(Object.values(tarifas))].sort((a,b)=>a-b);
+        const asignadosML=new Set(grupos.flatMap(g=>g.partidos||[]));
+        const sinAsignarML=ALL_PARTIDOS.filter(p=>!asignadosML.has(p));
+        const updGruposML=fn=>{if(setMlTarifas)setMlTarifas(p=>({...p,grupos:fn(p.grupos||[])}));};
+        const COLORES_ML=["#10b981","#6366f1","#f59e0b","#ef4444","#8b5cf6","#06b6d4","#f97316","#ec4899"];
         const crearNuevaVigenciaML=()=>{
           const nuevaFecha=window.prompt("Vigencia desde (YYYY-MM-DD):",fechaHoy());
           if(!nuevaFecha||!setMlTarifas)return;
-          const histActual=[...historial,{vigenciaDesde:vigDesde,tarifas:{...tarifas}}];
-          setMlTarifas(p=>({...p,vigenciaDesde:nuevaFecha,historial:histActual}));
+          setMlTarifas(p=>({...p,vigenciaDesde:nuevaFecha,historial:[...(p.historial||[]),{vigenciaDesde:vigDesde,grupos:grupos.map(g=>({...g,partidos:[...(g.partidos||[])]}))}}));
         };
-        const setTarifaML=(partido,val)=>{if(setMlTarifas)setMlTarifas(p=>({...p,tarifas:{...p.tarifas,[partido]:parseInt(val)||0}}));};
+        const guardarPrecioGrupo=(id,val)=>updGruposML(gs=>gs.map(g=>g.id===id?{...g,precio:parseInt(val)||0}:g));
         return(<div>
           {/* Descripción */}
           <div style={{background:"#0d1119",border:"1px solid #1e2535",borderRadius:"8px",padding:"0.6rem 1rem",marginBottom:"0.75rem",fontSize:"0.75rem",color:"#6b7280"}}>
-            Lo que <strong style={{color:"#fbbf24"}}>Mercado Libre te acredita</strong> por cada envío FLEX según el partido de entrega. Se muestra en cada envío (ML $X) y en el Informe para calcular el margen: lo que paga ML menos lo que pagás a la logística.
+            Lo que <strong style={{color:"#fbbf24"}}>Mercado Libre te acredita</strong> por cada envío FLEX según el partido de entrega. Editá el precio de cada grupo y asigná los partidos que correspondan. Se muestra en cada envío (ML $X) y en el Informe para calcular el margen.
           </div>
           {/* Cabecera vigencia */}
           <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.75rem",display:"flex",gap:"0.75rem",alignItems:"center",flexWrap:"wrap"}}>
@@ -3013,45 +3024,90 @@ function TabTarifas({zc,setZc,lc,setLc,mlTarifas=ML_TARIFAS_INIT,setMlTarifas}){
             <button onClick={crearNuevaVigenciaML} style={{...S.btnSm(false),color:"#f59e0b",border:"1px solid #f59e0b",padding:"2px 10px",fontSize:"0.7rem"}}>+ Nueva vigencia</button>
             {historial.length>0&&<span style={{marginLeft:"auto",fontSize:"0.7rem",color:"#4b5563"}}>{historial.length} vigencia{historial.length!==1?"s":""} anteriores</span>}
           </div>
-          {/* Vista agrupada por precio */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(270px,1fr))",gap:"0.75rem",marginBottom:"0.75rem"}}>
-            {precios.map(precio=>{
-              const parts=Object.entries(tarifas).filter(([,v])=>v===precio).map(([k])=>k).sort();
-              return(<div key={precio} style={{...S.card,borderLeft:"3px solid #f59e0b"}}>
-                <div style={{padding:"0.4rem 0.9rem",borderBottom:"1px solid #1e2535",display:"flex",alignItems:"center",gap:"0.5rem"}}>
-                  <span style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase"}}>ML paga</span>
-                  <span style={{color:"#fbbf24",fontWeight:800,fontSize:"1rem"}}>{fmt(precio)}</span>
-                  <span style={{color:"#4b5563",fontSize:"0.62rem",marginLeft:"auto"}}>{parts.length} partidos</span>
+          {/* Modal mover partido */}
+          {moverPartidoML&&(
+            <div style={{...S.card,border:"1px solid #f59e0b",marginBottom:"0.75rem",padding:"0.7rem 1rem"}}>
+              <div style={{color:"#fbbf24",fontWeight:700,fontSize:"0.78rem",marginBottom:"6px"}}>Mover <strong>{moverPartidoML.partido}</strong> a:</div>
+              <div style={{display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center"}}>
+                {grupos.filter(g=>g.id!==moverPartidoML.fromId).map(g=>(
+                  <button key={g.id} onClick={()=>{
+                    updGruposML(gs=>gs.map(gg=>{
+                      if(gg.id===g.id)return{...gg,partidos:[...new Set([...(gg.partidos||[]),moverPartidoML.partido])]};
+                      if(gg.id===moverPartidoML.fromId)return{...gg,partidos:(gg.partidos||[]).filter(x=>x!==moverPartidoML.partido)};
+                      return gg;
+                    }));
+                    setMoverPartidoML(null);
+                  }} style={{...S.btnSm(false),color:g.color||"#f59e0b",borderColor:g.color||"#f59e0b",fontSize:"0.75rem"}}>{g.nombre}</button>
+                ))}
+                {moverPartidoML.fromId&&<button onClick={()=>{
+                  updGruposML(gs=>gs.map(g=>g.id===moverPartidoML.fromId?{...g,partidos:(g.partidos||[]).filter(x=>x!==moverPartidoML.partido)}:g));
+                  setMoverPartidoML(null);
+                }} style={{...S.btnSm(false),color:"#6b7280",fontSize:"0.75rem"}}>Sin asignar</button>}
+                <button onClick={()=>setMoverPartidoML(null)} style={{...S.btnSm(false),marginLeft:"auto",fontSize:"0.75rem"}}>Cancelar</button>
+              </div>
+            </div>
+          )}
+          {/* Cards de grupos */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(245px,1fr))",gap:"0.85rem",marginBottom:"0.9rem"}}>
+            {grupos.map(g=>(
+              <div key={g.id} style={{...S.card,borderTop:"3px solid "+(g.color||"#f59e0b"),overflow:"hidden"}}>
+                {/* Header nombre */}
+                <div style={{padding:"0.55rem 0.9rem 0.45rem",display:"flex",alignItems:"center",gap:"0.45rem",borderBottom:"1px solid #1e2535"}}>
+                  <input type="color" value={g.color||"#f59e0b"}
+                    onChange={ev=>updGruposML(gs=>gs.map(x=>x.id===g.id?{...x,color:ev.target.value}:x))}
+                    style={{width:"18px",height:"18px",border:"none",borderRadius:"50%",cursor:"pointer",padding:0,flexShrink:0}}/>
+                  <input value={g.nombre||""} onChange={ev=>updGruposML(gs=>gs.map(x=>x.id===g.id?{...x,nombre:ev.target.value}:x))}
+                    style={{...S.input,flex:1,padding:"0.2rem 0.4rem",background:"transparent",border:"none",color:g.color||"#f59e0b",fontWeight:700,fontSize:"0.85rem"}}/>
+                  <button onClick={()=>{if(window.confirm("¿Eliminar grupo? Los partidos quedarán sin asignar."))updGruposML(gs=>gs.filter(x=>x.id!==g.id));}}
+                    style={{background:"none",border:"none",color:"#374151",cursor:"pointer",fontSize:"0.85rem"}}>x</button>
                 </div>
-                <div style={{padding:"0.45rem 0.65rem",display:"flex",flexWrap:"wrap",gap:"0.25rem"}}>
-                  {parts.map(p=><span key={p} style={{padding:"2px 8px",background:"#0f1420",border:"1px solid #78350f44",borderRadius:"5px",color:"#fbbf24",fontSize:"0.7rem"}}>{p}</span>)}
-                </div>
-              </div>);
-            })}
-          </div>
-          {/* Tabla editable */}
-          <div style={{...S.card,padding:"0.75rem 1rem",marginBottom:"0.75rem"}}>
-            <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"8px",borderBottom:"1px solid #1e2535",paddingBottom:"4px"}}>Editar por partido</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:"4px 1rem"}}>
-              {Object.entries(tarifas).sort(([a],[b])=>a.localeCompare(b)).map(([partido,precio])=>(
-                <div key={partido} style={{display:"flex",alignItems:"center",gap:"6px",padding:"3px 0",borderBottom:"1px solid #0d1119"}}>
-                  <span style={{flex:1,color:"#9ca3af",fontSize:"0.72rem"}}>{partido}</span>
-                  {editML?.partido===partido
+                {/* Precio */}
+                <div style={{padding:"0.45rem 0.9rem",borderBottom:"1px solid #1e2535",display:"flex",alignItems:"center",gap:"0.6rem"}}>
+                  <span style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase"}}>ML paga</span>
+                  {editML?.id===g.id
                     ?<input autoFocus type="number" value={editML.val}
                         onChange={ev=>setEditML({...editML,val:ev.target.value})}
-                        onBlur={()=>{setTarifaML(partido,editML.val);setEditML(null);}}
-                        onKeyDown={ev=>{if(ev.key==="Enter"){setTarifaML(partido,editML.val);setEditML(null);}if(ev.key==="Escape")setEditML(null);}}
-                        style={{...S.input,width:"90px",textAlign:"right",fontSize:"0.75rem",border:"1px solid #f59e0b"}}/>
-                    :<span onClick={()=>setEditML({partido,val:String(precio)})}
-                        style={{color:"#fbbf24",fontWeight:700,fontSize:"0.8rem",cursor:"text",padding:"2px 8px",borderRadius:"4px",minWidth:"70px",textAlign:"right",border:"1px solid transparent"}}>
-                        {fmt(precio)}
-                      </span>
+                        onBlur={()=>{guardarPrecioGrupo(g.id,editML.val);setEditML(null);}}
+                        onKeyDown={ev=>{if(ev.key==="Enter"){guardarPrecioGrupo(g.id,editML.val);setEditML(null);}if(ev.key==="Escape")setEditML(null);}}
+                        style={{...S.input,width:"100px",textAlign:"right",border:"1px solid "+(g.color||"#f59e0b"),fontWeight:700}}/>
+                    :<span onClick={()=>setEditML({id:g.id,val:String(g.precio||0)})}
+                        style={{color:g.precio>0?"#fbbf24":"#374151",fontWeight:800,fontSize:"1.1rem",cursor:"pointer",padding:"2px 8px",borderRadius:"5px"}}>{fmt(g.precio)}</span>
                   }
+                  <span style={{color:"#374151",fontSize:"0.65rem",marginLeft:"auto"}}>{(g.partidos||[]).length}</span>
                 </div>
-              ))}
+                {/* Partidos */}
+                <div style={{padding:"0.45rem 0.65rem",minHeight:"50px",display:"flex",flexWrap:"wrap",gap:"0.25rem",alignContent:"flex-start"}}>
+                  {!(g.partidos||[]).length&&<div style={{color:"#374151",fontSize:"0.7rem",width:"100%",textAlign:"center"}}>Sin partidos</div>}
+                  {(g.partidos||[]).sort().map(p=>(
+                    <div key={p} style={{display:"flex",alignItems:"center",gap:"0.2rem",padding:"2px 6px",background:"#0f1420",border:"1px solid "+(g.color||"#f59e0b")+"44",borderRadius:"5px"}}>
+                      <button onClick={()=>setMoverPartidoML({partido:p,fromId:g.id})}
+                        style={{background:"none",border:"none",color:"#d1d5db",cursor:"pointer",fontSize:"0.68rem",padding:0}}>{p}</button>
+                      <button onClick={()=>updGruposML(gs=>gs.map(x=>x.id===g.id?{...x,partidos:(x.partidos||[]).filter(q=>q!==p)}:x))}
+                        style={{background:"none",border:"none",color:"#374151",cursor:"pointer",fontSize:"0.6rem",padding:0}}>x</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {/* Nuevo grupo */}
+            <div onClick={()=>{const n=window.prompt("Nombre del grupo:","Nuevo grupo");if(!n)return;updGruposML(gs=>[...gs,{id:"ml_"+Date.now(),nombre:n,precio:0,color:COLORES_ML[gs.length%COLORES_ML.length],partidos:[]}]);}}
+              style={{...S.card,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:"0.4rem",minHeight:"130px",cursor:"pointer",border:"1px dashed #252d40",background:"transparent"}}>
+              <span style={{color:"#374151",fontSize:"1.6rem"}}>+</span>
+              <span style={{color:"#4b5563",fontSize:"0.78rem"}}>Nuevo grupo</span>
             </div>
-            <div style={{color:"#4b5563",fontSize:"0.65rem",marginTop:"8px"}}>Click en un valor para editarlo · Enter o click afuera para confirmar · Esc para cancelar · Se guarda automáticamente</div>
           </div>
+          {/* Sin asignar */}
+          {sinAsignarML.length>0&&(
+            <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.75rem"}}>
+              <div style={{color:"#f59e0b",fontWeight:700,fontSize:"0.68rem",marginBottom:"0.4rem"}}>Sin asignar ({sinAsignarML.length})</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:"0.3rem"}}>
+                {sinAsignarML.map(p=>(
+                  <button key={p} onClick={()=>setMoverPartidoML({partido:p,fromId:null})}
+                    style={{padding:"2px 8px",background:"#1c1500",border:"1px solid #78350f",borderRadius:"5px",color:"#fbbf24",fontSize:"0.7rem",cursor:"pointer"}}>{p}</button>
+                ))}
+              </div>
+            </div>
+          )}
           {/* Historial */}
           {historial.length>0&&(
             <div style={{...S.card,padding:"0.75rem 1rem"}}>
@@ -3059,12 +3115,11 @@ function TabTarifas({zc,setZc,lc,setLc,mlTarifas=ML_TARIFAS_INIT,setMlTarifas}){
               {[...historial].sort((a,b)=>b.vigenciaDesde.localeCompare(a.vigenciaDesde)).map((h,i)=>(
                 <div key={i} style={{borderBottom:"1px solid #1e2535",paddingBottom:"8px",marginBottom:"8px"}}>
                   <div style={{color:"#9ca3af",fontSize:"0.72rem",fontWeight:700,marginBottom:"5px"}}>Desde {h.vigenciaDesde}</div>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:"2px 1rem"}}>
-                    {Object.entries(h.tarifas||{}).sort(([a],[b])=>a.localeCompare(b)).map(([p,v])=>(
-                      <div key={p} style={{display:"flex",justifyContent:"space-between",fontSize:"0.68rem"}}>
-                        <span style={{color:"#6b7280"}}>{p}</span>
-                        <span style={{color:"#78350f"}}>{fmt(v)}</span>
-                      </div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:"4px 1rem"}}>
+                    {(h.grupos||[]).map(g=>(
+                      <span key={g.id} style={{fontSize:"0.68rem",color:"#6b7280"}}>
+                        <span style={{color:g.color||"#f59e0b",fontWeight:700}}>{g.nombre}</span>: {fmt(g.precio)} · {(g.partidos||[]).length} partidos
+                      </span>
                     ))}
                   </div>
                 </div>
