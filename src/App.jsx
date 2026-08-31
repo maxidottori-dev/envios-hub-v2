@@ -1210,8 +1210,8 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
         <textarea value={e.nota||""} onChange={ev=>set("nota",ev.target.value)} placeholder="Nota interna sobre este envio..." style={{...S.input,display:"block",width:"100%",height:"44px",resize:"vertical",fontSize:"0.8rem"}}/>
       </div>
       <div style={{marginBottom:"0.4rem"}}>
-        <button onClick={()=>set("cambio",e.cambio!==null?null:"")} style={S.btnSm(e.cambio!==null,"#ec4899")}>Cambio</button>
-        {e.cambio!==null&&<textarea value={e.cambio||""} onChange={ev=>set("cambio",ev.target.value)} placeholder="Que tiene que retirar para el cambio..." style={{...S.input,display:"block",width:"100%",marginTop:"4px",height:"42px",resize:"vertical",fontSize:"0.8rem"}}/>}
+        <button onClick={()=>set("cambio",e.cambio!=null?null:"")} style={S.btnSm(e.cambio!=null,"#ec4899")}>Cambio</button>
+        {e.cambio!=null&&<textarea value={e.cambio||""} onChange={ev=>set("cambio",ev.target.value)} placeholder="Que tiene que retirar para el cambio..." style={{...S.input,display:"block",width:"100%",marginTop:"4px",height:"42px",resize:"vertical",fontSize:"0.8rem"}}/>}
       </div>
       <div style={{marginBottom:"0.75rem"}}>
         <button onClick={()=>set("retiro",e.retiro!==null?null:"")} style={S.btnSm(e.retiro!==null,"#f97316")}>Retiro</button>
@@ -1696,7 +1696,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                     {e.turno&&<Bdg label={e.turno} bg={TURNO_C[e.turno]?.bg||"#130d2a"} t={TURNO_C[e.turno]?.c||"#a78bfa"}/>}
                     {e.fecha&&<Bdg label={fmtCorta(e.fecha)} bg="#12172a" t="#6b7280"/>}
                     {e.cobranza!==null&&<Bdg label={"$"+Number(e.cobranza).toLocaleString("es-AR")} bg="#1c1500" t="#fbbf24"/>}
-                    {e.cambio!==null&&<Bdg label="Cambio" bg="#1c0514" t="#ec4899"/>}
+                    {e.cambio!=null&&<Bdg label="Cambio" bg="#1c0514" t="#ec4899"/>}
                     {e.retiro!==null&&<Bdg label="Retiro" bg="#1c1000" t="#f97316"/>}
                     {e.alertaDireccion&&<Bdg label="Sin CP/Dir" bg="#1c0a00" t="#fb923c"/>}
                     {!e.partido&&getEstado(e)!=="cancelado"&&<Bdg label="Sin partido" bg="#1c0a00" t="#fb923c"/>}
@@ -3077,7 +3077,7 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
   );
   // Envios con cambio, retiro, o devolución por cancelación tras despacho
   const conRetiro = envios.filter(e =>
-    ((e.cambio !== null || e.retiro !== null) && getEstado(e) !== "cancelado") ||
+    ((e.cambio != null || e.retiro !== null) && getEstado(e) !== "cancelado") ||
     (e.devolucionPendiente && !e.devolucionCancelacionRecibida)
   );
 
@@ -3317,7 +3317,7 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
                     {e.nroSeguimiento&&<span style={{fontFamily:"monospace",fontSize:"0.7rem",color:"#94a3b8"}}>{e.nroSeguimiento}</span>}
                     {e.partido&&<span style={{fontSize:"0.72rem",color:"#9ca3af"}}>· {e.partido}</span>}
                   </div>
-                  {seccion === "cobranzas" && e.cambio !== null && (
+                  {seccion === "cobranzas" && e.cambio != null && (
                     <div style={{ color: "#ec4899", fontSize: "0.72rem", marginTop: "2px" }}>Cambio: {e.cambio}</div>
                   )}
                   {seccion === "retiros" && e.devolucionPendiente && (
@@ -3325,7 +3325,7 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
                   )}
                   {seccion === "retiros" && !e.devolucionPendiente && (
                     <div style={{ marginTop: "3px" }}>
-                      {e.cambio !== null && <div style={{ color: "#ec4899", fontSize: "0.72rem" }}>Cambio: {e.cambio}</div>}
+                      {e.cambio != null && <div style={{ color: "#ec4899", fontSize: "0.72rem" }}>Cambio: {e.cambio}</div>}
                       {e.retiro !== null && <div style={{ color: "#f97316", fontSize: "0.72rem" }}>Retiro: {e.retiro}</div>}
                     </div>
                   )}
@@ -4953,7 +4953,7 @@ function VistaLogistica({envios,sesion,lc}){
                   {e.fecha&&<Bdg label={fmtCorta(e.fecha)} bg="#12172a" t="#9ca3af"/>}
                   {(e.bultos||1)>1&&<Bdg label={e.bultos+" bultos"} bg="#0c1a2e" t="#60a5fa"/>}
                   {e.cobranza!==null&&<Bdg label={"Cobrar $"+Number(e.cobranza).toLocaleString("es-AR")} bg="#1c1500" t="#fbbf24"/>}
-                  {e.cambio!==null&&<Bdg label="Cambio" bg="#1c0514" t="#ec4899"/>}
+                  {e.cambio!=null&&<Bdg label="Cambio" bg="#1c0514" t="#ec4899"/>}
                   {e.retiro!==null&&<Bdg label="Retiro" bg="#1c1000" t="#f97316"/>}
                 </div>
                 {esTN&&<div style={{display:"flex",gap:"8px",alignItems:"baseline",marginBottom:"1px"}}>
