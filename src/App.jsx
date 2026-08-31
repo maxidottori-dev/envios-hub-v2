@@ -1007,8 +1007,8 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
   return(
     <div style={{background:"#12172a",border:"1px solid #6366f1",borderRadius:"12px",padding:"0.9rem 1rem",marginTop:"2px"}}>
 
-      {/* Datos TN — solo lectura */}
-      {esTN && (
+      {/* Datos de origen — solo lectura para TN, editable para Manual/ML */}
+      {esTN ? (
         <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.75rem",background:"#0d1119",border:"1px solid #1e2535"}}>
           <div style={{color:"#6366f1",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"6px"}}>Datos de Tienda Nube</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.35rem 1rem",fontSize:"0.78rem"}}>
@@ -1020,7 +1020,27 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
           {e.notasCliente&&<div style={{marginTop:"6px",padding:"5px 8px",background:"#12172a",borderRadius:"6px",fontSize:"0.75rem",color:"#9ca3af",fontStyle:"italic"}}>
             <span style={{color:"#6b7280",fontStyle:"normal",fontWeight:700,fontSize:"0.62rem",textTransform:"uppercase"}}>Notas del cliente: </span>{e.notasCliente}
           </div>}
-              {e.linkTN&&<a href={e.linkTN} target="_blank" rel="noreferrer" style={{display:"inline-block",marginTop:"6px",fontSize:"0.7rem",color:"#6366f1",textDecoration:"none"}}>Ver orden en Tienda Nube →</a>}
+          {e.linkTN&&<a href={e.linkTN} target="_blank" rel="noreferrer" style={{display:"inline-block",marginTop:"6px",fontSize:"0.7rem",color:"#6366f1",textDecoration:"none"}}>Ver orden en Tienda Nube →</a>}
+        </div>
+      ) : (
+        <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.75rem",background:"#0d1119",border:"1px solid #1e2535"}}>
+          <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"8px"}}>Cliente</div>
+          <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:"0.5rem",marginBottom:e.nroSeguimiento?"0.5rem":"0"}}>
+            <div>
+              <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nombre</div>
+              <input value={e.clienteNombre||""} onChange={ev=>set("clienteNombre",ev.target.value)} style={{...S.input,width:"100%",fontSize:"0.8rem"}} placeholder="Nombre del cliente"/>
+            </div>
+            <div>
+              <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Teléfono</div>
+              <input value={e.telefono||""} onChange={ev=>set("telefono",ev.target.value)} style={{...S.input,width:"100%",fontSize:"0.8rem"}} placeholder="11 xxxx-xxxx"/>
+            </div>
+          </div>
+          {e.nroSeguimiento&&(
+            <div style={{marginTop:"0.5rem"}}>
+              <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. seguimiento</div>
+              <input value={e.nroSeguimiento||""} onChange={ev=>set("nroSeguimiento",ev.target.value)} style={{...S.input,width:"100%",fontSize:"0.8rem"}}/>
+            </div>
+          )}
         </div>
       )}
 
@@ -1183,8 +1203,8 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
 
       {/* Notas de la orden — editable (incluye datepicker) */}
       <div style={{marginBottom:"0.5rem"}}>
-        <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>{esTN?"Notas de la orden":"Observaciones"}</div>
-        <textarea value={esTN?(e.notasOrden||""):(e.observaciones||"")} onChange={ev=>set(esTN?"notasOrden":"observaciones",ev.target.value)} placeholder={esTN?"Notas de la orden...":"Notas adicionales..."} style={{...S.input,display:"block",width:"100%",height:"52px",resize:"vertical",fontSize:"0.8rem"}}/>
+        <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Observaciones</div>
+        <textarea value={esTN?(e.notasOrden||""):(e.observaciones||"")} onChange={ev=>set(esTN?"notasOrden":"observaciones",ev.target.value)} placeholder="Notas adicionales..." style={{...S.input,display:"block",width:"100%",height:"52px",resize:"vertical",fontSize:"0.8rem"}}/>
       </div>
 
       {/* Estado de liquidacion */}
