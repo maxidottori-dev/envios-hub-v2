@@ -2828,6 +2828,7 @@ function TabTarifas({zc,setZc,lc,setLc,mlTarifas=ML_TARIFAS_INIT,setMlTarifas}){
   const [moverModal,setMoverModal]=useState(null);
   const [addModal,setAddModal]=useState(false);
   const [newZona,setNewZona]=useState({nombre:"",color:"#6366f1",precio:0});
+  const [editML,setEditML]=useState(null);
   const elimLog=async(k,nombre)=>{
     if(!window.confirm(`¿Eliminar "${nombre}"? Esta acción no se puede deshacer.`))return;
     const newLc={...lc};
@@ -2990,7 +2991,6 @@ function TabTarifas({zc,setZc,lc,setLc,mlTarifas=ML_TARIFAS_INIT,setMlTarifas}){
         const tarifas=mlTarifas?.tarifas||{};
         const vigDesde=mlTarifas?.vigenciaDesde||"";
         const historial=mlTarifas?.historial||[];
-        const [editML,setEditML]=useState(null); // {partido, val}
         const precios=[...new Set(Object.values(tarifas))].sort((a,b)=>a-b);
         const crearNuevaVigenciaML=()=>{
           const nuevaFecha=window.prompt("Vigencia desde (YYYY-MM-DD):",fechaHoy());
