@@ -2302,11 +2302,11 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
       <div style={{...S.card,padding:"1rem 1.1rem"}}>
         <h3 style={{margin:"0 0 0.9rem",fontWeight:800,fontSize:"0.95rem",color:"#e5e7eb"}}>Nuevo envio</h3>
 
-        {/* ── ORIGEN + IDENTIFICACIÓN + CLIENTE ── */}
+        {/* ── A: Identificación + Cliente ── */}
         <div style={{marginBottom:"0.7rem"}}>
           <Lbl>Origen</Lbl>
           <div style={{display:"flex",gap:"4px"}}>
-            {["Manual","ML"].map(o=><button key={o} onClick={()=>{setF(p=>({...p,origen:o,tipo:o,id:"",nroSeguimiento:""}));}} style={S.btnSm(f.origen===o,"#6366f1")}>{o}</button>)}
+            {["Manual","ML"].map(o=><button key={o} onClick={()=>setF(p=>({...p,origen:o,tipo:o,id:"",nroSeguimiento:""}))} style={S.btnSm(f.origen===o,"#6366f1")}>{o}</button>)}
           </div>
         </div>
         {!esML?(
@@ -2357,7 +2357,7 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
           </div>
         </div>
         {dirsCliente.length>1&&(
-          <div style={{marginBottom:"0.7rem",background:"#0f1420",border:"1px solid #6366f1",borderRadius:"6px",overflow:"hidden"}}>
+          <div style={{marginBottom:"0.9rem",background:"#0f1420",border:"1px solid #6366f1",borderRadius:"6px",overflow:"hidden"}}>
             <div style={{padding:"5px 10px",fontSize:"0.62rem",color:"#6366f1",fontWeight:700,textTransform:"uppercase",borderBottom:"1px solid #252d40"}}>Elegí una dirección</div>
             {dirsCliente.map((d,i)=>(
               <div key={i} onMouseDown={()=>{setF(p=>({...p,direccion:d.direccion,cp:d.cp,ciudad:d.ciudad,partido:d.partido||cpAPartido(d.cp)||""}));setDirsCliente([]);}}
@@ -2372,7 +2372,34 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
           </div>
         )}
 
-        {/* ── ENTREGA ── */}
+        {/* ── B: Cobranza / Extras ── */}
+        <SecH>Cobranza</SecH>
+        <div style={{marginBottom:"0.7rem"}}>
+          <Lbl>Cobranza ($)</Lbl>
+          <input type="number" min="0" value={f.cobranza===null?"":f.cobranza}
+            onChange={e=>{const v=e.target.value;set("cobranza",v===""?null:parseFloat(v)||0);}}
+            placeholder="— dejar vacío si no cobra en entrega" style={{...S.input,width:"100%"}}/>
+        </div>
+        <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.7rem",background:f.esCC?"#130d2a":"#0f1420",border:f.esCC?"1px solid #a78bfa":"1px solid #1e2535"}}>
+          <div style={{display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
+            <button onClick={()=>set("esCC",!f.esCC)} style={S.btnSm(f.esCC,"#a78bfa")}>Cta. Corriente</button>
+            {f.esCC&&<><input type="number" placeholder="Importe CC" value={f.importeCC||""} onChange={e=>set("importeCC",parseFloat(e.target.value)||0)} style={{...S.input,width:"130px",padding:"4px 10px"}}/><input value={f.nroFactura||""} onChange={e=>set("nroFactura",e.target.value)} placeholder="Nro. factura" style={{...S.input,width:"130px",padding:"4px 10px"}}/></>}
+            {!f.esCC&&<span style={{color:"#374151",fontSize:"0.78rem"}}>Marcar como Cuenta Corriente</span>}
+          </div>
+        </div>
+        <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.7rem",background:f.retiro!==null?"#1c1000":"#0f1420",border:f.retiro!==null?"1px solid #f97316":"1px solid #1e2535"}}>
+          <div style={{display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
+            <button onClick={()=>set("retiro",f.retiro!==null?null:"")} style={S.btnSm(f.retiro!==null,"#f97316")}>Retiro</button>
+            {f.retiro!==null&&<input value={f.retiro||""} onChange={e=>set("retiro",e.target.value||null)} placeholder="Qué se retira del cliente..." style={{...S.input,flex:1,padding:"4px 10px"}}/>}
+            {f.retiro===null&&<span style={{color:"#374151",fontSize:"0.78rem"}}>Marca si la logística retira algo en la entrega</span>}
+          </div>
+        </div>
+        <div style={{marginBottom:"0.9rem"}}>
+          <Lbl>Observaciones</Lbl>
+          <textarea value={f.observaciones} onChange={e=>set("observaciones",e.target.value)} style={{...S.input,display:"block",width:"100%",height:"44px",resize:"vertical",fontSize:"0.8rem"}} placeholder="Notas internas, alertas..."/>
+        </div>
+
+        {/* ── C: Entrega ── */}
         <SecH>Entrega</SecH>
         <div style={{marginBottom:"0.7rem"}}>
           <Lbl>Dirección *</Lbl>
@@ -2391,16 +2418,9 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
           <Lbl>Logística</Lbl>
           <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{logActivas.map(l=><button key={l} onClick={()=>handleTrans(l)} style={S.btnSm(f.trans===l,lc[l]?.color||"#6366f1")}>{l}</button>)}</div>
         </div>
-        <div style={{marginBottom:"0.7rem"}}>
+        <div style={{marginBottom:"0.9rem"}}>
           <Lbl>Tarifa log. ($)</Lbl>
           <input type="number" min="0" value={f.tarifaLog||""} onChange={e=>set("tarifaLog",parseFloat(e.target.value)||0)} placeholder="0" style={{...S.input,width:"160px"}}/>
-        </div>
-        <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.9rem",background:f.retiro!==null?"#1c1000":"#0f1420",border:f.retiro!==null?"1px solid #f97316":"1px solid #1e2535"}}>
-          <div style={{display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
-            <button onClick={()=>set("retiro",f.retiro!==null?null:"")} style={S.btnSm(f.retiro!==null,"#f97316")}>Retiro</button>
-            {f.retiro!==null&&<input value={f.retiro||""} onChange={e=>set("retiro",e.target.value||null)} placeholder="Qué se retira del cliente..." style={{...S.input,flex:1,padding:"4px 10px"}}/>}
-            {f.retiro===null&&<span style={{color:"#374151",fontSize:"0.78rem"}}>Marca si la logística retira algo en la entrega</span>}
-          </div>
         </div>
 
         <div style={{display:"flex",justifyContent:"flex-end",gap:"0.5rem"}}>
