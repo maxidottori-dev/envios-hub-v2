@@ -1122,41 +1122,84 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
         </div>
       )}
       {dividido&&<div style={{background:"#041f14",border:"1px solid #065f46",borderRadius:"8px",padding:"6px 12px",marginBottom:"0.65rem",fontSize:"0.75rem",color:"#34d399"}}>✓ Costo dividido aplicado a {duplicados.length+1} pedidos</div>}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.6rem 1rem",marginBottom:"0.65rem",opacity:(esTN&&e.pagoEstado==="pendiente")?0.35:1,pointerEvents:(esTN&&e.pagoEstado==="pendiente")?"none":"auto"}}>
-        <div>
-          <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Logistica</div>
-          <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{logActivas.map(l =><button key={l} onClick={()=>handleTrans(l)} style={S.chip(e.trans===l,lc[l].color,lc[l].bg)}>{l}</button>)}</div>
-        </div>
-        <div>
-          <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Turno</div>
-          <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{TURNOS.map(t =>{const tc=TURNO_C[t]||{c:"#a78bfa",bg:"#130d2a"};return <button key={t} onClick={()=>set("turno",e.turno===t?"":t)} style={S.chip(e.turno===t,tc.c,tc.bg)}>{t}</button>;})}</div>
-        </div>
-        <div>
-          <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Fecha entrega</div>
-          <div style={{display:"flex",gap:"3px",flexWrap:"wrap",alignItems:"center"}}>
-            <button onClick={()=>set("fecha",fechaHoy())} style={S.btnSm(e.fecha===fechaHoy(),"#6366f1")}>Hoy</button>
-            <button onClick={()=>set("fecha",fechaManana())} style={S.btnSm(e.fecha===fechaManana(),"#6366f1")}>Manana</button>
-            <input type="date" value={e.fecha||""} onChange={ev=>set("fecha",ev.target.value)} style={{...S.input,padding:"2px 6px",fontSize:"0.72rem",height:"24px",width:"120px"}}/>
+      {/* ===== SECCIÓN ENTREGA ===== */}
+      <div style={{marginBottom:"0.75rem"}}>
+        <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"8px",borderBottom:"1px solid #1e2535",paddingBottom:"4px"}}>Entrega</div>
+
+        {/* Logística + Turno */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.6rem 1rem",marginBottom:"0.6rem",opacity:(esTN&&e.pagoEstado==="pendiente")?0.35:1,pointerEvents:(esTN&&e.pagoEstado==="pendiente")?"none":"auto"}}>
+          <div>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Logistica</div>
+            <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{logActivas.map(l=><button key={l} onClick={()=>handleTrans(l)} style={S.chip(e.trans===l,lc[l].color,lc[l].bg)}>{l}</button>)}</div>
+          </div>
+          <div>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Turno</div>
+            <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{TURNOS.map(t=>{const tc=TURNO_C[t]||{c:"#a78bfa",bg:"#130d2a"};return <button key={t} onClick={()=>set("turno",e.turno===t?"":t)} style={S.chip(e.turno===t,tc.c,tc.bg)}>{t}</button>;})}</div>
           </div>
         </div>
-        <div>
-          <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Estado</div>
-          <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{Object.entries(ESTADO_C).map(([k,v])=><button key={k} onClick={()=>handleEstado(k)} style={S.chip(e.estado===k,v.t,v.bg)}>{v.label}</button>)}</div>
+
+        {/* Fecha + Estado */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.6rem 1rem",marginBottom:"0.6rem"}}>
+          <div>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Fecha entrega</div>
+            <div style={{display:"flex",gap:"3px",flexWrap:"wrap",alignItems:"center"}}>
+              <button onClick={()=>set("fecha",fechaHoy())} style={S.btnSm(e.fecha===fechaHoy(),"#6366f1")}>Hoy</button>
+              <button onClick={()=>set("fecha",fechaManana())} style={S.btnSm(e.fecha===fechaManana(),"#6366f1")}>Manana</button>
+              <input type="date" value={e.fecha||""} onChange={ev=>set("fecha",ev.target.value)} style={{...S.input,padding:"2px 6px",fontSize:"0.72rem",height:"24px",width:"120px"}}/>
+            </div>
+          </div>
+          <div>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Estado</div>
+            <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{Object.entries(ESTADO_C).map(([k,v])=><button key={k} onClick={()=>handleEstado(k)} style={S.chip(e.estado===k,v.t,v.bg)}>{v.label}</button>)}</div>
+          </div>
         </div>
-        <div>
+
+        {/* Bultos */}
+        <div style={{marginBottom:"0.6rem"}}>
           <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Bultos</div>
           <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
             <input type="number" min="1" value={e.bultos||""} onChange={ev=>{
               const v=parseInt(ev.target.value);
               set("bultos",v>0?v:0);
-              // Auto-preparado solo si NO FLEX y el usuario está ingresando el valor por primera vez
               if(v>0&&e.origen!=="ML"&&!e.preparado) set("preparado",true);
             }} placeholder="Ingresá cantidad..." style={{...S.input,width:"140px",padding:"4px 10px"}}/>
             {e.origen!=="ML"&&e.preparado&&<span style={{color:"#10b981",fontSize:"0.72rem",fontWeight:700}}>✓ Preparado</span>}
           </div>
         </div>
-        <div>
-          <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Cobranza</div>
+
+        {/* Dirección */}
+        <div style={{marginBottom:"0"}}>
+          <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Dirección</div>
+          <textarea value={e.direccion||""} onChange={ev=>set("direccion",ev.target.value)} placeholder="Calle, número..." style={{...S.input,display:"block",width:"100%",height:"48px",resize:"vertical",fontSize:"0.8rem"}}/>
+          <div style={{display:"flex",gap:"6px",marginTop:"4px"}}>
+            <input value={e.localidad||""} onChange={ev=>set("localidad",ev.target.value)} placeholder="Barrio/Localidad" style={{...S.input,flex:1,padding:"3px 8px",fontSize:"0.75rem"}}/>
+            <input value={e.partido||""} onChange={ev=>set("partido",ev.target.value)} placeholder="Partido" style={{...S.input,flex:1,padding:"3px 8px",fontSize:"0.75rem"}}/>
+            <input value={e.cp||""} onChange={ev=>set("cp",ev.target.value)} placeholder="CP" style={{...S.input,width:"70px",padding:"3px 8px",fontSize:"0.75rem"}}/>
+          </div>
+        </div>
+      </div>
+
+      {/* Datos FLEX — solo ML */}
+      {e.origen==="ML"&&(
+        <div style={{marginBottom:"0.65rem",background:"#0d1119",border:"1px solid #1a3008",borderRadius:"10px",padding:"0.65rem 1rem"}}>
+          <div style={{color:"#84cc16",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"8px"}}>Datos de la etiqueta FLEX</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.35rem 1rem",marginBottom:"8px",fontSize:"0.78rem"}}>
+            {e.destinatario&&<div style={{gridColumn:"1/-1"}}><span style={{color:"#6b7280"}}>Destinatario: </span><span style={{color:"#e5e7eb",fontWeight:600}}>{e.destinatario}</span></div>}
+            {e.tipoEntrega&&<div><span style={{background:e.tipoEntrega==="COMERCIAL"?"#0c1a40":"#0a1a0a",color:e.tipoEntrega==="COMERCIAL"?"#38bdf8":"#86efac",border:"1px solid "+(e.tipoEntrega==="COMERCIAL"?"#38bdf8":"#86efac"),borderRadius:"4px",padding:"1px 8px",fontSize:"0.7rem",fontWeight:700}}>{e.tipoEntrega}</span></div>}
+          </div>
+          <div>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Referencia / instrucciones</div>
+            <textarea value={e.referencia||""} onChange={ev=>set("referencia",ev.target.value)} placeholder="Indicaciones de entrega..." style={{...S.input,display:"block",width:"100%",height:"52px",resize:"vertical",fontSize:"0.78rem"}}/>
+          </div>
+        </div>
+      )}
+
+      {/* ===== SECCIÓN COBRANZA ===== */}
+      <div style={{marginBottom:"0.75rem"}}>
+        <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"8px",borderBottom:"1px solid #1e2535",paddingBottom:"4px"}}>Cobranza</div>
+
+        {/* Toggle Cobranza + CC */}
+        <div style={{marginBottom:"0.5rem"}}>
           <div style={{display:"flex",gap:"3px",alignItems:"center",flexWrap:"wrap"}}>
             {!e.esCC&&<>
               <button onClick={()=>set("cobranza",e.cobranza!==null?null:0)} style={S.btnSm(e.cobranza!==null,"#f59e0b")}>{e.cobranza!==null?"Activa":"Agregar"}</button>
@@ -1166,52 +1209,31 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
             {e.esCC&&<input type="number" placeholder="Importe CC" value={e.importeCC||""} onChange={ev=>setE(p=>({...p,importeCC:parseFloat(ev.target.value)||0}))} style={{...S.input,width:"120px",padding:"3px 8px",fontSize:"0.8rem"}}/>}
           </div>
         </div>
-      </div>
 
-      {/* Dirección editable */}
-      <div style={{marginBottom:"0.5rem"}}>
-        <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Dirección</div>
-        <textarea value={e.direccion||""} onChange={ev=>set("direccion",ev.target.value)} placeholder="Calle, número..." style={{...S.input,display:"block",width:"100%",height:"48px",resize:"vertical",fontSize:"0.8rem"}}/>
-        <div style={{display:"flex",gap:"6px",marginTop:"4px"}}>
-          <input value={e.localidad||""} onChange={ev=>set("localidad",ev.target.value)} placeholder="Barrio/Localidad" style={{...S.input,flex:1,padding:"3px 8px",fontSize:"0.75rem"}}/>
-          <input value={e.partido||""} onChange={ev=>set("partido",ev.target.value)} placeholder="Partido" style={{...S.input,flex:1,padding:"3px 8px",fontSize:"0.75rem"}}/>
-          <input value={e.cp||""} onChange={ev=>set("cp",ev.target.value)} placeholder="CP" style={{...S.input,width:"70px",padding:"3px 8px",fontSize:"0.75rem"}}/>
+        {/* Nro Factura */}
+        <div style={{marginBottom:"0.5rem"}}>
+          <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Nro. Factura</div>
+          <input value={e.nroFactura||""} onChange={ev=>set("nroFactura",ev.target.value)} placeholder="ej. FA-00001" style={{...S.input,width:"100%",fontSize:"0.8rem"}}/>
+        </div>
+
+        {/* Retiro */}
+        <div style={{marginBottom:"0.5rem"}}>
+          <button onClick={()=>set("retiro",e.retiro!==null?null:"")} style={S.btnSm(e.retiro!==null,"#f97316")}>Retiro</button>
+          {e.retiro!==null&&<textarea value={e.retiro||""} onChange={ev=>set("retiro",ev.target.value)} placeholder="Que tiene que retirar..." style={{...S.input,display:"block",width:"100%",marginTop:"4px",height:"42px",resize:"vertical",fontSize:"0.8rem"}}/>}
+        </div>
+
+        {/* Observaciones */}
+        <div style={{marginBottom:"0"}}>
+          <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Observaciones</div>
+          <textarea value={esTN?(e.notasOrden||""):(e.observaciones||"")} onChange={ev=>set(esTN?"notasOrden":"observaciones",ev.target.value)} placeholder="Notas adicionales..." style={{...S.input,display:"block",width:"100%",height:"52px",resize:"vertical",fontSize:"0.8rem"}}/>
         </div>
       </div>
-      {/* Datos FLEX — destinatario, tipo entrega, referencia, QR */}
-      {e.origen==="ML"&&(
-        <div style={{marginBottom:"0.65rem",background:"#0d1119",border:"1px solid #1a3008",borderRadius:"10px",padding:"0.65rem 1rem"}}>
-          <div style={{color:"#84cc16",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"8px"}}>Datos de la etiqueta FLEX</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.35rem 1rem",marginBottom:"8px",fontSize:"0.78rem"}}>
-            {e.destinatario&&<div style={{gridColumn:"1/-1"}}><span style={{color:"#6b7280"}}>Destinatario: </span><span style={{color:"#e5e7eb",fontWeight:600}}>{e.destinatario}</span></div>}
-            {e.tipoEntrega&&<div><span style={{background:e.tipoEntrega==="COMERCIAL"?"#0c1a40":"#0a1a0a",color:e.tipoEntrega==="COMERCIAL"?"#38bdf8":"#86efac",border:"1px solid "+(e.tipoEntrega==="COMERCIAL"?"#38bdf8":"#86efac"),borderRadius:"4px",padding:"1px 8px",fontSize:"0.7rem",fontWeight:700}}>{e.tipoEntrega}</span></div>}
 
-          </div>
-
-          <div>
-            <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Referencia / instrucciones</div>
-            <textarea value={e.referencia||""} onChange={ev=>set("referencia",ev.target.value)} placeholder="Indicaciones de entrega..." style={{...S.input,display:"block",width:"100%",height:"52px",resize:"vertical",fontSize:"0.78rem"}}/>
-          </div>
-        </div>
-      )}
-
-      {/* Nro Factura */}
-      <div style={{marginBottom:"0.5rem"}}>
-        <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Nro. Factura</div>
-        <input value={e.nroFactura||""} onChange={ev=>set("nroFactura",ev.target.value)} placeholder="ej. FA-00001" style={{...S.input,width:"100%",fontSize:"0.8rem"}}/>
-      </div>
-
-      {/* Notas de la orden — editable (incluye datepicker) */}
-      <div style={{marginBottom:"0.5rem"}}>
-        <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Observaciones</div>
-        <textarea value={esTN?(e.notasOrden||""):(e.observaciones||"")} onChange={ev=>set(esTN?"notasOrden":"observaciones",ev.target.value)} placeholder="Notas adicionales..." style={{...S.input,display:"block",width:"100%",height:"52px",resize:"vertical",fontSize:"0.8rem"}}/>
-      </div>
-
-      {/* Estado de liquidacion */}
+      {/* Estado de liquidación */}
       {e.trans&&<div style={{marginBottom:"0.65rem"}}>
         <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"6px"}}>Estado de liquidacion</div>
         <div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>
-          {[{k:"normal",l:"Normal",c:"#10b981"},{k:"cancelado_liq",l:"Sin cargo",c:"#f87171"},{k:"no_abonado",l:"No abonado por demora",c:"#f59e0b"}].map(x =>(
+          {[{k:"normal",l:"Normal",c:"#10b981"},{k:"cancelado_liq",l:"Sin cargo",c:"#f87171"},{k:"no_abonado",l:"No abonado por demora",c:"#f59e0b"}].map(x=>(
             <button key={x.k} onClick={()=>set("estadoLiq",x.k)} style={{...S.btnSm((e.estadoLiq||"normal")===x.k,x.c),padding:"3px 10px",fontSize:"0.72rem"}}>{x.l}</button>
           ))}
         </div>
@@ -1219,19 +1241,17 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
           <textarea value={e.notaLiq||""} onChange={ev=>set("notaLiq",ev.target.value)} placeholder="Motivo..." style={{...S.input,display:"block",width:"100%",marginTop:"6px",height:"38px",resize:"vertical",fontSize:"0.78rem"}}/>
         )}
       </div>}
+
       {/* Etiquetas por bulto */}
       {e.bultos>0&&e.trans&&<div style={{marginBottom:"0.65rem",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div style={{color:"#6b7280",fontSize:"0.72rem"}}>{e.bultos} bulto{e.bultos>1?"s":""} — {e.trans}</div>
         {puedeVer(sesion,"accion_imprimir")&&<button onClick={()=>imprimirEtiquetas(e,lc)} style={{...S.btnSm(false),color:"#6366f1",border:"1px solid #6366f1",padding:"3px 12px",fontSize:"0.72rem"}}>🖨 Imprimir etiquetas</button>}
       </div>}
-      {/* Nota del envio */}
+
+      {/* Nota interna */}
       <div style={{marginBottom:"0.65rem"}}>
         <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Nota interna</div>
         <textarea value={e.nota||""} onChange={ev=>set("nota",ev.target.value)} placeholder="Nota interna sobre este envio..." style={{...S.input,display:"block",width:"100%",height:"44px",resize:"vertical",fontSize:"0.8rem"}}/>
-      </div>
-      <div style={{marginBottom:"0.75rem"}}>
-        <button onClick={()=>set("retiro",e.retiro!==null?null:"")} style={S.btnSm(e.retiro!==null,"#f97316")}>Retiro</button>
-        {e.retiro!==null&&<textarea value={e.retiro||""} onChange={ev=>set("retiro",ev.target.value)} placeholder="Que tiene que retirar..." style={{...S.input,display:"block",width:"100%",marginTop:"4px",height:"42px",resize:"vertical",fontSize:"0.8rem"}}/>}
       </div>
       </div>{/* fin wrapper bloqueo */}
       {/* Auditoría */}
