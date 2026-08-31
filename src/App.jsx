@@ -2243,13 +2243,13 @@ const TIPO_PV_C={
   producto_incorrecto:{bg:"#1c0a0a",border:"#7f1d1d",t:"#fca5a5"},
 };
 
-function imprimirNotaPV(caso){
+function imprimirNotaPV(caso,envioDoc){
   const TIPO_L={faltante:"Faltante",cruce_etiqueta:"Cruce de etiqueta",embalaje:"Embalaje deficiente",producto_incorrecto:"Producto incorrecto"};
   const pvId="PV-"+caso.id.slice(-6).toUpperCase();
   const fecha=caso.fechaCreacion?new Date(caso.fechaCreacion).toLocaleDateString("es-AR"):"";
   const tipoLabel=TIPO_L[caso.tipoIncidente]||caso.tipoIncidente||"";
   const direccionFull=[caso.direccion,caso.localidad,caso.partido,caso.cp].filter(Boolean).join(" · ");
-  const fechaEntrega=caso.envioFecha?new Date(caso.envioFecha+"T12:00:00").toLocaleDateString("es-AR"):"—";
+  const fechaEntrega=(envioDoc?.fecha)?new Date(envioDoc.fecha+"T12:00:00").toLocaleDateString("es-AR"):"—";
 
   const copia=`
     <div class="copia">
@@ -2268,9 +2268,9 @@ function imprimirNotaPV(caso){
       <div class="section-card" style="margin-bottom:3mm">
         <div class="section-header">Entrega</div>
         <div class="grid3" style="padding:2mm 3mm">
-          <div class="field"><div class="flabel">Logística</div><div class="fval">${caso.envioTrans||"—"}</div></div>
+          <div class="field"><div class="flabel">Logística</div><div class="fval">${envioDoc?.trans||"—"}</div></div>
           <div class="field"><div class="flabel">Fecha</div><div class="fval">${fechaEntrega}</div></div>
-          <div class="field"><div class="flabel">Turno</div><div class="fval">${caso.envioTurno||"—"}</div></div>
+          <div class="field"><div class="flabel">Turno</div><div class="fval">${envioDoc?.turno||"—"}</div></div>
         </div>
       </div>
       <div class="section-card" style="flex:1">
@@ -2319,7 +2319,7 @@ function imprimirNotaPV(caso){
   win.onload=()=>win.print();
 }
 
-function TabPostVenta({envios=[],sesion=null}){
+function TabPostVenta({envios=[],setEnvios,sesion=null}){
   const [casos,setCasos]=useState([]);
   const [loading,setLoading]=useState(true);
   const [modo,setModo]=useState("lista");
@@ -2327,6 +2327,7 @@ function TabPostVenta({envios=[],sesion=null}){
   const [filtroTipo,setFiltroTipo]=useState("todos");
   const [saving,setSaving]=useState(false);
   const [err,setErr]=useState("");
+  const [ordenEncontrada,setOrdenEncontrada]=useState(null);
 
   const VACIO={ordenOriginal:"",clienteNombre:"",telefono:"",direccion:"",localidad:"",partido:"",cp:"",
     tipoIncidente:"",descripcion:"",resolucion:"",costoResolucion:0,
@@ -2347,9 +2348,10 @@ function TabPostVenta({envios=[],sesion=null}){
   // Auto-fill cliente desde orden original
   useEffect(()=>{
     const id=f.ordenOriginal.trim();
-    if(!id)return;
+    if(!id){setOrdenEncontrada(null);return;}
     const found=envios.find(e=>e.id===id||(e.nroOrdenTN&&String(e.nroOrdenTN)===id));
     if(found){
+      setOrdenEncontrada(found);
       setF(p=>({...p,
         clienteNombre:found.clienteNombre||p.clienteNombre,
         telefono:found.telefono||p.telefono,
@@ -2358,29 +2360,47 @@ function TabPostVenta({envios=[],sesion=null}){
         partido:found.partido||p.partido,
         cp:found.cp||p.cp,
       }));
+    }else{
+      setOrdenEncontrada(null);
     }
-  },[f.ordenOriginal]);
-
-  // Auto-fill logística/fecha/turno desde envío vinculado
-  useEffect(()=>{
-    const id=f.envioId.trim();
-    if(!id)return;
-    const found=envios.find(e=>e.id===id);
-    if(found) setF(p=>({...p,envioTrans:found.trans||"",envioFecha:found.fecha||"",envioTurno:found.turno||""}));
-  },[f.envioId]);
+  },[f.ordenOriginal,envios]);
 
   const guardar=async()=>{
     if(!f.ordenOriginal.trim()){setErr("La orden original es obligatoria.");return;}
     if(!f.tipoIncidente){setErr("Seleccioná el tipo de incidente.");return;}
     if(!f.descripcion.trim()){setErr("La descripción es obligatoria.");return;}
-    if(!f.resolucion){setErr("Seleccioná el tipo de resolución.");return;}
     const audit=mkAudit(sesion);
-    const data={...f,fechaCreacion:new Date().toISOString(),...(audit?{creadoPor:audit}:{})};
+    const hoy=fechaHoy();
+    let envioId="";
     try{
       setSaving(true);
-      const ref=await addDoc(collection(db,"postventa"),data);
-      setCasos(p=>[{id:ref.id,...data},...p]);
-      setF(VACIO);setErr("");setModo("lista");
+      // 1. Crear PV en Firestore
+      const pvData={...f,fechaCreacion:new Date().toISOString(),...(audit?{creadoPor:audit}:{})};
+      const pvRef=await addDoc(collection(db,"postventa"),pvData);
+      // 2. Si resolución es Envío → crear envío automáticamente
+      if(f.resolucion==="envio"){
+        const tipoLabel=TIPOS_PV.find(t=>t.k===f.tipoIncidente)?.l||f.tipoIncidente;
+        envioId="PV"+pvRef.id.slice(-8).toUpperCase();
+        const envioData={
+          id:envioId,tipo:"Manual",origen:"Manual",
+          clienteNombre:f.clienteNombre,telefono:f.telefono,
+          direccion:f.direccion,localidad:f.localidad,partido:f.partido,cp:f.cp,
+          fecha:hoy,fechaVenta:hoy,turno:"",trans:"",
+          estado:"sin_asignar",bultos:0,
+          cobranza:null,retiro:null,esCC:false,importeCC:0,nroFactura:"",
+          observaciones:`Post Venta — ${tipoLabel} — Ref. #${f.ordenOriginal}`,
+          tarifaLog:0,pvCasoId:pvRef.id,
+          creadoTs:new Date().toISOString(),
+          ...(audit?{creadoPor:audit}:{}),
+        };
+        await setDoc(doc(db,"envios",envioId),envioData);
+        if(setEnvios) setEnvios(p=>[envioData,...p]);
+        // Actualizar PV con el envioId generado
+        await setDoc(doc(db,"postventa",pvRef.id),{envioId},{merge:true});
+        pvData.envioId=envioId;
+      }
+      setCasos(p=>[{id:pvRef.id,...pvData},...p]);
+      setF(VACIO);setOrdenEncontrada(null);setErr("");setModo("lista");
     }catch(e){console.error("guardar PV",e);setErr("Error: "+e.message);}
     finally{setSaving(false);}
   };
@@ -2420,7 +2440,14 @@ function TabPostVenta({envios=[],sesion=null}){
               <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Orden original</div>
               <input value={f.ordenOriginal} onChange={ev=>set("ordenOriginal",ev.target.value)}
                 placeholder="ID del envío..." style={{...S.input,width:"100%",fontSize:"0.8rem"}}/>
-              {f.clienteNombre&&<div style={{fontSize:"0.7rem",color:"#10b981",marginTop:"3px"}}>✓ {f.clienteNombre}</div>}
+              {ordenEncontrada&&(
+                <div style={{background:"#041f14",border:"1px solid #065f46",borderRadius:"6px",padding:"6px 10px",marginTop:"5px",fontSize:"0.72rem",color:"#d1fae5",display:"grid",gap:"2px"}}>
+                  <div style={{fontWeight:700,color:"#10b981"}}>{ordenEncontrada.clienteNombre}</div>
+                  {ordenEncontrada.telefono&&<div style={{color:"#6b7280"}}>📞 {ordenEncontrada.telefono}</div>}
+                  {ordenEncontrada.direccion&&<div style={{color:"#9ca3af"}}>{ordenEncontrada.direccion}{ordenEncontrada.localidad?", "+ordenEncontrada.localidad:""}{ordenEncontrada.cp?" ("+ordenEncontrada.cp+")":""}</div>}
+                  {ordenEncontrada.trans&&<div style={{color:"#6b7280"}}>🚚 {ordenEncontrada.trans}</div>}
+                </div>
+              )}
             </div>
             <div>
               <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Tipo de incidente</div>
@@ -2447,15 +2474,12 @@ function TabPostVenta({envios=[],sesion=null}){
             <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"6px",borderBottom:"1px solid #1e2535",paddingBottom:"4px"}}>Resolución</div>
             <div style={{display:"flex",gap:"6px",marginBottom:"0.5rem"}}>
               {[{k:"envio",l:"Envío",c:"#10b981"},{k:"reintegro",l:"Reintegro",c:"#f59e0b"},{k:"sin_costo",l:"Sin costo",c:"#6b7280"}].map(r=>(
-                <button key={r.k} onClick={()=>set("resolucion",r.k)} style={{...S.btnSm(f.resolucion===r.k,r.c),fontSize:"0.75rem"}}>{r.l}</button>
+                <button key={r.k} onClick={()=>set("resolucion",f.resolucion===r.k?"":r.k)} style={{...S.btnSm(f.resolucion===r.k,r.c),fontSize:"0.75rem"}}>{r.l}</button>
               ))}
             </div>
             {f.resolucion==="envio"&&(
-              <div style={{marginTop:"0.5rem"}}>
-                <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>ID del envío creado</div>
-                <input value={f.envioId} onChange={ev=>set("envioId",ev.target.value)}
-                  placeholder="Ingresá el ID del envío manual creado..." style={{...S.input,width:"100%",fontSize:"0.8rem"}}/>
-                {f.envioTrans&&<div style={{fontSize:"0.7rem",color:"#10b981",marginTop:"3px"}}>✓ {f.envioTrans} · {f.envioFecha} · {f.envioTurno}</div>}
+              <div style={{marginTop:"0.5rem",background:"#041f14",border:"1px solid #065f46",borderRadius:"6px",padding:"6px 10px",fontSize:"0.71rem",color:"#6ee7b7"}}>
+                Se creará automáticamente un envío Manual vinculado al guardar el caso.
               </div>
             )}
             {f.resolucion==="reintegro"&&(
@@ -2528,7 +2552,7 @@ function TabPostVenta({envios=[],sesion=null}){
                   </div>
                   <div style={{display:"flex",gap:"4px",flexShrink:0}}>
                     {caso.resolucion==="envio"&&caso.envioId&&(
-                      <button onClick={()=>imprimirNotaPV(caso)} style={{...S.btnSm(false),color:"#6366f1",border:"1px solid #6366f1",fontSize:"0.68rem",padding:"3px 8px"}}>🖨 Imprimir</button>
+                      <button onClick={()=>imprimirNotaPV(caso,envios.find(e=>e.id===caso.envioId))} style={{...S.btnSm(false),color:"#6366f1",border:"1px solid #6366f1",fontSize:"0.68rem",padding:"3px 8px"}}>🖨 Imprimir</button>
                     )}
                     <button onClick={()=>toggleEstado(caso)} style={{...S.btnSm(caso.estado==="resuelto","#10b981"),fontSize:"0.68rem",padding:"3px 8px"}}>
                       {caso.estado==="resuelto"?"↩ Reabrir":"✓ Resolver"}
@@ -10957,7 +10981,7 @@ export default function App(){
         {tab==="flex"    &&<TabEnvios   envios={envios.filter(e=>e.origen==="ML")}  setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin} sesion={sesion} mostrarResumenFlex={true} facturaClientes={facturaClientes}/>}
         {tab==="imprimir"&&<TabImprimir envios={envios} setEnvios={setEnvios} zc={zc} lc={lc}/>}
         {tab==="manual"  &&<TabManual   setEnvios={setEnvios} onSuccess={()=>{mostrarToast("Envio agregado");}} lc={lc} enviosExistentes={envios} sesion={sesion}/>}
-        {tab==="postventa"&&<TabPostVenta envios={envios} sesion={sesion}/>}
+        {tab==="postventa"&&<TabPostVenta envios={envios} setEnvios={setEnvios} sesion={sesion}/>}
         {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZcPersist} lc={lc} setLc={setLcPersist}/>}
         {tab==="informe"     &&<TabInforme     envios={envios} zc={zc} lc={lc}/>}
         {tab==="liquidacion"    &&<TabLiquidacion    envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>}
