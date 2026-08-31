@@ -2302,76 +2302,19 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
       <div style={{...S.card,padding:"1rem 1.1rem"}}>
         <h3 style={{margin:"0 0 0.9rem",fontWeight:800,fontSize:"0.95rem",color:"#e5e7eb"}}>Nuevo envio</h3>
 
-        {/* ── CLIENTE ── */}
-        <SecH>Cliente</SecH>
-        <div style={{position:"relative",marginBottom:"0.7rem"}}>
-          <Lbl>Nombre *</Lbl>
-          <input value={f.clienteNombre}
-            onChange={e=>{set("clienteNombre",e.target.value);setSugsVisible(true);setDirsCliente([]);}}
-            onFocus={()=>setSugsVisible(true)} onBlur={()=>setTimeout(()=>setSugsVisible(false),150)}
-            style={{...S.input,width:"100%"}} placeholder="Nombre completo o buscar existente"/>
-          {sugerencias.length>0&&(
-            <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:200,background:"#1a1f2e",border:"1px solid #6366f1",borderRadius:"6px",marginTop:"2px",boxShadow:"0 6px 16px rgba(0,0,0,0.5)",overflow:"hidden"}}>
-              {sugerencias.map(n=>{
-                const d=clientesData[n];
-                return(
-                  <div key={n} onMouseDown={()=>seleccionarCliente(n)} style={{padding:"0.45rem 0.75rem",cursor:"pointer",borderBottom:"1px solid #252d40"}} onMouseEnter={e=>e.currentTarget.style.background="#252d40"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                    <div style={{color:"#e5e7eb",fontSize:"0.82rem",fontWeight:600}}>{n}</div>
-                    <div style={{fontSize:"0.68rem",color:"#4b5563",marginTop:"1px",display:"flex",gap:"8px"}}>
-                      {d?.telefono&&<span>📞 {d.telefono}</span>}
-                      {d?.direcciones?.length===1&&<span>📍 {d.direcciones[0].direccion}</span>}
-                      {d?.direcciones?.length>1&&<span>📍 {d.direcciones.length} direcciones</span>}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {dirsCliente.length>1&&(
-            <div style={{marginTop:"6px",background:"#0f1420",border:"1px solid #6366f1",borderRadius:"6px",overflow:"hidden"}}>
-              <div style={{padding:"5px 10px",fontSize:"0.62rem",color:"#6366f1",fontWeight:700,textTransform:"uppercase",borderBottom:"1px solid #252d40"}}>Elegí una dirección</div>
-              {dirsCliente.map((d,i)=>(
-                <div key={i} onMouseDown={()=>{setF(p=>({...p,direccion:d.direccion,cp:d.cp,ciudad:d.ciudad,partido:d.partido||cpAPartido(d.cp)||""}));setDirsCliente([]);}}
-                  style={{padding:"7px 10px",cursor:"pointer",borderBottom:i<dirsCliente.length-1?"1px solid #1a1f2e":"none"}}
-                  onMouseEnter={e=>e.currentTarget.style.background="#1a1f2e"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                  <div style={{fontSize:"0.78rem",color:"#e2e8f0",fontWeight:600}}>{d.direccion}</div>
-                  <div style={{fontSize:"0.65rem",color:"#4b5563",marginTop:"1px",display:"flex",gap:"8px"}}>
-                    {d.ciudad&&<span>{d.ciudad}</span>}{d.partido&&<span>· {d.partido}</span>}{d.cp&&<span>· CP {d.cp}</span>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        <div style={{marginBottom:"0.7rem"}}>
-          <Lbl>Teléfono</Lbl>
-          <input value={f.telefono} onChange={e=>set("telefono",e.target.value)} style={{...S.input,width:"100%"}} placeholder="ej. 1165432100"/>
-        </div>
-        <div style={{marginBottom:"0.7rem"}}>
-          <Lbl>Dirección *</Lbl>
-          <textarea value={f.direccion} onChange={e=>set("direccion",e.target.value)} style={{...S.input,width:"100%",height:"52px",resize:"vertical"}} placeholder="Calle, número, piso/dpto"/>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"0.7rem",marginBottom:"0.9rem"}}>
-          <div><Lbl>CP</Lbl><input value={f.cp} onChange={e=>set("cp",e.target.value)} style={{...S.input,width:"100%"}} placeholder="1642"/></div>
-          <div><Lbl>Ciudad</Lbl><input value={f.ciudad||""} onChange={e=>set("ciudad",e.target.value)} style={{...S.input,width:"100%"}} placeholder="ej. San Isidro"/></div>
-          <div><Lbl>Partido</Lbl><input value={f.partido} onChange={e=>set("partido",e.target.value)} style={{...S.input,width:"100%",color:f.partido?"#10b981":"#6b7280"}} placeholder="auto desde CP"/></div>
-        </div>
-
-        {/* ── CONTENIDO ── */}
-        <SecH>Contenido</SecH>
+        {/* ── ORIGEN + IDENTIFICACIÓN + CLIENTE ── */}
         <div style={{marginBottom:"0.7rem"}}>
           <Lbl>Origen</Lbl>
           <div style={{display:"flex",gap:"4px"}}>
-            {["Manual","ML"].map(o=><button key={o} onClick={()=>{set("origen",o);set("tipo",o);}} style={S.btnSm(f.origen===o,"#6366f1")}>{o}</button>)}
+            {["Manual","ML"].map(o=><button key={o} onClick={()=>{setF(p=>({...p,origen:o,tipo:o,id:"",nroSeguimiento:""}));}} style={S.btnSm(f.origen===o,"#6366f1")}>{o}</button>)}
           </div>
         </div>
-        {!esML&&(
+        {!esML?(
           <div style={{marginBottom:"0.7rem"}}>
             <Lbl>Nro de pedido * <span style={{color:idDuplicado?"#f87171":"#374151",fontSize:"0.6rem",fontWeight:400,textTransform:"none"}}>{idDuplicado?"— ya existe":""}</span></Lbl>
             <input value={f.id} onChange={e=>set("id",e.target.value)} style={{...S.input,width:"100%",borderColor:idDuplicado?"#7f1d1d":"#252d40"}} placeholder="ej. PED-001"/>
           </div>
-        )}
-        {esML&&(
+        ):(
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.7rem",marginBottom:"0.7rem"}}>
             <div>
               <Lbl>Nro de venta * <span style={{color:idDuplicado?"#f87171":"#374151",fontSize:"0.6rem",fontWeight:400,textTransform:"none"}}>{idDuplicado?"— ya existe":""}</span></Lbl>
@@ -2383,28 +2326,63 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
             </div>
           </div>
         )}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.7rem",marginBottom:"0.7rem"}}>
-          <div><Lbl>Bultos</Lbl><input type="number" min="0" value={f.bultos===0?"0":f.bultos||""} onChange={ev=>{const v=parseInt(ev.target.value);set("bultos",isNaN(v)?0:v);}} style={{...S.input,width:"100%"}}/></div>
-          <div><Lbl>Cobranza ($)</Lbl>
-            <div style={{display:"flex",gap:"4px",alignItems:"center"}}>
-              <input type="number" min="0" value={f.cobranza===null?"":f.cobranza} onChange={e=>{const v=e.target.value;set("cobranza",v===""?null:parseFloat(v)||0);}} placeholder="— sin cobro" style={{...S.input,flex:1}}/>
-            </div>
+        <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:"0.7rem",marginBottom:"0.9rem"}}>
+          <div style={{position:"relative"}}>
+            <Lbl>Nombre *</Lbl>
+            <input value={f.clienteNombre}
+              onChange={e=>{set("clienteNombre",e.target.value);setSugsVisible(true);setDirsCliente([]);}}
+              onFocus={()=>setSugsVisible(true)} onBlur={()=>setTimeout(()=>setSugsVisible(false),150)}
+              style={{...S.input,width:"100%"}} placeholder="Nombre completo"/>
+            {sugerencias.length>0&&(
+              <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:200,background:"#1a1f2e",border:"1px solid #6366f1",borderRadius:"6px",marginTop:"2px",boxShadow:"0 6px 16px rgba(0,0,0,0.5)",overflow:"hidden"}}>
+                {sugerencias.map(n=>{
+                  const d=clientesData[n];
+                  return(
+                    <div key={n} onMouseDown={()=>seleccionarCliente(n)} style={{padding:"0.45rem 0.75rem",cursor:"pointer",borderBottom:"1px solid #252d40"}} onMouseEnter={e=>e.currentTarget.style.background="#252d40"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                      <div style={{color:"#e5e7eb",fontSize:"0.82rem",fontWeight:600}}>{n}</div>
+                      <div style={{fontSize:"0.68rem",color:"#4b5563",marginTop:"1px",display:"flex",gap:"8px"}}>
+                        {d?.telefono&&<span>📞 {d.telefono}</span>}
+                        {d?.direcciones?.length===1&&<span>📍 {d.direcciones[0].direccion}</span>}
+                        {d?.direcciones?.length>1&&<span>📍 {d.direcciones.length} direcciones</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <div>
+            <Lbl>Teléfono</Lbl>
+            <input value={f.telefono} onChange={e=>set("telefono",e.target.value)} style={{...S.input,width:"100%"}} placeholder="11 xxxx-xxxx"/>
           </div>
         </div>
-        <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.7rem",background:f.esCC?"#130d2a":"#0f1420",border:f.esCC?"1px solid #a78bfa":"1px solid #1e2535"}}>
-          <div style={{display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
-            <button onClick={()=>set("esCC",!f.esCC)} style={S.btnSm(f.esCC,"#a78bfa")}>Cta. Corriente</button>
-            {f.esCC&&<><input type="number" placeholder="Importe CC" value={f.importeCC||""} onChange={e=>set("importeCC",parseFloat(e.target.value)||0)} style={{...S.input,width:"130px",padding:"4px 10px"}}/><input value={f.nroFactura||""} onChange={e=>set("nroFactura",e.target.value)} placeholder="Nro. factura" style={{...S.input,width:"130px",padding:"4px 10px"}}/></>}
-            {!f.esCC&&<span style={{color:"#374151",fontSize:"0.78rem"}}>Marcar como Cuenta Corriente</span>}
+        {dirsCliente.length>1&&(
+          <div style={{marginBottom:"0.7rem",background:"#0f1420",border:"1px solid #6366f1",borderRadius:"6px",overflow:"hidden"}}>
+            <div style={{padding:"5px 10px",fontSize:"0.62rem",color:"#6366f1",fontWeight:700,textTransform:"uppercase",borderBottom:"1px solid #252d40"}}>Elegí una dirección</div>
+            {dirsCliente.map((d,i)=>(
+              <div key={i} onMouseDown={()=>{setF(p=>({...p,direccion:d.direccion,cp:d.cp,ciudad:d.ciudad,partido:d.partido||cpAPartido(d.cp)||""}));setDirsCliente([]);}}
+                style={{padding:"7px 10px",cursor:"pointer",borderBottom:i<dirsCliente.length-1?"1px solid #1a1f2e":"none"}}
+                onMouseEnter={e=>e.currentTarget.style.background="#1a1f2e"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <div style={{fontSize:"0.78rem",color:"#e2e8f0",fontWeight:600}}>{d.direccion}</div>
+                <div style={{fontSize:"0.65rem",color:"#4b5563",marginTop:"1px",display:"flex",gap:"8px"}}>
+                  {d.ciudad&&<span>{d.ciudad}</span>}{d.partido&&<span>· {d.partido}</span>}{d.cp&&<span>· CP {d.cp}</span>}
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
-        <div style={{marginBottom:"0.9rem"}}>
-          <Lbl>Observaciones</Lbl>
-          <textarea value={f.observaciones} onChange={e=>set("observaciones",e.target.value)} style={{...S.input,display:"block",width:"100%",height:"44px",resize:"vertical",fontSize:"0.8rem"}} placeholder="Notas internas, alertas..."/>
-        </div>
+        )}
 
         {/* ── ENTREGA ── */}
         <SecH>Entrega</SecH>
+        <div style={{marginBottom:"0.7rem"}}>
+          <Lbl>Dirección *</Lbl>
+          <textarea value={f.direccion} onChange={e=>set("direccion",e.target.value)} style={{...S.input,width:"100%",height:"52px",resize:"vertical"}} placeholder="Calle, número, piso/dpto"/>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"0.7rem",marginBottom:"0.7rem"}}>
+          <div><Lbl>CP</Lbl><input value={f.cp} onChange={e=>set("cp",e.target.value)} style={{...S.input,width:"100%"}} placeholder="1642"/></div>
+          <div><Lbl>Ciudad</Lbl><input value={f.ciudad||""} onChange={e=>set("ciudad",e.target.value)} style={{...S.input,width:"100%"}} placeholder="ej. San Isidro"/></div>
+          <div><Lbl>Partido</Lbl><input value={f.partido} onChange={e=>set("partido",e.target.value)} style={{...S.input,width:"100%",color:f.partido?"#10b981":"#6b7280"}} placeholder="auto desde CP"/></div>
+        </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.7rem",marginBottom:"0.7rem"}}>
           <div><Lbl>Fecha *</Lbl><input type="date" value={f.fecha} onChange={e=>set("fecha",e.target.value)} style={{...S.input,width:"100%"}}/></div>
           <div><Lbl>Turno</Lbl><div style={{display:"flex",gap:"3px",flexWrap:"wrap",paddingTop:"2px"}}>{TURNOS.map(t=><button key={t} onClick={()=>set("turno",f.turno===t?"":t)} style={S.btnSm(f.turno===t,"#8b5cf6")}>{t}</button>)}</div></div>
