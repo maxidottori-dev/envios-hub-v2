@@ -2495,6 +2495,14 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
 
   const eliminar=async(caso)=>{
     if(!window.confirm(`¿Eliminar ${caso.nroCaso||caso.id}? Esta acción es irreversible.`))return;
+    if(caso.envioId){
+      const envioVinc=envios.find(e=>e.id===caso.envioId);
+      if(envioVinc?.despachado){
+        alert(`El envío ${caso.envioId} ya fue despachado y no puede eliminarse. Primero cancelalo manualmente.`);
+        return;
+      }
+      await deleteDoc(doc(db,"envios",caso.envioId));
+    }
     await deleteDoc(doc(db,"postventa",caso.id));
   };
 
