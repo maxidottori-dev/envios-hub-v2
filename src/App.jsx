@@ -605,6 +605,8 @@ function weekLabel(ds){const d=new Date(ds+"T00:00:00"),day=d.getDay()||7;const 
 const fmt=n=>n?"$"+Number(n).toLocaleString("es-AR"):"-";
 function beepOK(){try{const ctx=new(window.AudioContext||window.webkitAudioContext)();const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.frequency.setValueAtTime(880,ctx.currentTime);o.frequency.setValueAtTime(1100,ctx.currentTime+0.1);g.gain.setValueAtTime(0.3,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.3);o.start(ctx.currentTime);o.stop(ctx.currentTime+0.3);}catch(e){}}
 function beepError(){try{const ctx=new(window.AudioContext||window.webkitAudioContext)();const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type="sawtooth";o.frequency.setValueAtTime(280,ctx.currentTime);o.frequency.setValueAtTime(180,ctx.currentTime+0.15);g.gain.setValueAtTime(0.35,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.45);o.start(ctx.currentTime);o.stop(ctx.currentTime+0.45);}catch(e){}}
+// Doble beep descendente — para alertas "suaves" (ya despachado, sin preparar)
+function beepWarn(){try{const ctx=new(window.AudioContext||window.webkitAudioContext)();const play=(f1,f2,t0)=>{const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type="sine";o.frequency.setValueAtTime(f1,t0);o.frequency.setValueAtTime(f2,t0+0.08);g.gain.setValueAtTime(0.28,t0);g.gain.exponentialRampToValueAtTime(0.001,t0+0.18);o.start(t0);o.stop(t0+0.18);};const t=ctx.currentTime;play(620,480,t);play(620,480,t+0.22);}catch(e){}}
 
 // Scoring de búsqueda — compartido entre VistaExpedicion y TabSalida
 function scoreBusqueda(e,srch,nums){
@@ -9730,7 +9732,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
 
     // Pedido no preparado → bloqueo
     if(!best.preparado){
-      beepError();
+      beepWarn();
       setResultado({ok:false,msg:"⚠ Sin preparar: "+( best.nroOrdenTN?"#"+best.nroOrdenTN:best.direccion)});
       setTimeout(()=>setResultado(null),5000);
       if(inputRef.current)inputRef.current.focus();
@@ -9739,7 +9741,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
 
     // Ya despachado en esta sesión
     if(sesionIds.includes(best.id)){
-      beepError();
+      beepWarn();
       setResultado({ok:false,msg:"Ya despachado en esta sesión: "+(best.nroOrdenTN?"#"+best.nroOrdenTN:best.direccion)});
       setTimeout(()=>setResultado(null),4000);
       if(inputRef.current)inputRef.current.focus();
@@ -9809,8 +9811,9 @@ function TabSalida({envios,setEnvios,lc,sesion}){
               await new Promise(r=>setTimeout(r,800));
               if(!activo)return;
               procesarScan(val);
-              // Cámara continua — pausa breve antes del próximo scan
+              // Cámara continua — pausa antes del próximo scan para evitar re-escanear el mismo QR
               await new Promise(r=>setTimeout(r,1500));
+              lastValTs=Date.now(); // resetear cooldown al retomar para que el mismo QR necesite 2s más
               if(activo)rafId=requestAnimationFrame(scan);
               return;
             }
