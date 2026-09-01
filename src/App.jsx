@@ -536,6 +536,16 @@ const ALL_PARTIDOS=["CABA","Avellaneda","Lanus","Quilmes","Lomas de Zamora","Alm
 
 function buildTarifaMap(zc){const m={};Object.entries(zc).forEach(([l,c])=>c.zonas.forEach(z=>z.partidos.forEach(p=>{if(!m[p])m[p]={};m[p][l]=z.precio;})));return m;}
 function getZonaLogistica(zc,trans,partido){return zc[trans]?zc[trans].zonas.find(z=>z.partidos.includes(partido))||null:null;}
+function getMatrizFlexVigente(cfg,fechaEnvio){
+  if(!cfg)return null;
+  const fecha=fechaEnvio||fechaHoy();
+  const versiones=[
+    {desde:cfg.tarifaMatrixFlexVigenciaDesde||"2000-01-01",matrix:cfg.tarifaMatrixFlex},
+    ...(cfg.tarifaHistorialFlex||[]).map(h=>({desde:h.vigenciaDesde,matrix:h.tarifaMatrix}))
+  ].filter(v=>v.matrix&&Object.keys(v.matrix).length>0).sort((a,b)=>b.desde.localeCompare(a.desde));
+  const v=versiones.find(v=>v.desde<=fecha);
+  return v?.matrix||cfg.tarifaMatrixFlex||null;
+}
 function getMatrizVigente(cfg,fechaEnvio){
   // Devuelve la tarifaMatrix vigente para una fecha dada
   if(!cfg)return null;
@@ -568,7 +578,7 @@ function calcImp(e,tmap,lc,zc){
         let bk=bultos;
         if(bultos>=4&&bultos<=10)bk=10;
         else if(bultos>=11)bk=11;
-        if(esFlex&&cfg?.tarifaMatrixFlex){const mxF=cfg.tarifaMatrixFlex[zona.id]||{};const pF=mxF[String(bk)];if(pF!==undefined&&pF>0)return pF;}
+        if(esFlex&&cfg?.tarifaMatrixFlex){const mxF=(getMatrizFlexVigente(cfg,fechaEnvio)||{})[zona.id]||{};const pF=mxF[String(bk)];if(pF!==undefined&&pF>0)return pF;}
         const mx=getMatrizVigente(cfg,fechaEnvio);
         if(mx){const mxZ=mx[zona.id]||{};const p=mxZ[String(bk)];if(p!==undefined&&p>0)return p;}
       }
