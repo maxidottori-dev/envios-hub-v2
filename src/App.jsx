@@ -2358,7 +2358,7 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
   const [ordenEncontrada,setOrdenEncontrada]=useState(null);
 
   const hoy=fechaHoy();
-  const logisticas=Object.keys(lc).sort();
+  const logisticas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k).sort();
   const VACIO={ordenOriginal:"",clienteNombre:"",telefono:"",direccion:"",localidad:"",partido:"",cp:"",
     tipoIncidente:"",descripcion:"",resolucion:"",notasResolucion:"",costoResolucion:0,
     envioTrans:"",envioFecha:hoy,envioTurno:"",envioId:"",nroCaso:"",estado:"pendiente"};
@@ -2450,7 +2450,7 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
           direccion:f.direccion,localidad:f.localidad,partido:f.partido,cp:f.cp,
           fecha:f.envioFecha||hoy,fechaVenta:f.envioFecha||hoy,
           turno:f.envioTurno||"",trans:f.envioTrans||"",
-          estado:"sin_asignar",bultos:1,
+          estado:f.envioTrans?"asignado":"sin_asignar",bultos:1,
           cobranza:null,retiro:null,esCC:false,importeCC:0,nroFactura:"",
           observaciones:`Post Venta ${nroCaso} — ${tipoLabel} — Ref. #${f.ordenOriginal}`,
           tarifaLog:0,pvCasoId:pvRef.id,
@@ -2570,8 +2570,8 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
                       <select value={f.envioTurno} onChange={ev=>set("envioTurno",ev.target.value)}
                         style={{...S.input,width:"100%",fontSize:"0.78rem"}}>
                         <option value="">— Sin turno —</option>
-                        <option value="mañana">Mañana</option>
-                        <option value="tarde">Tarde</option>
+                        <option value="AM">AM</option>
+                        <option value="PM">PM</option>
                       </select>
                     </div>
                     <div>
