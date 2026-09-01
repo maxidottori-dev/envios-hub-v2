@@ -2359,8 +2359,8 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
   const hoy=fechaHoy();
   const logisticas=Object.keys(lc).sort();
   const VACIO={ordenOriginal:"",clienteNombre:"",telefono:"",direccion:"",localidad:"",partido:"",cp:"",
-    tipoIncidente:"",descripcion:"",resolucion:"",costoResolucion:0,
-    envioTrans:"",envioFecha:hoy,envioTurno:"",estado:"pendiente"};
+    tipoIncidente:"",descripcion:"",resolucion:"",notasResolucion:"",costoResolucion:0,
+    envioTrans:"",envioFecha:hoy,envioTurno:"",envioId:"",nroCaso:"",estado:"pendiente"};
   const [f,setF]=useState(VACIO);
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
 
@@ -2408,6 +2408,20 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
       setSaving(true);
       // ── EDITAR ──
       if(editId){
+        const casoOriginal=casos.find(c=>c.id===editId);
+        const envioVinculado=casoOriginal?.envioId?envios.find(e=>e.id===casoOriginal.envioId):null;
+        // Si la resolución cambió de "envio" a otra cosa
+        if(casoOriginal?.resolucion==="envio"&&f.resolucion!=="envio"&&casoOriginal.envioId){
+          if(envioVinculado?.despachado){
+            setErr("El envío "+casoOriginal.envioId+" ya fue despachado. No podés cambiar la resolución.");
+            setSaving(false);return;
+          }
+          if(!window.confirm(`¿Eliminar el envío vinculado ${casoOriginal.envioId}? Ya no corresponde a la resolución.`)){setSaving(false);return;}
+          await deleteDoc(doc(db,"envios",casoOriginal.envioId));
+          const upd={...f,envioId:"",modificadoTs:new Date().toISOString(),...(audit?{modificadoPor:audit}:{})};
+          await setDoc(doc(db,"postventa",editId),upd,{merge:true});
+          cancelar();return;
+        }
         const upd={...f,modificadoTs:new Date().toISOString(),...(audit?{modificadoPor:audit}:{})};
         await setDoc(doc(db,"postventa",editId),upd,{merge:true});
         cancelar();return;
@@ -2524,58 +2538,78 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
           </div>
 
           {/* C: Resolución */}
-          <div style={{background:"#0d1119",border:"1px solid #1e2535",borderRadius:"8px",padding:"0.75rem 0.9rem",marginBottom:"0.75rem"}}>
-            <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"6px",borderBottom:"1px solid #1e2535",paddingBottom:"4px"}}>Resolución</div>
-            <div style={{display:"flex",gap:"6px",marginBottom:"0.5rem"}}>
-              {[{k:"envio",l:"Envío",c:"#10b981"},{k:"reintegro",l:"Reintegro",c:"#f59e0b"},{k:"sin_costo",l:"Sin costo",c:"#6b7280"}].map(r=>(
-                <button key={r.k} onClick={()=>set("resolucion",f.resolucion===r.k?"":r.k)} style={{...S.btnSm(f.resolucion===r.k,r.c),fontSize:"0.75rem"}}>{r.l}</button>
-              ))}
-            </div>
-            {f.resolucion==="envio"&&(
-              <div style={{marginTop:"0.5rem",background:"#041f14",border:"1px solid #065f46",borderRadius:"6px",padding:"10px 12px",fontSize:"0.75rem"}}>
-                <div style={{color:"#6ee7b7",marginBottom:"8px",fontWeight:700}}>Se creará un envío vinculado al guardar (ID: caso + -E)</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"6px"}}>
-                  <div>
-                    <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"2px"}}>Fecha</div>
-                    <input type="date" value={f.envioFecha} onChange={ev=>set("envioFecha",ev.target.value)}
-                      style={{...S.input,width:"100%",fontSize:"0.78rem"}}/>
-                  </div>
-                  <div>
-                    <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"2px"}}>Turno</div>
-                    <select value={f.envioTurno} onChange={ev=>set("envioTurno",ev.target.value)}
-                      style={{...S.input,width:"100%",fontSize:"0.78rem"}}>
-                      <option value="">— Sin turno —</option>
-                      <option value="mañana">Mañana</option>
-                      <option value="tarde">Tarde</option>
-                    </select>
-                  </div>
-                  <div>
-                    <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"2px"}}>Logística</div>
-                    <select value={f.envioTrans} onChange={ev=>set("envioTrans",ev.target.value)}
-                      style={{...S.input,width:"100%",fontSize:"0.78rem"}}>
-                      <option value="">— Sin asignar —</option>
-                      {logisticas.map(l=><option key={l} value={l}>{l}</option>)}
-                    </select>
-                  </div>
+          {(()=>{
+            const envioVinc=f.envioId?envios.find(e=>e.id===f.envioId):null;
+            const locked=!!envioVinc?.despachado;
+            return(
+            <div style={{background:"#0d1119",border:`1px solid ${locked?"#7f1d1d":"#1e2535"}`,borderRadius:"8px",padding:"0.75rem 0.9rem",marginBottom:"0.75rem"}}>
+              <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"6px",borderBottom:"1px solid #1e2535",paddingBottom:"4px"}}>Resolución</div>
+              {locked&&(
+                <div style={{background:"#1c0a0a",border:"1px solid #7f1d1d",borderRadius:"6px",padding:"6px 10px",marginBottom:"8px",fontSize:"0.72rem",color:"#fca5a5"}}>
+                  🔒 El envío {f.envioId} ya fue despachado. No se puede cambiar la resolución.
                 </div>
-              </div>
-            )}
-            {f.resolucion==="reintegro"&&(
-              <div style={{marginTop:"0.5rem"}}>
-                <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Monto reintegrado ($)</div>
-                <input type="number" value={f.costoResolucion||""} onChange={ev=>set("costoResolucion",parseFloat(ev.target.value)||0)}
-                  placeholder="0" style={{...S.input,width:"140px",fontSize:"0.8rem"}}/>
-              </div>
-            )}
-            <div style={{marginTop:"0.65rem"}}>
-              <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Estado</div>
-              <div style={{display:"flex",gap:"4px"}}>
-                {[{k:"pendiente",l:"Pendiente",c:"#f59e0b"},{k:"resuelto",l:"Resuelto",c:"#10b981"}].map(s=>(
-                  <button key={s.k} onClick={()=>set("estado",s.k)} style={{...S.btnSm(f.estado===s.k,s.c),fontSize:"0.72rem"}}>{s.l}</button>
+              )}
+              <div style={{display:"flex",gap:"6px",marginBottom:"0.5rem",opacity:locked?0.4:1,pointerEvents:locked?"none":"auto"}}>
+                {[{k:"envio",l:"Envío",c:"#10b981"},{k:"reintegro",l:"Reintegro",c:"#f59e0b"},{k:"sin_costo",l:"Sin costo",c:"#6b7280"}].map(r=>(
+                  <button key={r.k} onClick={()=>set("resolucion",f.resolucion===r.k?"":r.k)} style={{...S.btnSm(f.resolucion===r.k,r.c),fontSize:"0.75rem"}}>{r.l}</button>
                 ))}
               </div>
+              {f.resolucion==="envio"&&!locked&&(
+                <div style={{marginTop:"0.5rem",background:"#041f14",border:"1px solid #065f46",borderRadius:"6px",padding:"10px 12px",fontSize:"0.75rem"}}>
+                  {!f.envioId&&<div style={{color:"#6ee7b7",marginBottom:"8px",fontWeight:700}}>Se creará un envío vinculado al guardar (ID: caso + -E)</div>}
+                  {f.envioId&&<div style={{color:"#6ee7b7",marginBottom:"8px"}}>Envío vinculado: <strong>{f.envioId}</strong></div>}
+                  {!f.envioId&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"6px"}}>
+                    <div>
+                      <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"2px"}}>Fecha</div>
+                      <input type="date" value={f.envioFecha} onChange={ev=>set("envioFecha",ev.target.value)}
+                        style={{...S.input,width:"100%",fontSize:"0.78rem"}}/>
+                    </div>
+                    <div>
+                      <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"2px"}}>Turno</div>
+                      <select value={f.envioTurno} onChange={ev=>set("envioTurno",ev.target.value)}
+                        style={{...S.input,width:"100%",fontSize:"0.78rem"}}>
+                        <option value="">— Sin turno —</option>
+                        <option value="mañana">Mañana</option>
+                        <option value="tarde">Tarde</option>
+                      </select>
+                    </div>
+                    <div>
+                      <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"2px"}}>Logística</div>
+                      <select value={f.envioTrans} onChange={ev=>set("envioTrans",ev.target.value)}
+                        style={{...S.input,width:"100%",fontSize:"0.78rem"}}>
+                        <option value="">— Sin asignar —</option>
+                        {logisticas.map(l=><option key={l} value={l}>{l}</option>)}
+                      </select>
+                    </div>
+                  </div>}
+                </div>
+              )}
+              {f.resolucion==="reintegro"&&(
+                <div style={{marginTop:"0.5rem"}}>
+                  <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Monto reintegrado ($)</div>
+                  <input type="number" value={f.costoResolucion||""} onChange={ev=>set("costoResolucion",parseFloat(ev.target.value)||0)}
+                    placeholder="0" style={{...S.input,width:"140px",fontSize:"0.8rem"}}/>
+                </div>
+              )}
+              {f.resolucion&&(
+                <div style={{marginTop:"0.65rem"}}>
+                  <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Notas de resolución</div>
+                  <textarea value={f.notasResolucion||""} onChange={ev=>set("notasResolucion",ev.target.value)}
+                    placeholder="Detallá cómo se resolvió, qué se acordó, quién autorizó..." rows={2}
+                    style={{...S.input,display:"block",width:"100%",resize:"vertical",fontSize:"0.78rem"}}/>
+                </div>
+              )}
+              <div style={{marginTop:"0.65rem"}}>
+                <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Estado</div>
+                <div style={{display:"flex",gap:"4px"}}>
+                  {[{k:"pendiente",l:"Pendiente",c:"#f59e0b"},{k:"resuelto",l:"Resuelto",c:"#10b981"}].map(s=>(
+                    <button key={s.k} onClick={()=>set("estado",s.k)} style={{...S.btnSm(f.estado===s.k,s.c),fontSize:"0.72rem"}}>{s.l}</button>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
+            );
+          })()}
 
           {err&&<div style={{color:"#fca5a5",fontSize:"0.78rem",marginBottom:"0.5rem"}}>{err}</div>}
           <button onClick={guardar} disabled={saving} style={{...S.btn(true,modo==="editar"?"#f59e0b":"#6366f1"),padding:"0.4rem 1.2rem",fontSize:"0.8rem",opacity:saving?0.6:1}}>
@@ -2633,6 +2667,7 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
                         :"Sin costo"
                       }</span>}
                     </div>
+                    {caso.notasResolucion&&<div style={{fontSize:"0.72rem",color:"#6b7280",marginTop:"2px",fontStyle:"italic"}}>💬 {caso.notasResolucion}</div>}
                   </div>
                   <div style={{display:"flex",gap:"4px",flexShrink:0,flexWrap:"wrap",justifyContent:"flex-end"}}>
                     {caso.resolucion==="envio"&&caso.envioId&&(
