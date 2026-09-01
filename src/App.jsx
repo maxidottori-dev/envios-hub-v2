@@ -605,8 +605,10 @@ function weekLabel(ds){const d=new Date(ds+"T00:00:00"),day=d.getDay()||7;const 
 const fmt=n=>n?"$"+Number(n).toLocaleString("es-AR"):"-";
 function beepOK(){try{const ctx=new(window.AudioContext||window.webkitAudioContext)();const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.frequency.setValueAtTime(880,ctx.currentTime);o.frequency.setValueAtTime(1100,ctx.currentTime+0.1);g.gain.setValueAtTime(0.3,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.3);o.start(ctx.currentTime);o.stop(ctx.currentTime+0.3);}catch(e){}}
 function beepError(){try{const ctx=new(window.AudioContext||window.webkitAudioContext)();const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type="sawtooth";o.frequency.setValueAtTime(280,ctx.currentTime);o.frequency.setValueAtTime(180,ctx.currentTime+0.15);g.gain.setValueAtTime(0.35,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.45);o.start(ctx.currentTime);o.stop(ctx.currentTime+0.45);}catch(e){}}
-// Doble beep descendente — para alertas "suaves" (ya despachado, sin preparar)
-function beepWarn(){try{const ctx=new(window.AudioContext||window.webkitAudioContext)();const play=(f1,f2,t0)=>{const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type="sine";o.frequency.setValueAtTime(f1,t0);o.frequency.setValueAtTime(f2,t0+0.08);g.gain.setValueAtTime(0.28,t0);g.gain.exponentialRampToValueAtTime(0.001,t0+0.18);o.start(t0);o.stop(t0+0.18);};const t=ctx.currentTime;play(620,480,t);play(620,480,t+0.22);}catch(e){}}
+// Triple pulso (square) — sin preparar: requiere acción
+function beepNoPrepared(){try{const ctx=new(window.AudioContext||window.webkitAudioContext)();const play=(t0)=>{const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type="square";o.frequency.setValueAtTime(440,t0);g.gain.setValueAtTime(0.18,t0);g.gain.exponentialRampToValueAtTime(0.001,t0+0.1);o.start(t0);o.stop(t0+0.1);};const t=ctx.currentTime;play(t);play(t+0.15);play(t+0.30);}catch(e){}}
+// Ding único agudo (sine) — ya despachado: informativo, no alarmante
+function beepYaDespachado(){try{const ctx=new(window.AudioContext||window.webkitAudioContext)();const o=ctx.createOscillator();const g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.type="sine";o.frequency.setValueAtTime(960,ctx.currentTime);g.gain.setValueAtTime(0.22,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.28);o.start(ctx.currentTime);o.stop(ctx.currentTime+0.28);}catch(e){}}
 
 // Scoring de búsqueda — compartido entre VistaExpedicion y TabSalida
 function scoreBusqueda(e,srch,nums){
@@ -9732,7 +9734,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
 
     // Pedido no preparado → bloqueo
     if(!best.preparado){
-      beepWarn();
+      beepNoPrepared();
       setResultado({ok:false,msg:"⚠ Sin preparar: "+( best.nroOrdenTN?"#"+best.nroOrdenTN:best.direccion)});
       setTimeout(()=>setResultado(null),5000);
       if(inputRef.current)inputRef.current.focus();
@@ -9741,7 +9743,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
 
     // Ya despachado en esta sesión
     if(sesionIds.includes(best.id)){
-      beepWarn();
+      beepYaDespachado();
       setResultado({ok:false,msg:"Ya despachado en esta sesión: "+(best.nroOrdenTN?"#"+best.nroOrdenTN:best.direccion)});
       setTimeout(()=>setResultado(null),4000);
       if(inputRef.current)inputRef.current.focus();
