@@ -2356,9 +2356,25 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
   const [saving,setSaving]=useState(false);
   const [err,setErr]=useState("");
   const [ordenEncontrada,setOrdenEncontrada]=useState(null);
+  const [busqOrden,setBusqOrden]=useState("");
+  const [mostrarSugsOrden,setMostrarSugsOrden]=useState(false);
 
   const hoy=fechaHoy();
   const logisticas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k).sort();
+
+  const sugsOrden=useMemo(()=>{
+    const q=norm(busqOrden.trim());
+    const base=[...envios]
+      .filter(e=>e.estado!=="cancelado")
+      .sort((a,b)=>(b.fecha||b.fechaVenta||"").localeCompare(a.fecha||a.fechaVenta||""));
+    if(!q)return base.slice(0,8);
+    return base.filter(e=>
+      norm(e.clienteNombre||"").includes(q)||
+      (e.id||"").toLowerCase().includes(q)||
+      String(e.nroOrdenTN||"").includes(q)||
+      norm(e.direccion||"").includes(q)
+    ).slice(0,12);
+  },[busqOrden,envios]);
   const VACIO={ordenOriginal:"",clienteNombre:"",telefono:"",direccion:"",localidad:"",partido:"",cp:"",
     tipoIncidente:"",descripcion:"",resolucion:"",notasResolucion:"",costoResolucion:0,
     envioTrans:"",envioFecha:hoy,envioTurno:"",envioId:"",nroCaso:"",estado:"pendiente"};
@@ -2396,9 +2412,14 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
     }
   },[f.ordenOriginal,envios,modo]);
 
-  const abrirNuevo=()=>{setEditId(null);setF(VACIO);setOrdenEncontrada(null);setErr("");setModo("nuevo");};
-  const abrirEditar=(caso)=>{setEditId(caso.id);setF({...VACIO,...caso});setOrdenEncontrada(null);setErr("");setModo("editar");};
-  const cancelar=()=>{setModo("lista");setEditId(null);setF(VACIO);setOrdenEncontrada(null);setErr("");};
+  const seleccionarEnvioOrigen=(e)=>{
+    setBusqOrden(e.clienteNombre?`${e.id} — ${e.clienteNombre}`:e.id);
+    set("ordenOriginal",e.id);
+    setMostrarSugsOrden(false);
+  };
+  const abrirNuevo=()=>{setEditId(null);setF(VACIO);setOrdenEncontrada(null);setBusqOrden("");setErr("");setModo("nuevo");};
+  const abrirEditar=(caso)=>{setEditId(caso.id);setF({...VACIO,...caso});setOrdenEncontrada(null);setBusqOrden(caso.ordenOriginal||"");setErr("");setModo("editar");};
+  const cancelar=()=>{setModo("lista");setEditId(null);setF(VACIO);setOrdenEncontrada(null);setBusqOrden("");setErr("");};
 
   const guardar=async()=>{
     if(!f.ordenOriginal.trim()){setErr("La orden original es obligatoria.");return;}
@@ -2506,11 +2527,39 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
 
           {/* A: Origen e incidente */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.6rem",marginBottom:"0.75rem"}}>
-            <div>
+            <div style={{position:"relative"}}>
               <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Orden original</div>
-              <input value={f.ordenOriginal} onChange={ev=>set("ordenOriginal",ev.target.value)}
-                placeholder="ID del envío o nro. TN..." style={{...S.input,width:"100%",fontSize:"0.8rem"}}/>
-              {ordenEncontrada&&(
+              <input value={busqOrden}
+                onChange={ev=>{setBusqOrden(ev.target.value);set("ordenOriginal",ev.target.value);setMostrarSugsOrden(true);}}
+                onFocus={()=>setMostrarSugsOrden(true)}
+                placeholder="Buscá por nombre, ID o nro. TN..."
+                style={{...S.input,width:"100%",fontSize:"0.8rem"}}
+                autoComplete="off"/>
+              {/* Overlay para cerrar al hacer click afuera */}
+              {mostrarSugsOrden&&<div style={{position:"fixed",inset:0,zIndex:48}} onClick={()=>setMostrarSugsOrden(false)}/>}
+              {/* Dropdown de sugerencias */}
+              {mostrarSugsOrden&&sugsOrden.length>0&&(
+                <div style={{position:"absolute",top:"calc(100% + 2px)",left:0,right:0,zIndex:50,background:"#1a1f2e",border:"1px solid #374151",borderRadius:"6px",maxHeight:"220px",overflowY:"auto",boxShadow:"0 4px 20px rgba(0,0,0,0.6)"}}>
+                  {!busqOrden.trim()&&<div style={{padding:"4px 10px",fontSize:"0.6rem",color:"#4b5563",fontWeight:700,textTransform:"uppercase",borderBottom:"1px solid #252d40"}}>Últimos envíos</div>}
+                  {sugsOrden.map(e=>(
+                    <div key={e.id} onClick={()=>seleccionarEnvioOrigen(e)}
+                      style={{padding:"6px 10px",cursor:"pointer",borderBottom:"1px solid #1e2535",fontSize:"0.75rem",transition:"background 0.1s"}}
+                      onMouseEnter={ev=>ev.currentTarget.style.background="#252d40"}
+                      onMouseLeave={ev=>ev.currentTarget.style.background="transparent"}>
+                      <div style={{display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}}>
+                        <span style={{fontWeight:700,color:"#e5e7eb",fontSize:"0.7rem"}}>{e.id}</span>
+                        {e.nroOrdenTN&&<span style={{color:"#38bdf8",fontSize:"0.65rem"}}>TN#{e.nroOrdenTN}</span>}
+                        <span style={{color:"#9ca3af"}}>{e.clienteNombre}</span>
+                        <span style={{marginLeft:"auto",color:"#6b7280",fontSize:"0.65rem"}}>{e.fecha||e.fechaVenta||""}</span>
+                        {e.trans&&<span style={{color:"#6b7280",fontSize:"0.65rem"}}>🚚 {e.trans}</span>}
+                      </div>
+                      {e.direccion&&<div style={{color:"#6b7280",fontSize:"0.68rem",marginTop:"1px"}}>{e.direccion}{e.localidad?", "+e.localidad:""}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* Preview del envío seleccionado */}
+              {ordenEncontrada&&!mostrarSugsOrden&&(
                 <div style={{background:"#041f14",border:"1px solid #065f46",borderRadius:"6px",padding:"6px 10px",marginTop:"5px",fontSize:"0.72rem",color:"#d1fae5",display:"grid",gap:"2px"}}>
                   <div style={{fontWeight:700,color:"#10b981"}}>{ordenEncontrada.clienteNombre}</div>
                   {ordenEncontrada.telefono&&<div style={{color:"#6b7280"}}>📞 {ordenEncontrada.telefono}</div>}
