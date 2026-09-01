@@ -2436,14 +2436,14 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
         tx.set(cRef,{next:n+1},{merge:true});
         return n;
       });
-      const nroCaso="PV-"+String(pvNum).padStart(4,"0");
+      const nroCaso="PV"+String(pvNum).padStart(4,"0");
       const pvData={...f,nroCaso,fechaCreacion:new Date().toISOString(),...(audit?{creadoPor:audit}:{})};
       // No guardamos envioTrans/envioFecha/envioTurno en el doc PV — son sólo para el envío generado
       const pvRef=await addDoc(collection(db,"postventa"),pvData);
       // Si resolución es Envío → crear envío automáticamente
       if(f.resolucion==="envio"){
         const tipoLabel=TIPOS_PV.find(t=>t.k===f.tipoIncidente)?.l||f.tipoIncidente;
-        const envioId=nroCaso+"-E";
+        const envioId=nroCaso+"E";
         const envioData={
           id:envioId,tipo:"Manual",origen:"Manual",
           clienteNombre:f.clienteNombre,telefono:f.telefono,
