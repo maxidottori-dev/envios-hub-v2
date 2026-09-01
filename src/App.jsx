@@ -2272,7 +2272,7 @@ const TIPO_PV_C={
 
 function imprimirNotaPV(caso,envioDoc){
   const TIPO_L={faltante:"Faltante",cruce_etiqueta:"Cruce de etiqueta",embalaje:"Embalaje deficiente",producto_incorrecto:"Producto incorrecto"};
-  const pvId="PV-"+caso.id.slice(-6).toUpperCase();
+  const pvId=caso.nroCaso||("PV-"+caso.id.slice(-6).toUpperCase());
   const fecha=caso.fechaCreacion?new Date(caso.fechaCreacion).toLocaleDateString("es-AR"):"";
   const tipoLabel=TIPO_L[caso.tipoIncidente]||caso.tipoIncidente||"";
   const direccionFull=[caso.direccion,caso.localidad,caso.partido,caso.cp].filter(Boolean).join(" · ");
