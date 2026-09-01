@@ -1357,7 +1357,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
     if(filZona!=="TODAS"&&getZonaML(e.partido)!==filZona)return false;
     if(filTurno==="SIN_TURNO"){if(e.turno)return false;}else if(filTurno!=="TODOS"&&e.turno!==filTurno)return false;
     if(filOrigen!=="TODOS"){
-      const origenVal=e.origen==="Tienda Nube"?"TN":e.origen==="ML"?"FLEX":"Manual";
+      const origenVal=e.origen==="Tienda Nube"?"TN":e.origen==="ML"?"FLEX":e.origen==="2da_visita"?"2davisita":e.pvCasoId?"PV":"Manual";
       if(origenVal!==filOrigen)return false;
     }
     if(mostrarResumenFlex&&filTipoEntrega!=="TODOS"){
@@ -1365,7 +1365,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
       else if(e.tipoEntrega!==filTipoEntrega)return false;
     }
     if(soloReprog&&!e.reprogramado)return false;
-    if(busqueda){const srch=norm(busqueda);return norm(e.direccion).includes(srch)||e.id.includes(srch)||norm(e.partido).includes(srch)||(e.nroSeguimiento||"").includes(srch)||norm(e.clienteNombre).includes(srch)||(e.nroOrdenTN||"").includes(srch);}
+    if(busqueda){const srch=norm(busqueda);return norm(e.direccion).includes(srch)||norm(e.id).includes(srch)||norm(e.partido).includes(srch)||norm(e.nroSeguimiento||"").includes(srch)||norm(e.clienteNombre).includes(srch)||(String(e.nroOrdenTN||"")).includes(srch);}
     return true;
   });
   const activos=filtrados.filter(e=>getEstado(e)!=="cancelado");
@@ -1538,7 +1538,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
           <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
           <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"38px"}}>Origen</span>
           <div style={{display:"flex",gap:"3px"}}>
-            {[{k:"TODOS",l:"Todos"},{k:"TN",l:"TN"},{k:"Manual",l:"Manual"}].map(x =><button key={x.k} onClick={()=>setFilOrigen(x.k)} style={S.btnSm(filOrigen===x.k,x.k==="TN"?"#38bdf8":"#6366f1")}>{x.l}</button>)}
+            {[{k:"TODOS",l:"Todos",c:"#6366f1"},{k:"TN",l:"TN",c:"#38bdf8"},{k:"Manual",l:"Manual",c:"#f59e0b"},{k:"PV",l:"Post Venta",c:"#10b981"},{k:"2davisita",l:"2da visita",c:"#fb923c"}].map(x=><button key={x.k} onClick={()=>setFilOrigen(x.k)} style={S.btnSm(filOrigen===x.k,x.c)}>{x.l}</button>)}
           </div>
         </div>
         {/* Fila 2: Logistica */}
