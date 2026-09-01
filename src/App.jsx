@@ -311,6 +311,7 @@ function mkAudit(sesion){return sesion?{id:sesion.id,nombre:sesion.nombre||sesio
 function fechaAyer()   { const d=new Date();d.setDate(d.getDate()-1);return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().split("T")[0]; }
 function fechaManana() { const d=new Date();d.setDate(d.getDate()+1);return d.toISOString().split("T")[0]; }
 function fechaInicioSemana() { const d=new Date();d.setDate(d.getDate()-((d.getDay()||7)-1));return d.toISOString().split("T")[0]; }
+function fechaFinSemana()   { const d=new Date();d.setDate(d.getDate()-((d.getDay()||7)-1)+5);return d.toISOString().split("T")[0]; }
 function fmtCorta(ds) { if(!ds)return"";const[,m,d]=ds.split("-");return d+"/"+m; }
 const norm=s=>s?String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase():"";
 
@@ -1310,7 +1311,7 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
 
 function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null,mostrarResumenFlex=false,facturaClientes={},mlTarifas={}}){
   const hoy=fechaHoy();
-  const [modFecha,setModFecha]=useState("hoy");
+  const [modFecha,setModFecha]=useState("semana");
   const [rangoD,setRangoD]=useState(hoy);
   const [rangoH,setRangoH]=useState(hoy);
   const [filTrans,setFilTrans]=useState("TODOS");
@@ -1340,7 +1341,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
     if(modFecha==="hoy")    return{d:hoy,h:hoy};
     if(modFecha==="ayer")   return{d:fechaAyer(),h:fechaAyer()};
     if(modFecha==="manana") return{d:fechaManana(),h:fechaManana()};
-    if(modFecha==="semana") return{d:fechaInicioSemana(),h:hoy};
+    if(modFecha==="semana") return{d:fechaInicioSemana(),h:fechaFinSemana()};
     return{d:rangoD,h:rangoH};
   };
   const{d:desde,h:hasta}=getRango();
@@ -10742,6 +10743,8 @@ export default function App(){
   const [despachoToken]=useState(()=>new URLSearchParams(window.location.search).get('d'));
   const [sesion,setSesion]=useState(()=>getSession());
   const [pantalla,setPantalla]=useState("dashboard");
+  const [ahora,setAhora]=useState(()=>new Date());
+  useEffect(()=>{const t=setInterval(()=>setAhora(new Date()),1000);return()=>clearInterval(t);},[]);
 
   // Validar sesión contra Firebase al arrancar — si el usuario fue desactivado, forzar logout
   // También sincroniza los permisos más recientes para que puedeVer() tenga datos frescos
@@ -11106,6 +11109,14 @@ export default function App(){
         <div style={{marginRight:"0.2rem"}}>
           <div style={{fontWeight:800,fontSize:"0.92rem"}}>EnviosHub <span style={{color:"#374151",fontSize:"0.6rem",fontWeight:400}}>v{VERSION}</span></div>
           <div style={{color:"#374151",fontSize:"0.58rem"}}>{syncLoading?"Conectando...":(envios.length>0?envios.length+" envios":"Sin envios")}</div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"2px 10px",borderRadius:"7px",background:"#12172a",border:"1px solid #1e2535",flexShrink:0,marginRight:"0.2rem",minWidth:"80px"}}>
+          <span style={{fontWeight:800,fontSize:"0.95rem",color:"#e5e7eb",fontVariantNumeric:"tabular-nums",letterSpacing:"0.5px"}}>
+            {ahora.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false})}
+          </span>
+          <span style={{fontSize:"0.55rem",color:"#6b7280",textTransform:"capitalize",letterSpacing:"0.2px"}}>
+            {ahora.toLocaleDateString("es-AR",{weekday:"short",day:"2-digit",month:"2-digit"})}
+          </span>
         </div>
         <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{TABS.map(t =>{
           const isFlex=t.id==="flex";
