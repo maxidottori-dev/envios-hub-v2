@@ -6964,6 +6964,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
   const [scanPendiente,setScanPendiente]=useState(null);
   const [bultosSel,setBultosSel]=useState(1);
   const [resultado,setResultado]=useState(null);
+  const [overlayRes,setOverlayRes]=useState(null); // fullscreen feedback al escanear
   const [ultimoArmador,setUltimoArmador]=useState(null);
   const [matchesPendientes,setMatchesPendientes]=useState([]); // candidatos para disambiguation
   const [modoEdicion,setModoEdicion]=useState(false);          // true cuando se edita un pedido ya preparado
@@ -7094,11 +7095,18 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
   },[]);
 
   // ── Lógica base de confirmación (debe ir ANTES de procesarScan) ───
+  const showOverlay=useCallback((ok,msg)=>{
+    setOverlayRes({ok,msg});
+    setTimeout(()=>setOverlayRes(null),1800);
+  },[]);
+
   const ejecutarArmado=useCallback((envio,armador,bultos,controlador,esEdit=false)=>{
     const ts=new Date().toISOString();
     setEnvios(pv=>pv.map(e=>e.id===envio.id?{...e,preparado:true,bultos,armadorId:armador.id,armadorNombre:armador.nombre,armadoTs:ts}:e));
     setUltimoArmador(armador);
-    setResultado({ok:true,envio,bultos,msg:(esEdit?"✏️ Editado: ":"✓ ")+armador.nombre+(bultos>1?" · "+bultos+" bultos":"")+(controlador?" — ctrl: "+controlador.nombre:"")});
+    const msg=(esEdit?"✏️ Editado: ":"✓ ")+armador.nombre+(bultos>1?" · "+bultos+" bultos":"")+(controlador?" — ctrl: "+controlador.nombre:"");
+    setResultado({ok:true,envio,bultos,msg});
+    showOverlay(true,msg);
     setTimeout(()=>setResultado(null),5000);
     if(inputRef.current)inputRef.current.focus();
     addDoc(collection(db,"armados"),{
@@ -7122,14 +7130,16 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
       armadoTs:ts,
     }).catch(err=>console.error("Error persistiendo preparado:",err));
     if(bultos>1&&impresionHabilitada&&envio.origen!=="ML")imprimirEtiquetasExtra({...envio,bultos},lc);
-  },[setEnvios,lc,impresionHabilitada]);
+  },[setEnvios,lc,impresionHabilitada,showOverlay]);
 
   // ── Lógica de confirmación para colectas ML (circuito separado de envios) ──
   const ejecutarArmadoColecta=useCallback((colecta,armador,controlador)=>{
     const ts=new Date().toISOString();
     if(setColectas)setColectas(pv=>pv.filter(c=>c.id!==colecta.id));
     setUltimoArmador(armador);
-    setResultado({ok:true,envio:colecta,bultos:1,msg:"📋 Colecta · "+armador.nombre+(controlador?" — ctrl: "+controlador.nombre:"")});
+    const msgC="📋 Colecta · "+armador.nombre+(controlador?" — ctrl: "+controlador.nombre:"");
+    setResultado({ok:true,envio:colecta,bultos:1,msg:msgC});
+    showOverlay(true,msgC);
     setTimeout(()=>setResultado(null),5000);
     if(inputRef.current)inputRef.current.focus();
     updateDoc(doc(db,"colectas",colecta.id),{
@@ -7153,14 +7163,16 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
       partido:colecta.partido||"",
       esFlex:false,esColecta:true,esEdicion:false,
     }).catch(err=>console.error("Error guardando armado:",err));
-  },[setColectas]);
+  },[setColectas,showOverlay]);
 
   // ── Lógica de confirmación para otros pedidos (retiro/courier/a_convenir) ──
   const ejecutarArmadoOtro=useCallback((otro,armador,controlador,bultos=1)=>{
     const ts=new Date().toISOString();
     const hoy2=new Date().toISOString().split("T")[0];
     setUltimoArmador(armador);
-    setResultado({ok:true,envio:{...otro,nroSeguimiento:"",direccion:otro.direccion||otro.clienteNombre||"",bultos},bultos,msg:"🏪 Otro · #"+otro.nroOrdenTN+" · "+armador.nombre+(controlador?" — ctrl: "+controlador.nombre:"")});
+    const msgO="🏪 Otro · #"+otro.nroOrdenTN+" · "+armador.nombre+(controlador?" — ctrl: "+controlador.nombre:"");
+    setResultado({ok:true,envio:{...otro,nroSeguimiento:"",direccion:otro.direccion||otro.clienteNombre||"",bultos},bultos,msg:msgO});
+    showOverlay(true,msgO);
     setTimeout(()=>setResultado(null),5000);
     if(inputRef.current)inputRef.current.focus();
     updateDoc(doc(db,"otrosPedidos",otro.id),{
@@ -7186,7 +7198,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
       carrier:otro.carrier||"",
       esEdicion:false,
     }).catch(err=>console.error("Error armado otro:",err));
-  },[]);
+  },[showOverlay]);
 
   // ── Scan handler con scoring ──────────────────────────────────────
   const procesarScan=useCallback((nro)=>{
@@ -7223,12 +7235,18 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
           beepOK();
           return;
         }
-        setResultado({ok:false,msg:"No encontrado: "+srch.slice(0,20)});
+        const msgNF="No encontrado: "+srch.slice(0,20);
+        setResultado({ok:false,msg:msgNF});
+        showOverlay(false,msgNF);
+        beepError();
         setTimeout(()=>setResultado(null),5000);return;
       }
       const found=candidatos[0].e;
       if(found.preparado&&found.armadorNombre){
-        setResultado({ok:"ya",envio:found,msg:"Ya preparado por "+found.armadorNombre});
+        const msgYA="Ya preparado por "+found.armadorNombre;
+        setResultado({ok:"ya",envio:found,msg:msgYA});
+        showOverlay("ya",msgYA);
+        beepYaDespachado();
         setTimeout(()=>setResultado(null),4000);return;
       }
       ejecutarArmado(found,armadorActivo,found.bultos||1,controladorSel||null);
@@ -7249,7 +7267,10 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
         // Probar contra otros pedidos por_preparar
         const candOtro=buscarOtro();
         if(candOtro.length===0){
-          setResultado({ok:false,msg:"No encontrado: "+srch.slice(0,20)});
+          const msgNF2="No encontrado: "+srch.slice(0,20);
+          setResultado({ok:false,msg:msgNF2});
+          showOverlay(false,msgNF2);
+          beepError();
           setTimeout(()=>setResultado(null),8000);return;
         }
         abrirPanelArmador({...candOtro[0],_isOtro:true});return;
@@ -7272,7 +7293,10 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
     if(candidatos.length===1){
       const found=candidatos[0].e;
       if(found.preparado&&found.armadorNombre){
-        setResultado({ok:"ya",envio:found,msg:"Ya preparado por "+found.armadorNombre+" · "+(found.bultos||1)+" bulto"+(found.bultos>1?"s":"")});
+        const msgYA2="Ya preparado por "+found.armadorNombre+" · "+(found.bultos||1)+" bulto"+(found.bultos>1?"s":"");
+        setResultado({ok:"ya",envio:found,msg:msgYA2});
+        showOverlay("ya",msgYA2);
+        beepYaDespachado();
         setTimeout(()=>setResultado(null),8000);return;
       }
       abrirPanelArmador(found);return;
@@ -7283,7 +7307,10 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
     if(topCands.length===1&&topScore===3){
       const found=topCands[0].e;
       if(found.preparado&&found.armadorNombre){
-        setResultado({ok:"ya",envio:found,msg:"Ya preparado por "+found.armadorNombre+" · "+(found.bultos||1)+" bulto"+(found.bultos>1?"s":"")});
+        const msgYA3="Ya preparado por "+found.armadorNombre+" · "+(found.bultos||1)+" bulto"+(found.bultos>1?"s":"");
+        setResultado({ok:"ya",envio:found,msg:msgYA3});
+        showOverlay("ya",msgYA3);
+        beepYaDespachado();
         setTimeout(()=>setResultado(null),8000);return;
       }
       abrirPanelArmador(found);return;
@@ -7391,6 +7418,21 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
   return(
     <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif"}}>
       <style>{`*{box-sizing:border-box;}`}</style>
+
+      {/* ── Overlay fullscreen resultado de escaneo ──────────────── */}
+      {overlayRes&&(
+        <div onClick={()=>setOverlayRes(null)} style={{position:"fixed",inset:0,zIndex:9999,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+          background:overlayRes.ok===true?"rgba(4,31,20,0.96)":overlayRes.ok==="ya"?"rgba(10,14,26,0.96)":"rgba(28,4,4,0.96)",
+          cursor:"pointer"}}>
+          <div style={{fontSize:"5rem",lineHeight:1,marginBottom:"0.5rem",color:overlayRes.ok===true?"#34d399":overlayRes.ok==="ya"?"#9ca3af":"#f87171"}}>
+            {overlayRes.ok===true?"✓":overlayRes.ok==="ya"?"⏸":"✗"}
+          </div>
+          <div style={{fontSize:"1.1rem",fontWeight:700,color:overlayRes.ok===true?"#34d399":overlayRes.ok==="ya"?"#9ca3af":"#f87171",textAlign:"center",padding:"0 2rem",maxWidth:"340px"}}>
+            {overlayRes.msg}
+          </div>
+          <div style={{position:"absolute",bottom:"2rem",fontSize:"0.75rem",color:"#4b5563"}}>Tocá para cerrar</div>
+        </div>
+      )}
 
       {/* ── Panel flotante (disambiguation + armador) ──────────────── */}
       {(matchesPendientes.length>0||scanPendiente)&&(
