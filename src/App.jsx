@@ -3,7 +3,7 @@ import * as XLSXLib from "xlsx";
 import jsQR from "jsqr";
 import { jsPDF } from "jspdf";
 import { db } from "./firebase.js";
-import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, updateDoc, query, where, getDocs, addDoc, serverTimestamp, limit, orderBy, writeBatch } from "firebase/firestore";
+import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, updateDoc, query, where, getDocs, addDoc, serverTimestamp, limit, orderBy, writeBatch, runTransaction } from "firebase/firestore";
 
 const VERSION = "2.1";
 
@@ -2345,23 +2345,26 @@ function imprimirNotaPV(caso,envioDoc){
   win.onload=()=>win.print();
 }
 
-function TabPostVenta({envios=[],setEnvios,sesion=null}){
+function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
   const [casos,setCasos]=useState([]);
   const [loading,setLoading]=useState(true);
-  const [modo,setModo]=useState("lista");
+  const [modo,setModo]=useState("lista"); // "lista" | "nuevo" | "editar"
+  const [editId,setEditId]=useState(null);
   const [filtroEstado,setFiltroEstado]=useState("todos");
   const [filtroTipo,setFiltroTipo]=useState("todos");
   const [saving,setSaving]=useState(false);
   const [err,setErr]=useState("");
   const [ordenEncontrada,setOrdenEncontrada]=useState(null);
 
+  const hoy=fechaHoy();
+  const logisticas=Object.keys(lc).sort();
   const VACIO={ordenOriginal:"",clienteNombre:"",telefono:"",direccion:"",localidad:"",partido:"",cp:"",
     tipoIncidente:"",descripcion:"",resolucion:"",costoResolucion:0,
-    envioId:"",envioTrans:"",envioFecha:"",envioTurno:"",estado:"pendiente"};
+    envioTrans:"",envioFecha:hoy,envioTurno:"",estado:"pendiente"};
   const [f,setF]=useState(VACIO);
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
 
-  // Cargar desde Firestore
+  // Cargar desde Firestore — onSnapshot es la única fuente de verdad
   useEffect(()=>{
     const unsub=onSnapshot(
       query(collection(db,"postventa"),orderBy("fechaCreacion","desc")),
@@ -2371,8 +2374,9 @@ function TabPostVenta({envios=[],setEnvios,sesion=null}){
     return()=>unsub();
   },[]);
 
-  // Auto-fill cliente desde orden original
+  // Auto-fill cliente desde orden original (solo en modo nuevo/editar)
   useEffect(()=>{
+    if(modo==="lista")return;
     const id=f.ordenOriginal.trim();
     if(!id){setOrdenEncontrada(null);return;}
     const found=envios.find(e=>e.id===id||(e.nroOrdenTN&&String(e.nroOrdenTN)===id));
@@ -2389,52 +2393,73 @@ function TabPostVenta({envios=[],setEnvios,sesion=null}){
     }else{
       setOrdenEncontrada(null);
     }
-  },[f.ordenOriginal,envios]);
+  },[f.ordenOriginal,envios,modo]);
+
+  const abrirNuevo=()=>{setEditId(null);setF(VACIO);setOrdenEncontrada(null);setErr("");setModo("nuevo");};
+  const abrirEditar=(caso)=>{setEditId(caso.id);setF({...VACIO,...caso});setOrdenEncontrada(null);setErr("");setModo("editar");};
+  const cancelar=()=>{setModo("lista");setEditId(null);setF(VACIO);setOrdenEncontrada(null);setErr("");};
 
   const guardar=async()=>{
     if(!f.ordenOriginal.trim()){setErr("La orden original es obligatoria.");return;}
     if(!f.tipoIncidente){setErr("Seleccioná el tipo de incidente.");return;}
     if(!f.descripcion.trim()){setErr("La descripción es obligatoria.");return;}
     const audit=mkAudit(sesion);
-    const hoy=fechaHoy();
-    let envioId="";
     try{
       setSaving(true);
-      // 1. Crear PV en Firestore
-      const pvData={...f,fechaCreacion:new Date().toISOString(),...(audit?{creadoPor:audit}:{})};
+      // ── EDITAR ──
+      if(editId){
+        const upd={...f,modificadoTs:new Date().toISOString(),...(audit?{modificadoPor:audit}:{})};
+        await setDoc(doc(db,"postventa",editId),upd,{merge:true});
+        cancelar();return;
+      }
+      // ── NUEVO ──
+      // Número correlativo con transacción atómica
+      const cRef=doc(db,"config","pvCounter");
+      const pvNum=await runTransaction(db,async(tx)=>{
+        const snap=await tx.get(cRef);
+        const n=snap.exists()?snap.data().next:1;
+        tx.set(cRef,{next:n+1},{merge:true});
+        return n;
+      });
+      const nroCaso="PV-"+String(pvNum).padStart(4,"0");
+      const pvData={...f,nroCaso,fechaCreacion:new Date().toISOString(),...(audit?{creadoPor:audit}:{})};
+      // No guardamos envioTrans/envioFecha/envioTurno en el doc PV — son sólo para el envío generado
       const pvRef=await addDoc(collection(db,"postventa"),pvData);
-      // 2. Si resolución es Envío → crear envío automáticamente
+      // Si resolución es Envío → crear envío automáticamente
       if(f.resolucion==="envio"){
         const tipoLabel=TIPOS_PV.find(t=>t.k===f.tipoIncidente)?.l||f.tipoIncidente;
-        envioId="PV"+pvRef.id.slice(-8).toUpperCase();
+        const envioId=nroCaso+"-E";
         const envioData={
           id:envioId,tipo:"Manual",origen:"Manual",
           clienteNombre:f.clienteNombre,telefono:f.telefono,
           direccion:f.direccion,localidad:f.localidad,partido:f.partido,cp:f.cp,
-          fecha:hoy,fechaVenta:hoy,turno:"",trans:"",
-          estado:"sin_asignar",bultos:0,
+          fecha:f.envioFecha||hoy,fechaVenta:f.envioFecha||hoy,
+          turno:f.envioTurno||"",trans:f.envioTrans||"",
+          estado:"sin_asignar",bultos:1,
           cobranza:null,retiro:null,esCC:false,importeCC:0,nroFactura:"",
-          observaciones:`Post Venta — ${tipoLabel} — Ref. #${f.ordenOriginal}`,
+          observaciones:`Post Venta ${nroCaso} — ${tipoLabel} — Ref. #${f.ordenOriginal}`,
           tarifaLog:0,pvCasoId:pvRef.id,
           creadoTs:new Date().toISOString(),
           ...(audit?{creadoPor:audit}:{}),
         };
         await setDoc(doc(db,"envios",envioId),envioData);
-        if(setEnvios) setEnvios(p=>[envioData,...p]);
-        // Actualizar PV con el envioId generado
         await setDoc(doc(db,"postventa",pvRef.id),{envioId},{merge:true});
-        pvData.envioId=envioId;
       }
-      setCasos(p=>[{id:pvRef.id,...pvData},...p]);
-      setF(VACIO);setOrdenEncontrada(null);setErr("");setModo("lista");
+      // No llamamos setCasos aquí — onSnapshot lo maneja solo
+      cancelar();
     }catch(e){console.error("guardar PV",e);setErr("Error: "+e.message);}
     finally{setSaving(false);}
   };
 
   const toggleEstado=async(caso)=>{
     const next=caso.estado==="resuelto"?"pendiente":"resuelto";
+    // Solo escritura en Firestore — onSnapshot actualiza el estado local
     await setDoc(doc(db,"postventa",caso.id),{estado:next},{merge:true});
-    setCasos(p=>p.map(c=>c.id===caso.id?{...c,estado:next}:c));
+  };
+
+  const eliminar=async(caso)=>{
+    if(!window.confirm(`¿Eliminar ${caso.nroCaso||caso.id}? Esta acción es irreversible.`))return;
+    await deleteDoc(doc(db,"postventa",caso.id));
   };
 
   const casosFiltrados=casos.filter(c=>{
@@ -2442,6 +2467,8 @@ function TabPostVenta({envios=[],setEnvios,sesion=null}){
     if(filtroTipo!=="todos"&&c.tipoIncidente!==filtroTipo)return false;
     return true;
   });
+
+  const esFormulario=modo==="nuevo"||modo==="editar";
 
   return(
     <div style={{maxWidth:"860px",margin:"0 auto",padding:"1rem"}}>
@@ -2451,21 +2478,23 @@ function TabPostVenta({envios=[],setEnvios,sesion=null}){
           <div style={{fontSize:"1.1rem",fontWeight:700,color:"#e5e7eb"}}>Post Venta</div>
           <div style={{fontSize:"0.72rem",color:"#6b7280",marginTop:"2px"}}>{casosFiltrados.length} caso{casosFiltrados.length!==1?"s":""}</div>
         </div>
-        <button onClick={()=>{setModo(m=>m==="nuevo"?"lista":"nuevo");setErr("");}} style={{...S.btn(modo==="nuevo","#6366f1"),padding:"0.4rem 1rem",fontSize:"0.78rem"}}>
-          {modo==="nuevo"?"← Cancelar":"+ Nuevo caso"}
-        </button>
+        {esFormulario
+          ?<button onClick={cancelar} style={{...S.btn(false),padding:"0.4rem 1rem",fontSize:"0.78rem"}}>← Cancelar</button>
+          :<button onClick={abrirNuevo} style={{...S.btn(false,"#6366f1"),padding:"0.4rem 1rem",fontSize:"0.78rem"}}>+ Nuevo caso</button>
+        }
       </div>
 
-      {/* Formulario nuevo */}
-      {modo==="nuevo"&&(
-        <div style={{...S.card,padding:"1rem",marginBottom:"1rem",border:"1px solid #6366f1"}}>
+      {/* Formulario nuevo/editar */}
+      {esFormulario&&(
+        <div style={{...S.card,padding:"1rem",marginBottom:"1rem",border:`1px solid ${modo==="editar"?"#f59e0b":"#6366f1"}`}}>
+          {modo==="editar"&&<div style={{color:"#f59e0b",fontSize:"0.7rem",fontWeight:700,marginBottom:"0.6rem",textTransform:"uppercase"}}>✏ Editando caso</div>}
 
           {/* A: Origen e incidente */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.6rem",marginBottom:"0.75rem"}}>
             <div>
               <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Orden original</div>
               <input value={f.ordenOriginal} onChange={ev=>set("ordenOriginal",ev.target.value)}
-                placeholder="ID del envío..." style={{...S.input,width:"100%",fontSize:"0.8rem"}}/>
+                placeholder="ID del envío o nro. TN..." style={{...S.input,width:"100%",fontSize:"0.8rem"}}/>
               {ordenEncontrada&&(
                 <div style={{background:"#041f14",border:"1px solid #065f46",borderRadius:"6px",padding:"6px 10px",marginTop:"5px",fontSize:"0.72rem",color:"#d1fae5",display:"grid",gap:"2px"}}>
                   <div style={{fontWeight:700,color:"#10b981"}}>{ordenEncontrada.clienteNombre}</div>
@@ -2486,10 +2515,9 @@ function TabPostVenta({envios=[],setEnvios,sesion=null}){
             </div>
           </div>
 
-          {/* B: Incidente */}
+          {/* B: Descripción */}
           <div style={{marginBottom:"0.75rem",background:"#0d1119",border:"1px solid #1e2535",borderRadius:"8px",padding:"0.75rem 0.9rem"}}>
             <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"6px",borderBottom:"1px solid #1e2535",paddingBottom:"4px"}}>Incidente</div>
-            <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Qué enviar / descripción</div>
             <textarea value={f.descripcion} onChange={ev=>set("descripcion",ev.target.value)}
               placeholder="Describí qué faltó, qué salió mal y qué hay que enviar..." rows={3}
               style={{...S.input,display:"block",width:"100%",resize:"vertical",fontSize:"0.8rem"}}/>
@@ -2504,8 +2532,32 @@ function TabPostVenta({envios=[],setEnvios,sesion=null}){
               ))}
             </div>
             {f.resolucion==="envio"&&(
-              <div style={{marginTop:"0.5rem",background:"#041f14",border:"1px solid #065f46",borderRadius:"6px",padding:"6px 10px",fontSize:"0.71rem",color:"#6ee7b7"}}>
-                Se creará automáticamente un envío Manual vinculado al guardar el caso.
+              <div style={{marginTop:"0.5rem",background:"#041f14",border:"1px solid #065f46",borderRadius:"6px",padding:"10px 12px",fontSize:"0.75rem"}}>
+                <div style={{color:"#6ee7b7",marginBottom:"8px",fontWeight:700}}>Se creará un envío vinculado al guardar (ID: caso + -E)</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"6px"}}>
+                  <div>
+                    <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"2px"}}>Fecha</div>
+                    <input type="date" value={f.envioFecha} onChange={ev=>set("envioFecha",ev.target.value)}
+                      style={{...S.input,width:"100%",fontSize:"0.78rem"}}/>
+                  </div>
+                  <div>
+                    <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"2px"}}>Turno</div>
+                    <select value={f.envioTurno} onChange={ev=>set("envioTurno",ev.target.value)}
+                      style={{...S.input,width:"100%",fontSize:"0.78rem"}}>
+                      <option value="">— Sin turno —</option>
+                      <option value="mañana">Mañana</option>
+                      <option value="tarde">Tarde</option>
+                    </select>
+                  </div>
+                  <div>
+                    <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"2px"}}>Logística</div>
+                    <select value={f.envioTrans} onChange={ev=>set("envioTrans",ev.target.value)}
+                      style={{...S.input,width:"100%",fontSize:"0.78rem"}}>
+                      <option value="">— Sin asignar —</option>
+                      {logisticas.map(l=><option key={l} value={l}>{l}</option>)}
+                    </select>
+                  </div>
+                </div>
               </div>
             )}
             {f.resolucion==="reintegro"&&(
@@ -2526,8 +2578,8 @@ function TabPostVenta({envios=[],setEnvios,sesion=null}){
           </div>
 
           {err&&<div style={{color:"#fca5a5",fontSize:"0.78rem",marginBottom:"0.5rem"}}>{err}</div>}
-          <button onClick={guardar} disabled={saving} style={{...S.btn(true,"#6366f1"),padding:"0.4rem 1.2rem",fontSize:"0.8rem",opacity:saving?0.6:1}}>
-            {saving?"Guardando...":"Guardar caso"}
+          <button onClick={guardar} disabled={saving} style={{...S.btn(true,modo==="editar"?"#f59e0b":"#6366f1"),padding:"0.4rem 1.2rem",fontSize:"0.8rem",opacity:saving?0.6:1}}>
+            {saving?"Guardando...":(modo==="editar"?"Guardar cambios":"Guardar caso")}
           </button>
         </div>
       )}
@@ -2558,12 +2610,14 @@ function TabPostVenta({envios=[],setEnvios,sesion=null}){
           {casosFiltrados.map(caso=>{
             const tc=TIPO_PV_C[caso.tipoIncidente]||{bg:"#1a1f2e",border:"#374151",t:"#9ca3af"};
             const tipoLabel=TIPOS_PV.find(t=>t.k===caso.tipoIncidente)?.l||caso.tipoIncidente||"";
+            const numDisplay=caso.nroCaso||"#"+caso.id.slice(-6).toUpperCase();
             return(
               <div key={caso.id} style={{...S.card,padding:"0.75rem 1rem",borderLeft:`3px solid ${tc.t}`}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"0.5rem"}}>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{display:"flex",gap:"6px",alignItems:"center",marginBottom:"4px",flexWrap:"wrap"}}>
-                      <span style={{fontSize:"0.75rem",fontWeight:700,color:"#e5e7eb"}}>#{caso.ordenOriginal}</span>
+                      <span style={{fontSize:"0.8rem",fontWeight:700,color:"#6366f1",letterSpacing:"0.5px"}}>{numDisplay}</span>
+                      <span style={{fontSize:"0.68rem",color:"#6b7280"}}>→ Ref. {caso.ordenOriginal}</span>
                       {caso.clienteNombre&&<span style={{fontSize:"0.72rem",color:"#9ca3af"}}>{caso.clienteNombre}</span>}
                       {tipoLabel&&<span style={{fontSize:"0.65rem",fontWeight:700,color:tc.t,background:tc.bg,border:`1px solid ${tc.border}`,borderRadius:"4px",padding:"1px 6px"}}>{tipoLabel}</span>}
                       <span style={{fontSize:"0.65rem",color:caso.estado==="resuelto"?"#10b981":"#f59e0b",fontWeight:700}}>
@@ -2573,16 +2627,22 @@ function TabPostVenta({envios=[],setEnvios,sesion=null}){
                     {caso.descripcion&&<div style={{fontSize:"0.75rem",color:"#9ca3af",marginBottom:"4px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{caso.descripcion}</div>}
                     <div style={{display:"flex",gap:"12px",fontSize:"0.68rem",color:"#6b7280",flexWrap:"wrap"}}>
                       {caso.fechaCreacion&&<span>{new Date(caso.fechaCreacion).toLocaleDateString("es-AR")}</span>}
-                      {caso.resolucion&&<span>{caso.resolucion==="envio"?"Envío"+(caso.envioId?" #"+caso.envioId:""):caso.resolucion==="reintegro"?"Reintegro $"+Number(caso.costoResolucion||0).toLocaleString("es-AR"):"Sin costo"}</span>}
+                      {caso.resolucion&&<span>{
+                        caso.resolucion==="envio"?("Envío"+(caso.envioId?" "+caso.envioId:""))
+                        :caso.resolucion==="reintegro"?("Reintegro $"+Number(caso.costoResolucion||0).toLocaleString("es-AR"))
+                        :"Sin costo"
+                      }</span>}
                     </div>
                   </div>
-                  <div style={{display:"flex",gap:"4px",flexShrink:0}}>
+                  <div style={{display:"flex",gap:"4px",flexShrink:0,flexWrap:"wrap",justifyContent:"flex-end"}}>
                     {caso.resolucion==="envio"&&caso.envioId&&(
                       <button onClick={()=>imprimirNotaPV(caso,envios.find(e=>e.id===caso.envioId))} style={{...S.btnSm(false),color:"#6366f1",border:"1px solid #6366f1",fontSize:"0.68rem",padding:"3px 8px"}}>🖨 Imprimir</button>
                     )}
+                    <button onClick={()=>abrirEditar(caso)} style={{...S.btnSm(false),color:"#f59e0b",border:"1px solid #78350f",fontSize:"0.68rem",padding:"3px 8px"}}>✏ Editar</button>
                     <button onClick={()=>toggleEstado(caso)} style={{...S.btnSm(caso.estado==="resuelto","#10b981"),fontSize:"0.68rem",padding:"3px 8px"}}>
                       {caso.estado==="resuelto"?"↩ Reabrir":"✓ Resolver"}
                     </button>
+                    <button onClick={()=>eliminar(caso)} style={{...S.btnSm(false),color:"#ef4444",border:"1px solid #7f1d1d",fontSize:"0.68rem",padding:"3px 8px"}}>🗑</button>
                   </div>
                 </div>
               </div>
@@ -11205,7 +11265,7 @@ export default function App(){
         {tab==="flex"    &&<TabEnvios   envios={envios.filter(e=>e.origen==="ML")}  setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin} sesion={sesion} mostrarResumenFlex={true} facturaClientes={facturaClientes} mlTarifas={mlTarifas}/>}
         {tab==="imprimir"&&<TabImprimir envios={envios} setEnvios={setEnvios} zc={zc} lc={lc}/>}
         {tab==="manual"  &&<TabManual   setEnvios={setEnvios} onSuccess={()=>{mostrarToast("Envio agregado");}} lc={lc} enviosExistentes={envios} sesion={sesion}/>}
-        {tab==="postventa"&&<TabPostVenta envios={envios} setEnvios={setEnvios} sesion={sesion}/>}
+        {tab==="postventa"&&<TabPostVenta envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>}
         {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZcPersist} lc={lc} setLc={setLcPersist} mlTarifas={mlTarifas} setMlTarifas={setMlTarifasPersist}/>}
         {tab==="informe"     &&<TabInforme     envios={envios} zc={zc} lc={lc} mlTarifas={mlTarifas}/>}
         {tab==="liquidacion"    &&<TabLiquidacion    envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>}
