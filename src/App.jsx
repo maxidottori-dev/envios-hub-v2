@@ -2813,11 +2813,12 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
 
   useEffect(()=>{const p=cpAPartido(f.cp);if(p)set("partido",p);},[f.cp]);
 
-  // Validación de ID único
+  // Validación de ID único — compara contra id de Firestore Y nroOrdenTN
+  // (los pedidos TN tienen ID auto-generado, pero nroOrdenTN = nro de orden visible)
   const idDuplicado=useMemo(()=>{
     const id=f.id.trim();
     if(!id)return false;
-    return (enviosExistentes||[]).some(e=>e.id===id);
+    return (enviosExistentes||[]).some(e=>e.id===id||String(e.nroOrdenTN||"")===id);
   },[f.id,enviosExistentes]);
 
   const handleTrans=l=>{const t=f.trans===l?"":l;setF(p=>({...p,trans:t,estado:t?"asignado":"sin_asignar"}));};
