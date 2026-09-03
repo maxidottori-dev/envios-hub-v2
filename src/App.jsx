@@ -129,11 +129,13 @@ async function procesarConMLArmado(file, envioType, onProgress, logisticaMap = {
   formData.append("logistica_map", JSON.stringify(logisticaMap));
   // Keywords se toman del estado guardado en Firebase, no hace falta enviarlas
 
-  const res = await fetch(ML_ARMADO_URL + "/api/process", {
-    method: "POST",
-    body: formData,
-  });
-  if (!res.ok) throw new Error("ML Armado error: " + res.status);
+  const controller=new AbortController();
+  const tId=setTimeout(()=>controller.abort(),120000); // timeout 2 min
+  let res;
+  try{
+    res=await fetch(ML_ARMADO_URL+"/api/process",{method:"POST",body:formData,signal:controller.signal});
+  }finally{clearTimeout(tId);}
+  if(!res.ok)throw new Error("ML Armado error: "+res.status);
   const data = await res.json();
 
   // 3. Descargar el PDF anotado
@@ -10870,6 +10872,7 @@ export default function App(){
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
   const [borrador,setBorrador]=useState([]);
+  const [pendingMLFile,setPendingMLFile]=useState(null); // PDF flex guardado para enviar a ML Armado tras confirmar asignación
   const [modalPDF,setModalPDF]=useState(null); // archivo pendiente mientras modal abierto
   const [modalPDFColecta,setModalPDFColecta]=useState(null); // archivo Colecta pendiente mientras modal abierto
   const [colectaProgMsg,setColectaProgMsg]=useState(""); // texto de progreso a mostrar en el botón "Colecta" mientras se espera ML Armado
@@ -11121,11 +11124,26 @@ export default function App(){
   const confirmarAsignacion=async(asignados)=>{
     const ts=new Date().toISOString();
     for(const e of asignados){
-      // Agregar timestamp de asignación si no tiene (NO FLEX no lo trae)
       if(!e.loteImportacion)e.loteImportacion=ts;
       await guardarEnvio(e);
     }
     setPantalla("dashboard");setTab("envios");mostrarToast(asignados.length+" envios guardados");
+    // Enviar a ML Armado ahora que los envíos están guardados con logística completa
+    if(pendingMLFile){
+      const f=pendingMLFile;
+      setPendingMLFile(null);
+      try{
+        mostrarToast("Enviando a ML Armado...");
+        // logMap: combinar envíos ya en sistema + los recién asignados
+        const logMap={};
+        envios.forEach(e=>{if(e.nroSeguimiento&&e.trans)logMap[e.nroSeguimiento]=e.trans;});
+        asignados.forEach(e=>{if(e.nroSeguimiento&&e.trans)logMap[e.nroSeguimiento]=e.trans;});
+        await procesarConMLArmado(f,"Flex",null,logMap);
+        mostrarToast("PDF procesado por ML Armado");
+      }catch(mlErr){
+        mostrarToast("ML Armado no disponible — intentá de nuevo desde el botón");
+      }
+    }
   };
   const reasignarSel=items=>{setBorrador(items);setPantalla("asignacion");};
 
@@ -11297,32 +11315,31 @@ export default function App(){
                     }
                   }
                 }
-                // ML Armado — solo si el usuario lo eligió
-                if(procesarArmado){
-                  try{
-                    const logMap = {};
-                    for(const e of envios){
-                      if(e.nroSeguimiento && e.trans) logMap[e.nroSeguimiento] = e.trans;
-                    }
-                    await procesarConMLArmado(f,"Flex",null,logMap);
-                  }catch(mlErr){
-                    mostrarToast("ML Armado no disponible — intentá de nuevo en unos segundos");
-                  }
-                }
                 // Toast resumen
                 const partes=[];
                 if(cargarEnvios){
                   if(nuevos.length)partes.push(nuevos.length+" envio(s) nuevo(s)");
-                  else if(etiquetas.length)partes.push("Envios actualizados");
-                  else if(!etiquetas.length)partes.push("Sin etiquetas FLEX detectadas");
+                  else if(etiquetas.length)partes.push("Envios existentes actualizados");
+                  else partes.push("Sin etiquetas FLEX detectadas");
                 }
-                if(procesarArmado)partes.push("PDF procesado");
                 if(partes.length)mostrarToast(partes.join(" · "));
-                // Abrir popup solo si hay nuevos envíos
+                // Abrir pantalla de asignación si hay nuevos; guardamos el PDF para enviarlo a ML Armado después
                 if(nuevos.length){
                   setBorrador(nuevos);
                   setFileName(f.name);
+                  if(procesarArmado)setPendingMLFile(f); // se enviará tras confirmar asignación
                   setPantalla("asignacion");
+                } else if(procesarArmado){
+                  // Sin nuevos — enviar a ML Armado ya (logística ya asignada en sistema)
+                  try{
+                    mostrarToast("Enviando a ML Armado...");
+                    const logMap={};
+                    envios.forEach(e=>{if(e.nroSeguimiento&&e.trans)logMap[e.nroSeguimiento]=e.trans;});
+                    await procesarConMLArmado(f,"Flex",null,logMap);
+                    mostrarToast("PDF procesado por ML Armado");
+                  }catch(mlErr){
+                    mostrarToast("ML Armado no disponible — intentá de nuevo en unos segundos");
+                  }
                 }
               }catch(err){mostrarToast("Error: "+err.message);}
               setLoading(false);
