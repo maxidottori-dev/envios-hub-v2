@@ -75,7 +75,10 @@ export default async function handler(req, res) {
         const orden = await resp.json();
 
         if (orden.payment_status === "paid") {
-          await docSnap.ref.update({ pagoEstado: "pagado" });
+          const syncUpdate = { pagoEstado: "pagado" };
+          // Limpiar cobranza si no fue recibida manualmente (igual que webhook UMP)
+          if (!data.cobranzaRecibida) syncUpdate.cobranza = null;
+          await docSnap.ref.update(syncUpdate);
           actualizados++;
 
           // Si era CC (cuenta_corriente o esCC), registrar en pagosCC para bajar el saldo

@@ -217,11 +217,40 @@ export default async function handler(req, res) {
       const envioSnap = await envioRef.get();
       if (envioSnap.exists && order.payment_status === "paid") {
         const envioData = envioSnap.data();
-        if (envioData.pagoEstado !== "pagado" && envioData.pagoEstado !== "cuenta_corriente") {
-          await envioRef.update({ pagoEstado: "pagado" });
-          console.log("WEBHOOK OTRO→UMP PAGO ACTUALIZADO", order.id);
-          return res.status(200).json({ ok: true, action: "ump_pago_actualizado" });
+        const update = {};
+        if (envioData.pagoEstado !== "pagado") update.pagoEstado = "pagado";
+        // Limpiar cobranza (igual que el path normal UMP) y registrar pagosCC si es CC
+        if (!envioData.cobranzaRecibida) update.cobranza = null;
+        if (Object.keys(update).length > 0) await envioRef.update(update);
+        // Registrar pago en pagosCC si era CC o esCC
+        const wasCC = envioData.pagoEstado === "cuenta_corriente" || envioData.esCC === true;
+        if (wasCC) {
+          const monto = envioData.cobranza > 0 ? envioData.cobranza
+            : envioData.importeCC > 0 ? envioData.importeCC
+            : envioData.importeOrden || parseFloat(order.total) || 0;
+          const clienteKey = (envioData.clienteNombre || "").toLowerCase().trim().replace(/\s+/g, "_") || null;
+          if (monto > 0 && clienteKey) {
+            const existing = await db.collection("pagosCC")
+              .where("envioIds", "array-contains", String(order.id))
+              .limit(1).get();
+            if (existing.empty) {
+              await db.collection("pagosCC").add({
+                clienteKey,
+                clienteNombre: envioData.clienteNombre || "",
+                monto,
+                nota: "Pago automático TN (retiro→UMP)",
+                envioIds: [String(order.id)],
+                montosPorEnvio: { [String(order.id)]: monto },
+                fechaCobro: new Date().toISOString().split("T")[0],
+                creadoEn: new Date(),
+                autoSync: true,
+              });
+              console.log("WEBHOOK OTRO→UMP CC_PAGO_REGISTRADO", order.id, monto, clienteKey);
+            }
+          }
         }
+        console.log("WEBHOOK OTRO→UMP PAGO ACTUALIZADO", order.id, update);
+        return res.status(200).json({ ok: true, action: "ump_pago_actualizado" });
       }
       return res.status(200).json({ ok: true, skipped: "convertido_a_ump", envioExists: envioSnap.exists });
     }
