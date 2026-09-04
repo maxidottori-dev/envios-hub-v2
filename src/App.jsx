@@ -9713,7 +9713,8 @@ function TabSalida({envios,setEnvios,lc,sesion}){
     });
   },[envios,logSel,turnoSel,fecha]);
 
-  const totalLog=pedidosLog.length;
+  // totalLog = pendientes actuales + despachados en esta sesión (no cuenta sesiones anteriores)
+  // Se calcula más abajo tras definir lotePend y despachados
   // enviosMap debe estar aquí (antes de despachados) — usarlo antes de la definición
   // causa ReferenceError cuando sesionIds no está vacío (temporal dead zone de const).
   const enviosMap=new Map(envios.map(e=>[e.id,e]));
@@ -9723,9 +9724,9 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   const despachados=sesionIds.map(id=>enviosMap.get(id)).filter(Boolean);
   // Excluir los ya despachados en Firestore (de sesiones anteriores) a menos que estén en la sesión actual
   const lotePend=pedidosLog.filter(e=>!sesionSet.has(e.id)&&!e.despachado);
-  // Para el contador: incluir también los despachados en sesiones anteriores (flag Firestore)
-  const despachadosTotal=pedidosLog.filter(e=>sesionSet.has(e.id)||e.despachado);
-  const pct=totalLog>0?Math.round(despachadosTotal.length/totalLog*100):0;
+  // Total = pendientes actuales + lo que se despachó en esta sesión (ignora sesiones anteriores)
+  const totalLog=lotePend.length+despachados.length;
+  const pct=totalLog>0?Math.round(despachados.length/totalLog*100):0;
 
   // ── Procesar scan ─────────────────────────────────────────────────
   const procesarScan=useCallback((raw)=>{
@@ -10649,7 +10650,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
           {lci.nombreFormal&&<div style={{color:muted,fontSize:"0.72rem"}}>{lci.nombreFormal}</div>}
         </div>
         <div style={{textAlign:"right",marginRight:"0.5rem"}}>
-          <div style={{fontWeight:800,fontSize:"1.2rem",color:logColor}}>{despachadosTotal.length}<span style={{color:muted,fontWeight:400,fontSize:"0.8rem"}}> / {totalLog}</span></div>
+          <div style={{fontWeight:800,fontSize:"1.2rem",color:logColor}}>{despachados.length}<span style={{color:muted,fontWeight:400,fontSize:"0.8rem"}}> / {totalLog}</span></div>
           <div style={{color:muted,fontSize:"0.68rem"}}>despachados · {pct}%</div>
         </div>
         <div style={{display:"flex",gap:"6px",flexShrink:0}}>
