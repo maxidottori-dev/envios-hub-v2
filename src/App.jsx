@@ -7215,6 +7215,10 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
       .map(c=>({c,score:scoreBusqueda(c,srch,nums)}))
       .filter(x=>x.score>0)
       .sort((a,b)=>b.score-a.score);
+    const buscarColectaArmada=()=>colectasArmadasHoy
+      .map(c=>({c,score:scoreBusqueda(c,srch,nums)}))
+      .filter(x=>x.score>0)
+      .sort((a,b)=>b.score-a.score);
     // Modo armador activo: buscar y confirmar automáticamente sin panel
     if(armadorActivo){
       const candidatos=envios
@@ -7237,6 +7241,15 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
           resetArmadorTimer();
           beepOK();
           return;
+        }
+        // Verificar si es una colecta ya preparada hoy
+        const candColectaArm=buscarColectaArmada();
+        if(candColectaArm.length>0){
+          const msgYAC="Colecta ya preparada por "+(candColectaArm[0].c.armadorNombre||"un armador");
+          setResultado({ok:"ya",msg:msgYAC});
+          showOverlay("ya",msgYAC);
+          beepYaDespachado();
+          setTimeout(()=>setResultado(null),4000);return;
         }
         const msgNF="No encontrado: "+srch.slice(0,20);
         setResultado({ok:false,msg:msgNF});
@@ -7270,6 +7283,15 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
         // Probar contra otros pedidos por_preparar
         const candOtro=buscarOtro();
         if(candOtro.length===0){
+          // Verificar si es una colecta ya preparada hoy
+          const candColectaArm2=buscarColectaArmada();
+          if(candColectaArm2.length>0){
+            const msgYAC2="Colecta ya preparada por "+(candColectaArm2[0].c.armadorNombre||"un armador");
+            setResultado({ok:"ya",msg:msgYAC2});
+            showOverlay("ya",msgYAC2);
+            beepYaDespachado();
+            setTimeout(()=>setResultado(null),4000);return;
+          }
           const msgNF2="No encontrado: "+srch.slice(0,20);
           setResultado({ok:false,msg:msgNF2});
           showOverlay(false,msgNF2);
@@ -7327,7 +7349,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
       setTimeout(()=>setResultado(null),5000);
       if(inputRef.current)inputRef.current.focus();
     },30000);
-  },[envios,colectas,otrosPedidos,armadorActivo,ejecutarArmado,ejecutarArmadoColecta,ejecutarArmadoOtro,abrirPanelArmador,resetArmadorTimer]);
+  },[envios,colectas,colectasArmadasHoy,otrosPedidos,armadorActivo,ejecutarArmado,ejecutarArmadoColecta,ejecutarArmadoOtro,abrirPanelArmador,resetArmadorTimer,showOverlay]);
 
   // ── Confirmar armado desde el panel flotante ──────────────────────
   const confirmarArmado=useCallback((armador)=>{
