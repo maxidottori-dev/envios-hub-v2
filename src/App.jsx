@@ -2114,7 +2114,9 @@ function TabImprimir({envios,setEnvios,zc,lc}){
                 <td style={{...tdSt,textAlign:"center"}}>{e.turno||"—"}</td>
                 <td style={{...tdSt,color:"#9ca3af"}}>{e.fecha?fmtCorta(e.fecha):"—"}</td>
                 {hayCobro&&<td style={{...tdSt,textAlign:"right"}}>{e.cobranza?<span style={{color:"#fbbf24",fontWeight:700}}>{fmt(e.cobranza)}</span>:<span style={{color:"#374151"}}>—</span>}</td>}
-                <td style={{...tdSt,textAlign:"center",fontWeight:(e.bultos||1)>1?700:400}}>{e.bultos||1}</td>
+                <td style={{...tdSt,textAlign:"center",fontWeight:e.preparado&&(e.bultos||1)>1?700:400,color:!e.preparado?"#f59e0b":"inherit"}}>
+                  {e.preparado?(e.bultos||1):"No prep."}
+                </td>
                 <td style={{...tdSt,textAlign:"center"}}><div style={{width:"13px",height:"13px",border:"1px solid #374151",borderRadius:"2px",margin:"auto"}}/></td>
               </tr>);})}</tbody>
           </table>
@@ -2216,10 +2218,17 @@ function imprimirNotaPV(caso,envioDoc){
   win.onload=()=>win.print();
 }
 
+function semanaActual(){
+  const d=new Date();const day=d.getDay()||7;
+  const lun=new Date(d);lun.setDate(d.getDate()-day+1);
+  const dom=new Date(lun);dom.setDate(lun.getDate()+6);
+  const fmt=x=>x.toISOString().split("T")[0];
+  return{desde:fmt(lun),hasta:fmt(dom)};
+}
 function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
   const [casos,setCasos]=useState([]);
   const [loading,setLoading]=useState(true);
-  const [modo,setModo]=useState("lista"); // "lista" | "nuevo" | "editar"
+  const [modo,setModo]=useState("lista"); // "lista" | "nuevo" | "editar" | "stats"
   const [editId,setEditId]=useState(null);
   const [filtroEstado,setFiltroEstado]=useState("todos");
   const [filtroTipo,setFiltroTipo]=useState("todos");
@@ -2228,6 +2237,9 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
   const [ordenEncontrada,setOrdenEncontrada]=useState(null);
   const [busqOrden,setBusqOrden]=useState("");
   const [mostrarSugsOrden,setMostrarSugsOrden]=useState(false);
+  const sw=semanaActual();
+  const [statsDesde,setStatsDesde]=useState(sw.desde);
+  const [statsHasta,setStatsHasta]=useState(sw.hasta);
 
   const hoy=fechaHoy();
   const logisticas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k).sort();
@@ -2247,6 +2259,7 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
   },[busqOrden,envios]);
   const VACIO={ordenOriginal:"",clienteNombre:"",telefono:"",direccion:"",localidad:"",partido:"",cp:"",
     tipoIncidente:"",descripcion:"",resolucion:"",notasResolucion:"",costoResolucion:0,
+    armador:"",controlador:"",
     envioTrans:"",envioFecha:hoy,envioTurno:"",envioId:"",nroCaso:"",estado:"pendiente"};
   const [f,setF]=useState(VACIO);
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
@@ -2284,7 +2297,7 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
 
   const seleccionarEnvioOrigen=(e)=>{
     setBusqOrden(e.clienteNombre?`${e.id} — ${e.clienteNombre}`:e.id);
-    set("ordenOriginal",e.id);
+    setF(p=>({...p,ordenOriginal:e.id,armador:e.armadorNombre||p.armador}));
     setMostrarSugsOrden(false);
   };
   const abrirNuevo=()=>{setEditId(null);setF(VACIO);setOrdenEncontrada(null);setBusqOrden("");setErr("");setModo("nuevo");};
@@ -2392,10 +2405,15 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
           <div style={{fontSize:"1.1rem",fontWeight:700,color:"#e5e7eb"}}>Post Venta</div>
           <div style={{fontSize:"0.72rem",color:"#6b7280",marginTop:"2px"}}>{casosFiltrados.length} caso{casosFiltrados.length!==1?"s":""}</div>
         </div>
-        {esFormulario
-          ?<button onClick={cancelar} style={{...S.btn(false),padding:"0.4rem 1rem",fontSize:"0.78rem"}}>← Cancelar</button>
-          :<button onClick={abrirNuevo} style={{...S.btn(false,"#6366f1"),padding:"0.4rem 1rem",fontSize:"0.78rem"}}>+ Nuevo caso</button>
-        }
+        <div style={{display:"flex",gap:"6px"}}>
+          {esFormulario
+            ?<button onClick={cancelar} style={{...S.btn(false),padding:"0.4rem 1rem",fontSize:"0.78rem"}}>← Cancelar</button>
+            :<>
+              <button onClick={()=>setModo(modo==="stats"?"lista":"stats")} style={{...S.btn(modo==="stats","#6366f1"),padding:"0.4rem 0.9rem",fontSize:"0.78rem"}}>📊 Stats</button>
+              <button onClick={abrirNuevo} style={{...S.btn(false,"#6366f1"),padding:"0.4rem 1rem",fontSize:"0.78rem"}}>+ Nuevo caso</button>
+            </>
+          }
+        </div>
       </div>
 
       {/* Formulario nuevo/editar */}
@@ -2463,6 +2481,18 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
             <textarea value={f.descripcion} onChange={ev=>set("descripcion",ev.target.value)}
               placeholder="Describí qué faltó, qué salió mal y qué hay que enviar..." rows={3}
               style={{...S.input,display:"block",width:"100%",resize:"vertical",fontSize:"0.8rem"}}/>
+          </div>
+
+          {/* B2: Armador / Controlador */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.6rem",marginBottom:"0.75rem"}}>
+            <div>
+              <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Armó</div>
+              <input value={f.armador||""} onChange={ev=>set("armador",ev.target.value)} placeholder="Nombre del armador" style={{...S.input,width:"100%",fontSize:"0.8rem"}}/>
+            </div>
+            <div>
+              <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Controló</div>
+              <input value={f.controlador||""} onChange={ev=>set("controlador",ev.target.value)} placeholder="Nombre del controlador" style={{...S.input,width:"100%",fontSize:"0.8rem"}}/>
+            </div>
           </div>
 
           {/* C: Resolución */}
@@ -2559,6 +2589,111 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
         </div>
       )}
 
+      {/* ── STATS ── */}
+      {modo==="stats"&&(()=>{
+        const casosS=casos.filter(c=>{const f=(c.fechaCreacion||"").slice(0,10);return f>=statsDesde&&f<=statsHasta;});
+        const totalCosto=casosS.reduce((s,c)=>s+(c.costoResolucion||0),0);
+        const porTipo=TIPOS_PV.map(t=>({...t,n:casosS.filter(c=>c.tipoIncidente===t.k).length})).filter(x=>x.n>0);
+        // Agrupación por armador
+        const armadores=[...new Set(casosS.map(c=>c.armador||"").filter(Boolean))].sort();
+        const armSt=armadores.map(a=>({
+          nombre:a,
+          total:casosS.filter(c=>c.armador===a).length,
+          porTipo:TIPOS_PV.map(t=>({...t,n:casosS.filter(c=>c.armador===a&&c.tipoIncidente===t.k).length})).filter(x=>x.n>0),
+          costo:casosS.filter(c=>c.armador===a).reduce((s,c)=>s+(c.costoResolucion||0),0),
+        }));
+        const sinArmador=casosS.filter(c=>!c.armador).length;
+        const thS={padding:"5px 8px",textAlign:"left",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",color:"#6b7280",borderBottom:"1px solid #252d40",background:"#12172a",whiteSpace:"nowrap"};
+        const tdS={padding:"5px 8px",fontSize:"0.75rem",borderBottom:"1px solid #1a1f2e",color:"#e5e7eb"};
+        return(
+          <div>
+            {/* Selector de período */}
+            <div style={{display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap",marginBottom:"1rem",background:"#0d1119",border:"1px solid #1e2535",borderRadius:"10px",padding:"0.75rem 1rem"}}>
+              <span style={{color:"#6b7280",fontSize:"0.72rem",fontWeight:700,textTransform:"uppercase"}}>Período</span>
+              <input type="date" value={statsDesde} onChange={ev=>setStatsDesde(ev.target.value)} style={{...S.input,fontSize:"0.78rem",padding:"3px 8px"}}/>
+              <span style={{color:"#6b7280",fontSize:"0.75rem"}}>→</span>
+              <input type="date" value={statsHasta} onChange={ev=>setStatsHasta(ev.target.value)} style={{...S.input,fontSize:"0.78rem",padding:"3px 8px"}}/>
+              <button onClick={()=>{const w=semanaActual();setStatsDesde(w.desde);setStatsHasta(w.hasta);}} style={{...S.btnSm(false,"#6366f1"),fontSize:"0.68rem"}}>Esta semana</button>
+              <button onClick={()=>{
+                const d=new Date(statsDesde);d.setDate(d.getDate()-7);
+                const h=new Date(d);h.setDate(d.getDate()+6);
+                setStatsDesde(d.toISOString().split("T")[0]);setStatsHasta(h.toISOString().split("T")[0]);
+              }} style={{...S.btnSm(false,"#6b7280"),fontSize:"0.68rem"}}>← Semana ant.</button>
+              <button onClick={()=>{
+                const d=new Date(statsDesde);d.setDate(d.getDate()+7);
+                const h=new Date(d);h.setDate(d.getDate()+6);
+                setStatsDesde(d.toISOString().split("T")[0]);setStatsHasta(h.toISOString().split("T")[0]);
+              }} style={{...S.btnSm(false,"#6b7280"),fontSize:"0.68rem"}}>Semana sig. →</button>
+            </div>
+
+            {/* Widgets resumen */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:"8px",marginBottom:"1rem"}}>
+              <div style={{background:"#0d1119",border:"1px solid #252d40",borderRadius:"10px",padding:"0.85rem 1rem"}}>
+                <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"6px"}}>Errores en el período</div>
+                <div style={{fontSize:"2rem",fontWeight:800,color:"#f87171",lineHeight:1}}>{casosS.length}</div>
+                <div style={{marginTop:"6px",display:"flex",gap:"6px",flexWrap:"wrap"}}>
+                  {porTipo.map(t=><span key={t.k} style={{fontSize:"0.65rem",background:"#1a1f2e",border:"1px solid #252d40",borderRadius:"4px",padding:"1px 6px",color:"#9ca3af"}}>{t.l} ×{t.n}</span>)}
+                </div>
+              </div>
+              {totalCosto>0&&<div style={{background:"#0d1119",border:"1px solid #252d40",borderRadius:"10px",padding:"0.85rem 1rem"}}>
+                <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"6px"}}>Costo total reintegros</div>
+                <div style={{fontSize:"1.5rem",fontWeight:800,color:"#fbbf24",lineHeight:1}}>${totalCosto.toLocaleString("es-AR")}</div>
+              </div>}
+              {armadores.length>0&&<div style={{background:"#0d1119",border:"1px solid #252d40",borderRadius:"10px",padding:"0.85rem 1rem"}}>
+                <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"6px"}}>Por armador</div>
+                {armSt.map(a=><div key={a.nombre} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"3px"}}>
+                  <span style={{fontSize:"0.75rem",color:"#e5e7eb",fontWeight:600}}>{a.nombre}</span>
+                  <span style={{fontSize:"0.78rem",fontWeight:800,color:"#f87171"}}>{a.total}</span>
+                </div>)}
+                {sinArmador>0&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"3px"}}>
+                  <span style={{fontSize:"0.75rem",color:"#6b7280",fontStyle:"italic"}}>Sin asignar</span>
+                  <span style={{fontSize:"0.78rem",fontWeight:800,color:"#6b7280"}}>{sinArmador}</span>
+                </div>}
+              </div>}
+            </div>
+
+            {/* Tabla detalle */}
+            {casosS.length===0
+              ?<div style={{textAlign:"center",padding:"2rem",color:"#4b5563"}}>Sin casos en este período.</div>
+              :<div style={{...S.card,overflow:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.75rem"}}>
+                  <thead><tr>
+                    <th style={thS}>Nro</th>
+                    <th style={thS}>Fecha</th>
+                    <th style={thS}>Tipo</th>
+                    <th style={thS}>Descripción</th>
+                    <th style={thS}>Armó</th>
+                    <th style={thS}>Controló</th>
+                    <th style={thS}>Resolución</th>
+                    <th style={{...thS,textAlign:"right"}}>Costo</th>
+                    <th style={thS}>Estado</th>
+                  </tr></thead>
+                  <tbody>{casosS.map((c,i)=>{
+                    const tc=TIPO_PV_C[c.tipoIncidente]||{bg:"#1a1f2e",t:"#9ca3af"};
+                    const tipoL=TIPOS_PV.find(t=>t.k===c.tipoIncidente)?.l||c.tipoIncidente||"—";
+                    const costo=c.resolucion==="reintegro"&&c.costoResolucion>0?"$"+Number(c.costoResolucion).toLocaleString("es-AR"):"—";
+                    const res=c.resolucion==="envio"?("Envío"+(c.envioId?" "+c.envioId:""))
+                      :c.resolucion==="reintegro"?"Reintegro"
+                      :c.resolucion==="sin_costo"?"Sin costo":"—";
+                    return<tr key={c.id} style={{background:i%2===0?"transparent":"#0d1119"}}>
+                      <td style={{...tdS,color:"#6366f1",fontWeight:700}}>{c.nroCaso||c.id.slice(-6)}</td>
+                      <td style={{...tdS,color:"#9ca3af",whiteSpace:"nowrap"}}>{c.fechaCreacion?new Date(c.fechaCreacion).toLocaleDateString("es-AR"):"—"}</td>
+                      <td style={{...tdS,whiteSpace:"nowrap"}}><span style={{background:tc.bg,color:tc.t,padding:"1px 6px",borderRadius:"4px",fontSize:"0.65rem",fontWeight:700}}>{tipoL}</span></td>
+                      <td style={{...tdS,maxWidth:"200px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:"#9ca3af"}} title={c.descripcion}>{c.descripcion||"—"}</td>
+                      <td style={{...tdS,fontWeight:600}}>{c.armador||<span style={{color:"#374151"}}>—</span>}</td>
+                      <td style={{...tdS,fontWeight:600}}>{c.controlador||<span style={{color:"#374151"}}>—</span>}</td>
+                      <td style={{...tdS,color:"#9ca3af"}}>{res}</td>
+                      <td style={{...tdS,textAlign:"right",color:costo!=="—"?"#fbbf24":"#374151",fontWeight:costo!=="—"?700:400}}>{costo}</td>
+                      <td style={{...tdS,color:c.estado==="resuelto"?"#10b981":"#f59e0b",fontWeight:700}}>{c.estado==="resuelto"?"✓ Resuelto":"⏳ Pendiente"}</td>
+                    </tr>;
+                  })}</tbody>
+                </table>
+              </div>
+            }
+          </div>
+        );
+      })()}
+
       {/* Lista */}
       {modo==="lista"&&(
         <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
@@ -2589,6 +2724,8 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
                     {caso.descripcion&&<div style={{fontSize:"0.75rem",color:"#9ca3af",marginBottom:"4px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{caso.descripcion}</div>}
                     <div style={{display:"flex",gap:"12px",fontSize:"0.68rem",color:"#6b7280",flexWrap:"wrap"}}>
                       {caso.fechaCreacion&&<span>{new Date(caso.fechaCreacion).toLocaleDateString("es-AR")}</span>}
+                      {caso.armador&&<span>📦 Armó: <strong style={{color:"#e5e7eb"}}>{caso.armador}</strong></span>}
+                      {caso.controlador&&<span>🔍 Controló: <strong style={{color:"#e5e7eb"}}>{caso.controlador}</strong></span>}
                       {caso.resolucion&&<span>{
                         caso.resolucion==="envio"?("Envío"+(caso.envioId?" "+caso.envioId:""))
                         :caso.resolucion==="reintegro"?("Reintegro $"+Number(caso.costoResolucion||0).toLocaleString("es-AR"))
