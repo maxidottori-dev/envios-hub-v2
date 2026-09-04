@@ -1957,6 +1957,8 @@ function TabImprimir({envios,setEnvios,zc,lc}){
           partido:e.partido||"",
           cp:e.cp||"",
           bultos:e.bultos||1,
+          preparado:e.preparado||false,
+          telefono:e.telefono||"",
           cobranza:e.cobranza||0,
           tarifaLog:getImp(e),
           origen:e.origen||"",
@@ -8696,7 +8698,9 @@ function DespachoPage({token}){
         const nroRef=esFlex?(e.nroSeguimiento||""):("#"+(e.nroOrdenTN||""));
         const zml=esFlex?(getZonaML(e.partido)||""):(e.partido||"");
         const loteCell=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"—";
-        const row=[i+1,loteCell,nroRef,e.tipoEntrega==="COMERCIAL"?"COM":e.tipoEntrega==="RESIDENCIAL"?"RES":"—",e.bultos||1,"□",dir+(refExtra||""),zml,e.turno||"—",e.fecha?fmtCorta(e.fecha):"—"];
+        const bultosCell=e.preparado?(e.bultos||1):"No prep.";
+        const telCell=!esFlex&&e.telefono?" · Tel: "+e.telefono:"";
+        const row=[i+1,loteCell,nroRef,e.tipoEntrega==="COMERCIAL"?"COM":e.tipoEntrega==="RESIDENCIAL"?"RES":"—",bultosCell,"□",dir+(refExtra||"")+telCell,zml,e.turno||"—",e.fecha?fmtCorta(e.fecha):"—"];
         if(hayCobro)row.push(e.cobranza?"$"+Number(e.cobranza).toLocaleString("es-AR"):"—");
         return row;
       });
@@ -8729,8 +8733,11 @@ function DespachoPage({token}){
             if(data.column.index===6)data.cell.styles.fontStyle="bold";
             // Nro envío en courier
             if(data.column.index===2)data.cell.styles.font="courier";
-            // Bultos múltiples en negrita
-            if(data.column.index===4&&Number(data.cell.raw)>1)data.cell.styles.fontStyle="bold";
+            // Bultos: negrita si >1, naranja si no preparado
+            if(data.column.index===4){
+              if(Number(data.cell.raw)>1)data.cell.styles.fontStyle="bold";
+              else if(data.cell.raw==="No prep.")data.cell.styles.textColor=[220,100,0];
+            }
             // Color tipo COM/RES
             if(data.column.index===3){
               if(data.cell.raw==="COM"){data.cell.styles.textColor=[29,78,216];data.cell.styles.fillColor=[219,234,254];}
@@ -8873,7 +8880,7 @@ function ConfirmPage({token}){
           <div key={e.id} style={{padding:"0.5rem 0",borderBottom:i<cierre.envios.length-1?`1px solid ${brd}`:"none",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"8px"}}>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:"0.82rem",fontWeight:600,color:tx,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{e.direccion||"(sin dirección)"}</div>
-              <div style={{fontSize:"0.72rem",color:muted,marginTop:"1px"}}>{[e.localidad,e.partido].filter(Boolean).join(" · ")}{e.bultos>1?" · "+e.bultos+" bultos":""}</div>
+              <div style={{fontSize:"0.72rem",color:muted,marginTop:"1px"}}>{[e.localidad,e.partido].filter(Boolean).join(" · ")}{" · "+(e.bultos||1)+" bulto"+((e.bultos||1)===1?"":"s")}</div>
             </div>
             <div style={{textAlign:"right",flexShrink:0}}>
               <div style={{fontSize:"0.82rem",fontWeight:700,color:green}}>{fmtP(getTarifaLog(e))}</div>
