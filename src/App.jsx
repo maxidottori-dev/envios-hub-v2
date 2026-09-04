@@ -3929,10 +3929,7 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
 
   const lista = [...(seccion === "cobranzas" ? conCobranza : conRetiro)].filter(e => {
     if (filTrans !== "TODOS" && e.trans !== filTrans) return false;
-    // pagoEstado="pagado" (seteado por sync-pagos-tn) también cuenta como recibido en cobranzas
-    const recibido = seccion === "cobranzas"
-      ? (!!e.cobranzaRecibida || e.pagoEstado === "pagado")
-      : (e.devolucionPendiente ? !!e.devolucionCancelacionRecibida : !!e.retiroRecibido);
+    const recibido = seccion === "cobranzas" ? !!e.cobranzaRecibida : (e.devolucionPendiente ? !!e.devolucionCancelacionRecibida : !!e.retiroRecibido);
     if (filEstado === "pendiente" && recibido) return false;
     if (filEstado === "recibido" && !recibido) return false;
     const fEnv = e.fecha || e.fechaVenta || "";
@@ -3956,20 +3953,20 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
 
   // Totales cobranzas
   const totalEsperado = conCobranza.filter(e => filTrans === "TODOS" || e.trans === filTrans).reduce((s,e) => s + (e.cobranza||0), 0);
-  const totalRecibido = conCobranza.filter(e => (filTrans === "TODOS" || e.trans === filTrans) && (e.cobranzaRecibida || e.pagoEstado === "pagado")).reduce((s,e) => s + (e.cobranza||0), 0);
+  const totalRecibido = conCobranza.filter(e => (filTrans === "TODOS" || e.trans === filTrans) && e.cobranzaRecibida).reduce((s,e) => s + (e.cobranza||0), 0);
   const totalPendiente = totalEsperado - totalRecibido;
 
   // Por logistica - cobranzas
   const porLogCob = logActivas.map(l => {
     const envL = conCobranza.filter(e => e.trans === l);
     const total = envL.reduce((s,e) => s + (e.cobranza||0), 0);
-    const recibido = envL.filter(e => e.cobranzaRecibida || e.pagoEstado === "pagado").reduce((s,e) => s + (e.cobranza||0), 0);
+    const recibido = envL.filter(e => e.cobranzaRecibida).reduce((s,e) => s + (e.cobranza||0), 0);
     return {
       l,
       total,
       recibido,
       pendienteImporte: total - recibido,
-      pendienteN: envL.filter(e => !e.cobranzaRecibida && e.pagoEstado !== "pagado").length,
+      pendienteN: envL.filter(e => !e.cobranzaRecibida).length,
     };
   }).filter(x => x.total > 0);
 
