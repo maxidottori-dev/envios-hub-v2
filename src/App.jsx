@@ -2283,7 +2283,7 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
     if(found){
       setOrdenEncontrada(found);
       setF(p=>({...p,
-        clienteNombre:found.clienteNombre||p.clienteNombre,
+        clienteNombre:found.clienteNombre||found.destinatario||p.clienteNombre,
         telefono:found.telefono||p.telefono,
         direccion:found.direccion||p.direccion,
         localidad:found.localidad||p.localidad,
@@ -2296,8 +2296,18 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
   },[f.ordenOriginal,envios,modo]);
 
   const seleccionarEnvioOrigen=(e)=>{
-    setBusqOrden(e.clienteNombre?`${e.id} — ${e.clienteNombre}`:e.id);
-    setF(p=>({...p,ordenOriginal:e.id,armador:e.armadorNombre||p.armador}));
+    const nombre=e.clienteNombre||e.destinatario||"";
+    setBusqOrden(nombre?`${e.id} — ${nombre}`:e.id);
+    setF(p=>({...p,
+      ordenOriginal:e.id,
+      armador:e.armadorNombre||p.armador,
+      clienteNombre:nombre||p.clienteNombre,
+      telefono:e.telefono||p.telefono,
+      direccion:e.direccion||p.direccion,
+      localidad:e.localidad||p.localidad,
+      partido:e.partido||p.partido,
+      cp:e.cp||p.cp,
+    }));
     setMostrarSugsOrden(false);
   };
   const abrirNuevo=()=>{setEditId(null);setF(VACIO);setOrdenEncontrada(null);setBusqOrden("");setErr("");setModo("nuevo");};
