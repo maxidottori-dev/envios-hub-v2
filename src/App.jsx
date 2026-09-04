@@ -70,7 +70,6 @@ const FEATURES=[
   {key:"accion_imprimir",     grupo:"acciones", label:"Imprimir etiquetas", desc:"Imprimir etiquetas de envíos individuales con código QR y datos de entrega"},
   {key:"accion_autorizarcc",  grupo:"acciones", label:"Autorizar Cta. Corriente", desc:"Autorizar que un pedido de Tienda Nube con pago pendiente de acreditación pase a Cuenta Corriente, para poder asignarlo a una logística sin esperar el pago"},
   {key:"accion_verhistorialdespacho", grupo:"acciones", label:"Ver historial de despacho", desc:"Ver el registro histórico de envíos despachados, agrupado por fecha y logística"},
-  {key:"accion_crear_reenvio",        grupo:"acciones", label:"Crear 2da visita",           desc:"Crear un reenvío o cambio a partir de un envío ya despachado"},
 ];
 
 // Devuelve true si la sesión puede usar esa feature
@@ -1068,12 +1067,16 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
               <input value={e.telefono||""} onChange={ev=>set("telefono",ev.target.value)} style={{...S.input,width:"100%",fontSize:"0.8rem"}} placeholder="11 xxxx-xxxx"/>
             </div>
           </div>
-          {e.nroSeguimiento&&(
-            <div style={{marginTop:"0.5rem"}}>
-              <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. seguimiento</div>
-              <input value={e.nroSeguimiento||""} onChange={ev=>set("nroSeguimiento",ev.target.value)} style={{...S.input,width:"100%",fontSize:"0.8rem"}}/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.5rem",marginTop:"0.5rem"}}>
+            <div>
+              <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. pedido</div>
+              <input value={e.nroOrdenTN||""} onChange={ev=>set("nroOrdenTN",ev.target.value)} style={{...S.input,width:"100%",fontSize:"0.8rem"}} placeholder="Nro de pedido"/>
             </div>
-          )}
+            <div>
+              <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. seguimiento</div>
+              <input value={e.nroSeguimiento||""} onChange={ev=>set("nroSeguimiento",ev.target.value)} style={{...S.input,width:"100%",fontSize:"0.8rem"}} placeholder="Nro de tracking"/>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1330,14 +1333,6 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
   const [busqueda,setBusqueda]=useState("");
   const [editId,setEditId]=useState(null);
   const [seleccionados,setSeleccionados]=useState(new Set());
-  const [reenvioBase,setReenvioBase]=useState(null); // envío original del que se deriva
-  const [reenvioTipo,setReenvioTipo]=useState("reenvio"); // "reenvio"|"cambio"
-  const [reenvioFecha,setReenvioFecha]=useState("");
-  const [reenvioTurno,setReenvioTurno]=useState("AM");
-  const [renvioBultos,setRenvioBultos]=useState(1);
-  const [reenvioNota,setReenvioNota]=useState("");
-  const [reenvioTrans,setReenvioTrans]=useState("");
-  const [reenvioWorking,setReenvioWorking]=useState(false);
   const [modoSel,setModoSel]=useState(false);
   const tmap=buildTarifaMap(zc);
   const getImp=e=>calcImp(e,tmap,lc,zc);
@@ -1363,7 +1358,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
     if(filZona!=="TODAS"&&getZonaML(e.partido)!==filZona)return false;
     if(filTurno==="SIN_TURNO"){if(e.turno)return false;}else if(filTurno!=="TODOS"&&e.turno!==filTurno)return false;
     if(filOrigen!=="TODOS"){
-      const origenVal=e.origen==="Tienda Nube"?"TN":e.origen==="ML"?"FLEX":e.origen==="2da_visita"?"2davisita":e.pvCasoId?"PV":"Manual";
+      const origenVal=e.origen==="Tienda Nube"?"TN":e.origen==="ML"?"FLEX":e.pvCasoId?"PV":"Manual";
       if(origenVal!==filOrigen)return false;
     }
     if(mostrarResumenFlex&&filTipoEntrega!=="TODOS"){
@@ -1391,80 +1386,6 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
   };
   const saveMultipleEnvios=updates=>{setEnvios(p=>p.map(e=>{const u=updates.find(x=>x.id===e.id);return u?{...u,estado:getEstado(u)}:e;}));};
 
-  const iniciarReenvio=(e)=>{
-    setReenvioTipo("reenvio");
-    setReenvioFecha(fechaHoy());
-    setReenvioTurno(e.turno||"AM");
-    setRenvioBultos(1);
-    setReenvioNota("");
-    setReenvioTrans(e.trans||"");
-    setReenvioBase(e);
-  };
-
-  const confirmarReenvio=async()=>{
-    if(!reenvioFecha){alert("Ingresá la fecha de entrega.");return;}
-    if(reenvioWorking)return;
-    setReenvioWorking(true);
-    const orig=reenvioBase;
-    // Generar ID usando nroOrdenTN (número visible), no el ID interno de Firestore
-    const baseId=String(orig.nroOrdenTN||orig.id)+"-R";
-    let newId=baseId;
-    let suffix=2;
-    const MAX_SUFFIX=20;
-    // Verificar en estado local y Firestore para evitar duplicados
-    while(suffix<=MAX_SUFFIX&&(envios.some(x=>x.id===newId)||(await getDoc(doc(db,"envios",newId))).exists())){
-      newId=baseId+suffix;suffix++;
-    }
-    if(suffix>MAX_SUFFIX) throw new Error("No se pudo generar un ID único para el reenvío (máximo 20 intentos).");
-    const envioNuevo={
-      id:newId,
-      origen:"2da_visita",
-      reenvioDeId:String(orig.id),
-      tipoReenvio:reenvioTipo,
-      idTN:orig.idTN||null,
-      nroOrdenTN:orig.nroOrdenTN||null,
-      nroSeguimiento:"",
-      linkTN:orig.linkTN||"",
-      linkML:"",
-      clienteNombre:orig.clienteNombre||"",
-      telefono:orig.telefono||"",
-      direccion:orig.direccion||"",
-      ciudad:orig.ciudad||"",
-      localidad:orig.localidad||"",
-      cp:orig.cp||"",
-      partido:orig.partido||"",
-      provincia:orig.provincia||"",
-      alertaDireccion:!orig.direccion||!orig.cp,
-      formaPago:orig.formaPago||"",
-      importeOrden:0,
-      cobranza:null,
-      notasOrden:"",
-      notasCliente:"",
-      datepickerRaw:"",
-      fechaVenta:orig.fechaVenta||"",
-      fecha:reenvioFecha,
-      turno:reenvioTurno,
-      trans:reenvioTrans||"",
-      pagoEstado:"sin_pago",
-      estado:reenvioTrans?"asignado":"sin_asignar",
-      tarifaLog:0,
-      bultos:renvioBultos||1,
-      cambio:null,
-      retiro:null,
-      despachado:false,
-      preparado:false,
-      observaciones:reenvioNota||`${reenvioTipo==="cambio"?"Cambio":"Reenvío"} de #${orig.nroOrdenTN||orig.id}`,
-      creadoTs:new Date().toISOString(),
-      creadoPor:sesion?.nombre||sesion?.email||"",
-    };
-    try{
-      const resp=await fetch("/api/crear-reenvio",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({envioData:envioNuevo})});
-      const data=await resp.json();
-      if(!resp.ok||!data.ok) throw new Error(data.error||"Error al crear reenvío");
-      setReenvioBase(null); // onSnapshot lo agrega solo cuando llega de Firestore
-    }catch(err){console.error(err);alert("Error: "+err.message);}
-    finally{setReenvioWorking(false);}
-  };
   const [accionMasiva,setAccionMasiva]=useState(null); // {tipo:"fecha"|"turno", valor:""}
   const aplicarAccionMasiva=()=>{
     if(!accionMasiva?.valor)return;
@@ -1544,7 +1465,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
           <span style={{color:"#252d40",fontSize:"0.6rem"}}>|</span>
           <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",minWidth:"38px"}}>Origen</span>
           <div style={{display:"flex",gap:"3px"}}>
-            {[{k:"TODOS",l:"Todos",c:"#6366f1"},{k:"TN",l:"TN",c:"#38bdf8"},{k:"Manual",l:"Manual",c:"#f59e0b"},{k:"PV",l:"Post Venta",c:"#10b981"},{k:"2davisita",l:"2da visita",c:"#fb923c"}].map(x=><button key={x.k} onClick={()=>setFilOrigen(x.k)} style={S.btnSm(filOrigen===x.k,x.c)}>{x.l}</button>)}
+            {[{k:"TODOS",l:"Todos",c:"#6366f1"},{k:"TN",l:"TN",c:"#38bdf8"},{k:"Manual",l:"Manual",c:"#f59e0b"},{k:"PV",l:"Post Venta",c:"#10b981"}].map(x=><button key={x.k} onClick={()=>setFilOrigen(x.k)} style={S.btnSm(filOrigen===x.k,x.c)}>{x.l}</button>)}
           </div>
         </div>
         {/* Fila 2: Logistica */}
@@ -1750,9 +1671,6 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                       ?<button onClick={ev=>{ev.stopPropagation();setEditId(isEdit?null:e.id);}} style={{width:"36px",height:"36px",borderRadius:"7px",border:"1px solid "+(isEdit?"#6366f1":"#252d40"),background:isEdit?"#13102a":"#0f1420",color:isEdit?"#a78bfa":"#6b7280",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.85rem"}}>✏️</button>
                       :<span style={{color:"#374151",fontSize:"0.65rem",minWidth:"20px",textAlign:"right",paddingTop:"3px"}}>{i+1}</span>
                     }
-                    {e.despachado&&puedeVer(sesion,"accion_crear_reenvio")&&reenvioBase?.id!==e.id&&(
-                      <button onClick={ev=>{ev.stopPropagation();iniciarReenvio(e);}} style={{width:"36px",padding:"3px 0",borderRadius:"6px",fontSize:"0.6rem",fontWeight:700,cursor:"pointer",background:"#1c0f00",border:"1px solid #fb923c",color:"#fb923c",textAlign:"center",lineHeight:1.2}}>↩<br/>2da</button>
-                    )}
                   </div>
                 }
                 <div style={{flex:1,minWidth:0}} onClick={()=>{if(modoSel)toggleSel(e.id);}}>
@@ -1811,62 +1729,6 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                 </div>
               </div>
               {isEdit&&!modoSel&&puedeVer(sesion,"accion_editarenvio")&&<PanelEdit envio={e} onSave={saveEnvio} onSaveMultiple={saveMultipleEnvios} onClose={()=>setEditId(null)} lc={lc} envios={envios} getImp={getImp} esAdmin={esAdmin} sesion={sesion}/>}
-              {reenvioBase?.id===e.id&&(
-                <div style={{marginTop:"8px",padding:"12px 14px",background:"#120a00",border:"1px solid #fb923c",borderRadius:"10px",display:"flex",flexDirection:"column",gap:"10px"}}>
-                  <span style={{fontSize:"0.82rem",color:"#fb923c",fontWeight:700}}>↩ Nueva 2da visita a partir de #{e.nroOrdenTN||e.id}</span>
-                  {/* Tipo */}
-                  <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
-                    <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>Tipo</label>
-                    <label style={{fontSize:"0.75rem",color:"#e5e7eb",display:"flex",gap:"4px",alignItems:"center",cursor:"pointer"}}>
-                      <input type="radio" name={"rt"+e.id} value="reenvio" checked={reenvioTipo==="reenvio"} onChange={()=>setReenvioTipo("reenvio")} style={{accentColor:"#fb923c"}}/> Reenvío (faltó mercadería)
-                    </label>
-                    <label style={{fontSize:"0.75rem",color:"#e5e7eb",display:"flex",gap:"4px",alignItems:"center",cursor:"pointer"}}>
-                      <input type="radio" name={"rt"+e.id} value="cambio" checked={reenvioTipo==="cambio"} onChange={()=>setReenvioTipo("cambio")} style={{accentColor:"#fb923c"}}/> Cambio
-                    </label>
-                  </div>
-                  {/* Fecha + Turno + Bultos */}
-                  <div style={{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}}>
-                    <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>Fecha</label>
-                    <input type="date" value={reenvioFecha} onChange={ev=>setReenvioFecha(ev.target.value)}
-                      style={{padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #fb923c",color:"#e5e7eb",fontSize:"0.78rem"}}/>
-                    <select value={reenvioTurno} onChange={ev=>setReenvioTurno(ev.target.value)}
-                      style={{padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #fb923c",color:"#e5e7eb",fontSize:"0.78rem"}}>
-                      <option value="AM">AM</option>
-                      <option value="PM">PM</option>
-                    </select>
-                    <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>Bultos</label>
-                    <input type="number" min="1" value={renvioBultos} onChange={ev=>setRenvioBultos(Number(ev.target.value)||1)}
-                      style={{width:"52px",padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #fb923c",color:"#e5e7eb",fontSize:"0.78rem"}}/>
-                  </div>
-                  {/* Logística */}
-                  <div style={{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}}>
-                    <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>Logística</label>
-                    <select value={reenvioTrans} onChange={ev=>setReenvioTrans(ev.target.value)}
-                      style={{padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #fb923c",color:"#e5e7eb",fontSize:"0.78rem"}}>
-                      <option value="">— sin asignar —</option>
-                      {Object.entries(lc).filter(([,v])=>v.activa).map(([k,v])=><option key={k} value={k}>{k}</option>)}
-                    </select>
-                  </div>
-                  {/* Nota */}
-                  <div style={{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}}>
-                    <label style={{fontSize:"0.72rem",color:"#9ca3af"}}>Nota</label>
-                    <input value={reenvioNota} onChange={ev=>setReenvioNota(ev.target.value)}
-                      placeholder={reenvioTipo==="cambio"?"Detalle del cambio":"Qué faltó"}
-                      style={{flex:1,minWidth:"180px",padding:"4px 8px",borderRadius:"6px",background:"#1a1f2e",border:"1px solid #fb923c",color:"#e5e7eb",fontSize:"0.78rem"}}/>
-                  </div>
-                  {/* Acciones */}
-                  <div style={{display:"flex",gap:"8px"}}>
-                    <button onClick={confirmarReenvio} disabled={reenvioWorking}
-                      style={{padding:"5px 16px",borderRadius:"8px",fontSize:"0.78rem",fontWeight:700,cursor:reenvioWorking?"not-allowed":"pointer",background:"#fb923c",border:"none",color:"#0f0900",opacity:reenvioWorking?0.6:1}}>
-                      {reenvioWorking?"…":"Confirmar"}
-                    </button>
-                    <button onClick={()=>setReenvioBase(null)}
-                      style={{padding:"5px 12px",borderRadius:"8px",fontSize:"0.75rem",cursor:"pointer",background:"transparent",border:"1px solid #374151",color:"#6b7280"}}>
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           );
         })}
