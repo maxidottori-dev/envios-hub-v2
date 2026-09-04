@@ -2848,7 +2848,7 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
     try{
       setSaving(true);
       await setDoc(doc(db,"envios",id),data);
-      setEnvios(p=>[data,...p]);
+      // NO llamar setEnvios aquí — onSnapshot ya actualiza el estado global
       setF(vacio);setErr("");setDirsCliente([]);
       onSuccess();
     }catch(e){
