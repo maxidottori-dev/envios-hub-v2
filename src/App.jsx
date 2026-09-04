@@ -5797,7 +5797,10 @@ function VistaLogistica({envios,sesion,lc}){
                   {zml&&<Bdg label={zml} bg={ZONA_ML_BG[zml]||"#1a1f2e"} t={ZONA_ML_COLOR[zml]||"#6b7280"}/>}
                   {e.turno&&<Bdg label={e.turno} bg={TURNO_C[e.turno]?.bg||"#130d2a"} t={TURNO_C[e.turno]?.c||"#a78bfa"}/>}
                   {e.fecha&&<Bdg label={fmtCorta(e.fecha)} bg="#12172a" t="#9ca3af"/>}
-                  {(e.bultos||1)>1&&<Bdg label={e.bultos+" bultos"} bg="#0c1a2e" t="#60a5fa"/>}
+                  {e.preparado
+                    ?<Bdg label={(e.bultos||1)+" bulto"+((e.bultos||1)===1?"":"s")} bg="#0c1a2e" t="#60a5fa"/>
+                    :<Bdg label="No preparado" bg="#1c1200" t="#f59e0b"/>
+                  }
                   {e.cobranza!==null&&<Bdg label={"Cobrar $"+Number(e.cobranza).toLocaleString("es-AR")} bg="#1c1500" t="#fbbf24"/>}
                   {!!e.cambio&&<Bdg label="Cambio" bg="#1c0514" t="#ec4899"/>}
                   {e.retiro!==null&&<Bdg label="Retiro" bg="#1c1000" t="#f97316"/>}
