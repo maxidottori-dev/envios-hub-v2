@@ -7054,8 +7054,8 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
   // Colectas armadas en la fecha seleccionada (listener local, para mostrar en el listado)
   useEffect(()=>{
     if(!fecha)return;
-    const q=query(collection(db,"colectas"),where("estado","==","armada"),where("fechaArmado","==",fecha));
-    const unsub=onSnapshot(q,snap=>setColectasArmadasHoy(snap.docs.map(d=>({id:d.id,...d.data(),_isColecta:true}))),err=>console.error("colectasArmadas:",err));
+    const q=query(collection(db,"colectas"),where("estado","==","armada"),limit(300));
+    const unsub=onSnapshot(q,snap=>setColectasArmadasHoy(snap.docs.map(d=>({id:d.id,...d.data(),_isColecta:true})).filter(c=>c.fechaArmado===fecha)),err=>console.error("colectasArmadas:",err));
     return()=>unsub();
   },[fecha]);
 
