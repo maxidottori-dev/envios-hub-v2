@@ -119,6 +119,13 @@ export default async function handler(req, res) {
         console.log("WEBHOOK COBRANZA_CLEARED", order.id, "payment_status=paid, cobranzaRecibida=false");
       }
 
+      // Si el método cambió a Efectivo y cobranza todavía es null → setear importe
+      // (ocurre cuando el cliente cambia de Transferencia a Efectivo después del import)
+      if (esEfectivo(order) && (data.cobranza === null || data.cobranza === undefined) && !data.cobranzaRecibida) {
+        update.cobranza = parseFloat(order.total) || 0;
+        console.log("WEBHOOK COBRANZA_SET_EFECTIVO", order.id, update.cobranza);
+      }
+
       await docRef.update(update);
       console.log("WEBHOOK UPDATED", order.id);
 
