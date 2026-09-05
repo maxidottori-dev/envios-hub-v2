@@ -1727,10 +1727,10 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                   })()}
                   <div style={{color:e.clienteNombre?"#9ca3af":"#e5e7eb",fontSize:"0.8rem",lineHeight:1.35,textDecoration:getEstado(e)==="cancelado"?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",width:"100%",display:"block"}}>{e.direccion}{e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20))?" — "+e.referencia:""}</div>
                   <div style={{color:"#9ca3af",fontSize:"0.74rem",marginTop:"2px",display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center"}}>
-                    {/* fallback ID removido — siempre se muestra arriba */}
-                    {e.nroSeguimiento&&<span style={{background:"#0f1420",padding:"0 5px",borderRadius:"4px",border:"1px solid #252d40",color:"#94a3b8"}}>📦 {e.nroSeguimiento}</span>}
+                    {/* nroSeguimiento: solo para no-FLEX (FLEX ya lo muestra arriba en verde) */}
+                    {e.nroSeguimiento&&e.origen!=="ML"&&<span style={{background:"#0f1420",padding:"0 5px",borderRadius:"4px",border:"1px solid #252d40",color:"#94a3b8"}}>📦 {e.nroSeguimiento}</span>}
                     {e.tipoEntrega&&<span style={{background:e.tipoEntrega==="COMERCIAL"?"#0c1a40":"#0a1a0a",color:e.tipoEntrega==="COMERCIAL"?"#38bdf8":"#86efac",border:"1px solid "+(e.tipoEntrega==="COMERCIAL"?"#1e4060":"#1a3a1a"),borderRadius:"4px",padding:"0 5px",fontSize:"0.68rem",fontWeight:700}}>{e.tipoEntrega}</span>}
-                    {e.destinatario&&<span style={{color:"#cbd5e1",fontWeight:500,fontSize:"0.74rem"}}>· {e.destinatario}</span>}
+                    {e.destinatario&&e.origen!=="ML"&&<span style={{color:"#cbd5e1",fontWeight:500,fontSize:"0.74rem"}}>· {e.destinatario}</span>}
                     <span style={{color:"#cbd5e1",fontWeight:500,fontSize:"14px"}}>· {e.localidad?e.localidad+" · ":""}{e.partido}{e.cp?" · "+e.cp:""}</span>
                     {e.fechaVenta&&<span style={{color:"#6b7280"}}>· venta {fmtCorta(e.fechaVenta)}</span>}
                     {e.formaPago&&esTN&&<span style={{color:e.formaPago==="Efectivo"?"#fbbf24":"#9ca3af",fontWeight:e.formaPago==="Efectivo"?700:400}}>· {e.formaPago}</span>}
@@ -4257,11 +4257,14 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
                   </div>
                   <div style={{ color: "#e5e7eb", fontSize: "0.82rem", lineHeight: 1.35 }}>{e.direccion}</div>
                   <div style={{ display:"flex", gap:"6px", alignItems:"center", marginTop:"3px", flexWrap:"wrap" }}>
-                    {e.nroOrdenTN
-                      ? <span style={{fontFamily:"monospace",fontWeight:700,fontSize:"0.75rem",color:"#7dd3fc"}}>#{e.nroOrdenTN}</span>
-                      : <span style={{fontFamily:"monospace",fontSize:"0.7rem",color:"#64748b"}}>{e.id.slice(-10)}</span>
+                    {e.origen==="ML"
+                      ? <span style={{fontWeight:700,fontSize:"0.75rem",color:"#84cc16"}}>{e.nroSeguimiento||e.id}</span>
+                      : e.origen==="Tienda Nube"
+                        ? <span style={{fontWeight:700,fontSize:"0.75rem",color:"#7dd3fc"}}>#{e.nroOrdenTN}</span>
+                        : (e.pvCasoId||e.id?.startsWith("PV"))
+                          ? <span style={{fontWeight:700,fontSize:"0.75rem",color:"#c084fc"}}>{e.id}</span>
+                          : <span style={{fontWeight:700,fontSize:"0.75rem",color:"#f59e0b"}}>{e.nroOrdenTN?`#${e.nroOrdenTN}`:e.id}</span>
                     }
-                    {e.nroSeguimiento&&<span style={{fontFamily:"monospace",fontSize:"0.7rem",color:"#94a3b8"}}>{e.nroSeguimiento}</span>}
                     {e.partido&&<span style={{fontSize:"0.72rem",color:"#9ca3af"}}>· {e.partido}</span>}
                   </div>
                   {seccion === "cobranzas" && !!e.cambio && (
@@ -5906,11 +5909,22 @@ function VistaLogistica({envios,sesion,lc}){
                   {!!e.cambio&&<Bdg label="Cambio" bg="#1c0514" t="#ec4899"/>}
                   {e.retiro!==null&&<Bdg label="Retiro" bg="#1c1000" t="#f97316"/>}
                 </div>
-                {esTN&&<div style={{display:"flex",gap:"8px",alignItems:"baseline",marginBottom:"1px"}}>
-                  <span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.82rem"}}>#{e.nroOrdenTN}</span>
-                  {e.clienteNombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem"}}>{e.clienteNombre}</span>}
-                </div>}
-                <div style={{color:esTN&&e.clienteNombre?"#9ca3af":"#e5e7eb",fontSize:"0.82rem",fontWeight:500}}>{e.direccion}{e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20))?<span style={{color:"#6b7280",fontWeight:400}}> — {e.referencia}</span>:null}</div>
+                {(()=>{
+                  const esFlex=e.origen==="ML";
+                  const esPV=e.pvCasoId||e.id?.startsWith("PV");
+                  const nombre=e.clienteNombre||e.destinatario||"";
+                  let nroColor,nroLabel;
+                  if(esTN){nroColor="#7dd3fc";nroLabel=`#${e.nroOrdenTN}`;}
+                  else if(esFlex){nroColor="#84cc16";nroLabel=e.nroSeguimiento||e.id;}
+                  else if(esPV){nroColor="#c084fc";nroLabel=e.id;}
+                  else{nroColor="#f59e0b";nroLabel=e.nroOrdenTN?`#${e.nroOrdenTN}`:e.id;}
+                  return(
+                    <div style={{display:"flex",gap:"8px",alignItems:"baseline",marginBottom:"1px"}}>
+                      <span style={{color:nroColor,fontWeight:700,fontSize:"0.82rem",flexShrink:0}}>{nroLabel}</span>
+                      {nombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nombre}</span>}
+                    </div>);
+                })()}
+                <div style={{color:e.clienteNombre||e.destinatario?"#9ca3af":"#e5e7eb",fontSize:"0.82rem",fontWeight:500}}>{e.direccion}{e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20))?<span style={{color:"#6b7280",fontWeight:400}}> — {e.referencia}</span>:null}</div>
                 <div style={{color:"#6b7280",fontSize:"0.72rem",marginTop:"1px"}}>{e.localidad?e.localidad+" · ":""}{e.partido}{e.cp?" · CP "+e.cp:""}</div>
                 {e.telefono&&<div style={{color:"#6b7280",fontSize:"0.72rem"}}>📞 {e.telefono}</div>}
                 {/* Info expandida */}
@@ -7988,7 +8002,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
                               </>}
                               {esManual&&<>
                                 <span style={{background:"#1a0e2e",color:"#a78bfa",border:"1px solid #4b1d8e",padding:"1px 5px",borderRadius:"4px",fontSize:"0.6rem",fontWeight:700,flexShrink:0}}>MANUAL</span>
-                                <span style={{color:"#6b7280",fontFamily:"monospace",fontSize:"0.68rem"}}>...{e.id.slice(-6)}</span>
+                                <span style={{color:"#f59e0b",fontWeight:700,fontSize:"0.72rem"}}>{e.nroOrdenTN?`#${e.nroOrdenTN}`:e.id}</span>
                               </>}
                               {e.turno&&<Bdg label={e.turno} bg={TURNO_C[e.turno]?.bg||"#130d2a"} t={TURNO_C[e.turno]?.c||"#a78bfa"}/>}
                               {e.preparado&&<Bdg label={"✓ "+(e.bultos||1)+"b"+(e.armadorNombre?" · "+e.armadorNombre:"")} bg="#041f14" t="#10b981"/>}
