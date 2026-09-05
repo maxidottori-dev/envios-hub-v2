@@ -1697,24 +1697,32 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                   {/* Nro orden + Nombre en la misma linea, luego direccion */}
                   {(()=>{
                     const esPV=e.pvCasoId||e.id?.startsWith("PV");
+                    const esFlex=e.origen==="ML";
+                    const nombre=e.clienteNombre||e.destinatario||"";
                     // TN: muestra #nroOrdenTN
                     if(esTN)return(
                       <div style={{display:"flex",gap:"8px",alignItems:"baseline",marginBottom:"1px",overflow:"hidden"}}>
                         <span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.82rem",flexShrink:0}}>#{e.nroOrdenTN}</span>
-                        {e.clienteNombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.clienteNombre}</span>}
+                        {nombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nombre}</span>}
+                      </div>);
+                    // FLEX: muestra nroSeguimiento prominente
+                    if(esFlex)return(
+                      <div style={{display:"flex",gap:"8px",alignItems:"baseline",marginBottom:"1px",overflow:"hidden"}}>
+                        <span style={{color:"#4ade80",fontWeight:700,fontSize:"0.82rem",flexShrink:0}}>{e.nroSeguimiento||e.id}</span>
+                        {nombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nombre}</span>}
                       </div>);
                     // PostVenta: muestra ID en violeta
                     if(esPV)return(
                       <div style={{display:"flex",gap:"8px",alignItems:"baseline",marginBottom:"1px",overflow:"hidden"}}>
                         <span style={{color:"#c084fc",fontWeight:700,fontSize:"0.82rem",flexShrink:0}}>{e.id}</span>
-                        {e.clienteNombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.clienteNombre}</span>}
+                        {nombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nombre}</span>}
                       </div>);
                     // Manual: muestra #nroPedido si tiene, sino e.id — siempre prominente
                     const nroManual=e.nroOrdenTN?`#${e.nroOrdenTN}`:e.id;
                     return(
                       <div style={{display:"flex",gap:"8px",alignItems:"baseline",marginBottom:"1px",overflow:"hidden"}}>
                         <span style={{color:e.nroOrdenTN?"#7dd3fc":"#64748b",fontWeight:700,fontSize:"0.82rem",flexShrink:0}}>{nroManual}</span>
-                        {e.clienteNombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.clienteNombre}</span>}
+                        {nombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nombre}</span>}
                       </div>);
                   })()}
                   <div style={{color:e.clienteNombre?"#9ca3af":"#e5e7eb",fontSize:"0.8rem",lineHeight:1.35,textDecoration:getEstado(e)==="cancelado"?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",width:"100%",display:"block"}}>{e.direccion}{e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20))?" — "+e.referencia:""}</div>
