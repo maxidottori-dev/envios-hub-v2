@@ -1717,11 +1717,11 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                         <span style={{color:"#c084fc",fontWeight:700,fontSize:"0.82rem",flexShrink:0}}>{e.id}</span>
                         {nombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nombre}</span>}
                       </div>);
-                    // Manual: muestra #nroPedido si tiene, sino e.id — siempre prominente
+                    // Manual: muestra #nroPedido si tiene, sino e.id — en naranja igual que badge Manual
                     const nroManual=e.nroOrdenTN?`#${e.nroOrdenTN}`:e.id;
                     return(
                       <div style={{display:"flex",gap:"8px",alignItems:"baseline",marginBottom:"1px",overflow:"hidden"}}>
-                        <span style={{color:e.nroOrdenTN?"#7dd3fc":"#64748b",fontWeight:700,fontSize:"0.82rem",flexShrink:0}}>{nroManual}</span>
+                        <span style={{color:"#f59e0b",fontWeight:700,fontSize:"0.82rem",flexShrink:0}}>{nroManual}</span>
                         {nombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nombre}</span>}
                       </div>);
                   })()}
