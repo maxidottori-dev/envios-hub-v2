@@ -8652,45 +8652,45 @@ function TabStatsArmado({configExpedicion={},setConfigExpedicion=()=>{},esAdmin=
 
 function imprimirEtiquetas(envio,lc){
   const bultos=envio.bultos||1;
-  const lcD=lc[envio.trans]||{};
+  const esFlex=envio.origen==="ML";
+  const notas=envio.notasOrden||envio.notasCliente||"";
+  const css='@page{size:50mm 80mm;margin:2mm;}body{margin:0;padding:0;font-family:Arial,sans-serif;}@media print{button{display:none!important;}}.label{width:46mm;min-height:76mm;border:1.5px solid #333;border-radius:2px;padding:2mm 2.5mm;margin:0 auto 3mm;box-sizing:border-box;display:flex;flex-direction:column;page-break-after:always;}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.5mm;}.log-name{font-size:7.5pt;font-weight:900;color:#111;line-height:1;}.bulto-right{text-align:right;}.bulto-num{font-size:14pt;font-weight:900;color:#333;line-height:1;}.bulto-sub{font-size:5pt;color:#666;}.sep{border-top:0.5px solid #ccc;margin-bottom:1.5mm;}.dir{font-size:6.5pt;font-weight:700;color:#111;margin-bottom:0.8mm;line-height:1.2;}.zona{font-size:5.5pt;color:#555;margin-bottom:0.8mm;}.cliente{font-size:6pt;font-weight:700;color:#222;margin-bottom:0.5mm;}.tel{font-size:5.5pt;color:#555;margin-bottom:0.8mm;}.notas{font-size:5pt;color:#666;font-style:italic;border-left:1.5px solid #ccc;padding-left:1.5mm;margin-bottom:1mm;line-height:1.3;}.qr-area{display:flex;flex-direction:column;align-items:center;margin:1.5mm 0 0.5mm;}.qr-area canvas,.qr-area img{width:22mm!important;height:22mm!important;}.qr-num{font-size:6pt;font-weight:700;color:#333;text-align:center;margin-top:0.5mm;}.seguimiento{font-family:monospace;font-size:5pt;color:#555;margin:1mm 0;word-break:break-all;}.footer{display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto;padding-top:1mm;border-top:0.5px solid #eee;}.turno{display:inline-block;background:#f0f0f0;padding:0.5mm 2mm;border-radius:1mm;font-size:6pt;font-weight:700;color:#333;}.fecha{font-size:5pt;color:#666;margin-top:0.5mm;}.cobrar{font-size:6.5pt;font-weight:700;color:#b45309;text-align:right;}';
   const etqs=Array.from({length:bultos},(_,i)=>`
-    <div style="width:9cm;min-height:6cm;border:2px solid #333;border-radius:8px;padding:14px;margin:0 auto 16px;font-family:Arial,sans-serif;page-break-inside:avoid;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
-        <div>
-          <div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.04em;">EnviosHub · UMP Papel Distribuidora</div>
-          <div style="font-size:13px;font-weight:700;color:#333;margin-top:2px;">${envio.trans||"Sin asignar"}</div>
-        </div>
-        <div style="text-align:right;">
-          <div style="font-size:28px;font-weight:900;color:#333;line-height:1;">${i+1}/${bultos}</div>
-          <div style="font-size:10px;color:#666;">bulto${bultos>1?"s":""}</div>
+    <div class="label" id="label${i}">
+      <div class="header">
+        <div class="log-name">${envio.trans||"Sin asignar"}</div>
+        <div class="bulto-right">
+          <div class="bulto-num">${i+1}/${bultos}</div>
+          <div class="bulto-sub">bulto${bultos>1?"s":""}</div>
         </div>
       </div>
-      <div style="border-top:1px solid #ddd;padding-top:10px;margin-bottom:8px;">
-        <div style="font-size:15px;font-weight:700;color:#111;margin-bottom:4px;">${envio.direccion}</div>
-        <div style="font-size:12px;color:#444;">${[envio.localidad,envio.partido].filter(Boolean).join(" · ")}${envio.cp?" · CP "+envio.cp:""}</div>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:8px;">
+      <div class="sep"></div>
+      <div class="dir">${envio.direccion||""}</div>
+      <div class="zona">${[envio.localidad,envio.partido].filter(Boolean).join(" · ")}${envio.cp?" · CP "+envio.cp:""}</div>
+      ${envio.clienteNombre?'<div class="cliente">'+envio.clienteNombre+'</div>':""}
+      ${envio.telefono?'<div class="tel">📞 '+envio.telefono+'</div>':""}
+      ${notas?'<div class="notas">'+notas+'</div>':""}
+      ${!esFlex&&envio.nroOrdenTN?'<div class="qr-area"><div id="qr'+i+'"></div><div class="qr-num">#'+envio.nroOrdenTN+'</div></div>':""}
+      ${esFlex&&envio.nroSeguimiento?'<div class="seguimiento">'+envio.nroSeguimiento+'</div>':""}
+      <div class="footer">
         <div>
-          ${envio.turno?'<div style="display:inline-block;background:#f0f0f0;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;color:#333;">'+envio.turno+'</div>':""}
-          ${envio.fecha?'<div style="font-size:10px;color:#666;margin-top:3px;">'+envio.fecha+'</div>':""}
+          ${envio.turno?'<div class="turno">'+envio.turno+'</div>':""}
+          ${envio.fecha?'<div class="fecha">'+envio.fecha+'</div>':""}
         </div>
-        <div style="text-align:right;">
-          ${envio.origen==="ML"&&envio.nroSeguimiento?'<div style="font-family:monospace;font-size:10px;color:#666;">'+envio.nroSeguimiento+'</div>':""}
-          ${envio.nroOrdenTN?'<div style="font-size:11px;font-weight:700;color:#333;">#'+envio.nroOrdenTN+'</div>':""}
-          ${envio.cobranza?'<div style="font-size:13px;font-weight:700;color:#b45309;">Cobrar $'+Number(envio.cobranza).toLocaleString("es-AR")+'</div>':""}
+        <div>
+          ${envio.cobranza?'<div class="cobrar">Cobrar $'+Number(envio.cobranza).toLocaleString("es-AR")+'</div>':""}
         </div>
       </div>
     </div>`).join("");
-
+  const qrInits=!esFlex&&envio.nroOrdenTN
+    ?Array.from({length:bultos},(_,i)=>'new QRCode(document.getElementById("qr'+i+'"),{text:"'+envio.nroOrdenTN+'",width:90,height:90,colorDark:"#000",colorLight:"#fff"});').join("")
+    :"";
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Etiquetas</title>
-  <style>@page{size:A4;margin:10mm;}body{margin:0;padding:8px;}@media print{button{display:none!important;}}</style>
-  </head><body>
-  <div style="text-align:center;margin-bottom:12px;font-family:Arial;font-size:11px;color:#888;">
-    ${envio.direccion} · ${bultos} etiqueta${bultos>1?"s":""}
-  </div>
-  ${etqs}
-  <script>window.onload=function(){window.print();}<\/script>
-  </body></html>`;
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+<style>${css}</style>
+</head><body>${etqs}
+<script>window.onload=function(){${qrInits}setTimeout(function(){window.print();},400);};<\/script>
+</body></html>`;
   const w=window.open("","_blank");
   if(!w){alert("Permite ventanas emergentes.");return;}
   w.document.write(html);w.document.close();
@@ -8700,36 +8700,47 @@ function imprimirEtiquetas(envio,lc){
 function imprimirEtiquetasExtra(envio,lc){
   const bultos=envio.bultos||1;
   if(bultos<=1)return;
+  const esFlex=envio.origen==="ML";
+  const notas=envio.notasOrden||envio.notasCliente||"";
+  const css='@page{size:50mm 80mm;margin:2mm;}body{margin:0;padding:0;font-family:Arial,sans-serif;}@media print{button{display:none!important;}}.label{width:46mm;min-height:76mm;border:1.5px solid #333;border-radius:2px;padding:2mm 2.5mm;margin:0 auto 3mm;box-sizing:border-box;display:flex;flex-direction:column;page-break-after:always;}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.5mm;}.log-name{font-size:7.5pt;font-weight:900;color:#111;line-height:1;}.bulto-right{text-align:right;}.bulto-num{font-size:14pt;font-weight:900;color:#333;line-height:1;}.bulto-sub{font-size:5pt;color:#666;}.sep{border-top:0.5px solid #ccc;margin-bottom:1.5mm;}.dir{font-size:6.5pt;font-weight:700;color:#111;margin-bottom:0.8mm;line-height:1.2;}.zona{font-size:5.5pt;color:#555;margin-bottom:0.8mm;}.cliente{font-size:6pt;font-weight:700;color:#222;margin-bottom:0.5mm;}.tel{font-size:5.5pt;color:#555;margin-bottom:0.8mm;}.notas{font-size:5pt;color:#666;font-style:italic;border-left:1.5px solid #ccc;padding-left:1.5mm;margin-bottom:1mm;line-height:1.3;}.qr-area{display:flex;flex-direction:column;align-items:center;margin:1.5mm 0 0.5mm;}.qr-area canvas,.qr-area img{width:22mm!important;height:22mm!important;}.qr-num{font-size:6pt;font-weight:700;color:#333;text-align:center;margin-top:0.5mm;}.seguimiento{font-family:monospace;font-size:5pt;color:#555;margin:1mm 0;word-break:break-all;}.footer{display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto;padding-top:1mm;border-top:0.5px solid #eee;}.turno{display:inline-block;background:#f0f0f0;padding:0.5mm 2mm;border-radius:1mm;font-size:6pt;font-weight:700;color:#333;}.fecha{font-size:5pt;color:#666;margin-top:0.5mm;}.cobrar{font-size:6.5pt;font-weight:700;color:#b45309;text-align:right;}';
   const etqs=Array.from({length:bultos-1},(_,i)=>{
     const nb=i+2;
-    return`<div style="width:9cm;min-height:6cm;border:2px solid #333;border-radius:8px;padding:14px;margin:0 auto 16px;font-family:Arial,sans-serif;page-break-inside:avoid;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
-        <div>
-          <div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.04em;">EnviosHub · UMP Papel Distribuidora</div>
-          <div style="font-size:13px;font-weight:700;color:#333;margin-top:2px;">${envio.trans||"Sin asignar"}</div>
-        </div>
-        <div style="text-align:right;">
-          <div style="font-size:28px;font-weight:900;color:#333;line-height:1;">${nb}/${bultos}</div>
-          <div style="font-size:10px;color:#666;">bulto${bultos>1?"s":""}</div>
+    return`<div class="label" id="label${i}">
+      <div class="header">
+        <div class="log-name">${envio.trans||"Sin asignar"}</div>
+        <div class="bulto-right">
+          <div class="bulto-num">${nb}/${bultos}</div>
+          <div class="bulto-sub">bultos</div>
         </div>
       </div>
-      <div style="border-top:1px solid #ddd;padding-top:10px;margin-bottom:8px;">
-        <div style="font-size:15px;font-weight:700;color:#111;margin-bottom:4px;">${envio.direccion}</div>
-        <div style="font-size:12px;color:#444;">${[envio.localidad,envio.partido].filter(Boolean).join(" · ")}${envio.cp?" · CP "+envio.cp:""}</div>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:8px;">
+      <div class="sep"></div>
+      <div class="dir">${envio.direccion||""}</div>
+      <div class="zona">${[envio.localidad,envio.partido].filter(Boolean).join(" · ")}${envio.cp?" · CP "+envio.cp:""}</div>
+      ${envio.clienteNombre?'<div class="cliente">'+envio.clienteNombre+'</div>':""}
+      ${envio.telefono?'<div class="tel">📞 '+envio.telefono+'</div>':""}
+      ${notas?'<div class="notas">'+notas+'</div>':""}
+      ${!esFlex&&envio.nroOrdenTN?'<div class="qr-area"><div id="qr'+i+'"></div><div class="qr-num">#'+envio.nroOrdenTN+'</div></div>':""}
+      ${esFlex&&envio.nroSeguimiento?'<div class="seguimiento">'+envio.nroSeguimiento+'</div>':""}
+      <div class="footer">
         <div>
-          ${envio.turno?'<div style="display:inline-block;background:#f0f0f0;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;color:#333;">'+envio.turno+'</div>':""}
-          ${envio.fecha?'<div style="font-size:10px;color:#666;margin-top:3px;">'+envio.fecha+'</div>':""}
+          ${envio.turno?'<div class="turno">'+envio.turno+'</div>':""}
+          ${envio.fecha?'<div class="fecha">'+envio.fecha+'</div>':""}
         </div>
-        <div style="text-align:right;">
-          ${envio.nroOrdenTN?'<div style="font-size:11px;font-weight:700;color:#333;">#'+envio.nroOrdenTN+'</div>':""}
-          ${envio.cobranza?'<div style="font-size:13px;font-weight:700;color:#b45309;">Cobrar $'+Number(envio.cobranza).toLocaleString("es-AR")+'</div>':""}
+        <div>
+          ${envio.cobranza?'<div class="cobrar">Cobrar $'+Number(envio.cobranza).toLocaleString("es-AR")+'</div>':""}
         </div>
       </div>
     </div>`;
   }).join("");
-  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Etiquetas adicionales</title><style>@page{size:A4;margin:10mm;}body{margin:0;padding:8px;}@media print{button{display:none!important;}}</style></head><body><div style="text-align:center;margin-bottom:12px;font-family:Arial;font-size:11px;color:#888;">${envio.direccion} · bultos adicionales (${nb} de ${bultos})</div>${etqs}<script>window.onload=function(){window.print();};<\/script></body></html>`;
+  const qrInits=!esFlex&&envio.nroOrdenTN
+    ?Array.from({length:bultos-1},(_,i)=>'new QRCode(document.getElementById("qr'+i+'"),{text:"'+envio.nroOrdenTN+'",width:90,height:90,colorDark:"#000",colorLight:"#fff"});').join("")
+    :"";
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Etiquetas adicionales</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+<style>${css}</style>
+</head><body>${etqs}
+<script>window.onload=function(){${qrInits}setTimeout(function(){window.print();},400);};<\/script>
+</body></html>`;
   const w=window.open("","_blank");
   if(!w){alert("Permití ventanas emergentes para imprimir.");return;}
   w.document.write(html);w.document.close();
