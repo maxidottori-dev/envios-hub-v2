@@ -8072,17 +8072,26 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
                             <div style={{color:"#e5e7eb",fontSize:"0.85rem",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.clienteNombre||p.direccion||"—"}</div>
                             <div style={{color:"#6b7280",fontSize:"0.72rem",marginTop:"1px"}}>{p.direccion}{p.partido?" · "+p.partido:""}</div>
                           </div>
-                          <button
-                            onClick={()=>!esPrepared&&abrirPanelArmador({...p,_isOtro:true})}
-                            disabled={esPrepared}
-                            title={esPrepared?"Ya preparado":"Asignar armador"}
-                            style={{flexShrink:0,width:"34px",height:"34px",borderRadius:"8px",display:"flex",alignItems:"center",justifyContent:"center",cursor:esPrepared?"default":"pointer",fontSize:"0.95rem",
-                              background:esPrepared?"#0c1a10":"#0f1420",
-                              border:"1px solid "+(esPrepared?"#1D9E7544":"#252d40"),
-                              color:esPrepared?"#1D9E75":"#6b7280",
-                              transition:"all .15s",opacity:esPrepared?0.5:1}}>
-                            {esPrepared?"✓":"📦"}
-                          </button>
+                          <div style={{display:"flex",flexDirection:"column",gap:"4px",flexShrink:0}}>
+                            <button
+                              onClick={()=>!esPrepared&&abrirPanelArmador({...p,_isOtro:true})}
+                              disabled={esPrepared}
+                              title={esPrepared?"Ya preparado":"Asignar armador"}
+                              style={{width:"34px",height:"34px",borderRadius:"8px",display:"flex",alignItems:"center",justifyContent:"center",cursor:esPrepared?"default":"pointer",fontSize:"0.95rem",
+                                background:esPrepared?"#0c1a10":"#0f1420",
+                                border:"1px solid "+(esPrepared?"#1D9E7544":"#252d40"),
+                                color:esPrepared?"#1D9E75":"#6b7280",
+                                transition:"all .15s",opacity:esPrepared?0.5:1}}>
+                              {esPrepared?"✓":"📦"}
+                            </button>
+                            <button
+                              onClick={async()=>{if(!confirm("¿Archivar este pedido? Desaparecerá del listado."))return;await updateDoc(doc(db,"otrosPedidos",p.id),{estado:"archivado",archivadoTs:new Date().toISOString()});}}
+                              title="Archivar (desaparece del listado)"
+                              style={{width:"34px",height:"26px",borderRadius:"6px",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:"0.7rem",
+                                background:"transparent",border:"1px solid #374151",color:"#6b7280",transition:"all .15s"}}>
+                              ✕
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -9610,13 +9619,13 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false,configExpedicion=
                   {nextLabel(p)}
                 </button>
               )}
-              {(p.tipoOtro==="retiro_deposito"||p.tipoOtro==="a_convenir"||p.tipoOtro==="courier")&&!["archivado","cancelado","enviado","convertido_a_ump"].includes(p.estado)&&converting!==p.id&&(
+              {(p.tipoOtro==="retiro_deposito"||p.tipoOtro==="a_convenir"||p.tipoOtro==="courier")&&!["archivado","cancelado","convertido_a_ump"].includes(p.estado)&&p.estado!=="enviado"&&converting!==p.id&&(
                 <button onClick={()=>iniciarConversion(p)} disabled={!!working}
                   style={{padding:"4px 12px",borderRadius:"8px",fontSize:"0.72rem",fontWeight:700,cursor:"pointer",background:"#2e1065",border:"1px solid #7c3aed",color:"#c4b5fd",opacity:working?0.5:1}}>
                   → Convertir a UMP
                 </button>
               )}
-              {!["archivado","cancelado","enviado","convertido_a_ump"].includes(p.estado)&&(
+              {!["archivado","cancelado","convertido_a_ump"].includes(p.estado)&&(
                 <button onClick={()=>archivar(p)} disabled={!!working}
                   style={{padding:"4px 10px",borderRadius:"8px",fontSize:"0.72rem",fontWeight:600,cursor:"pointer",background:"transparent",border:"1px solid #374151",color:"#6b7280",opacity:working?0.5:1}}>
                   Archivar
@@ -9746,10 +9755,15 @@ function TabSalida({envios,setEnvios,lc,sesion}){
     return()=>clearTimeout(t);
   },[sesionIds,logSel,turnoSel,fecha,sesion]);
 
-  // Cargar firmante y sesión guardada desde localStorage; si no hay, intentar Firestore como fallback
+  // Cargar firmante por logística cuando se selecciona una
   useEffect(()=>{
-    const f=localStorage.getItem("salida_firmante_ultimo");
+    if(!logSel)return;
+    const f=localStorage.getItem(`salida_firmante_${logSel}`)||localStorage.getItem("salida_firmante_ultimo");
     if(f)setFirmante(f);
+  },[logSel]);
+
+  // Cargar sesión guardada desde localStorage; si no hay, intentar Firestore como fallback
+  useEffect(()=>{
     const s=localStorage.getItem("salida_sesion_activa");
     if(s){
       try{setSesionGuardadaOffer(JSON.parse(s));}catch(e){}
@@ -9815,16 +9829,13 @@ function TabSalida({envios,setEnvios,lc,sesion}){
     setLogSel(null);setTurnoSel([]);setLogPreSel(null);setSesionIds([]);setResultado(null);setQrInput("");setSelSalida(new Set());setModalCierre(false);setFirmaData(null);setNotasPendientes({});
   },[]);
 
-  // Despachar envíos seleccionados manualmente (sin escanear) — solo admin
+  // Agregar envíos seleccionados a la sesión manualmente (sin escanear) — solo admin
   const despacharSeleccionados=useCallback(()=>{
     if(!selSalida.size)return;
-    const ts=new Date().toISOString();
-    const despachoPor=sesion?.nombre||sesion?.email||"";
-    setEnvios(pv=>pv.map(e=>selSalida.has(e.id)?{...e,despachado:true,despachoTs:ts,despachoLogistica:logSel,despachoPor}:e));
     setSesionIds(prev=>[...[...selSalida].filter(id=>!prev.includes(id)),...prev]);
     setSelSalida(new Set());
     beepOK();
-  },[selSalida,logSel,sesion,setEnvios]);
+  },[selSalida,setEnvios]);
 
   // ── Pedidos del día para la logística + turno seleccionados ───────
   // Los envíos sin turno asignado (legacy) no se excluyen para no trabar pedidos viejos.
@@ -9951,10 +9962,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
       return;
     }
 
-    // ✅ Despachar (1 bulto)
-    const ts=new Date().toISOString();
-    const despachoPor=sesion?.nombre||sesion?.email||"";
-    setEnvios(pv=>pv.map(e=>e.id===best.id?{...e,despachado:true,despachoTs:ts,despachoLogistica:logSel,despachoPor}:e));
+    // ✅ Agregar a la sesión (el despacho se confirma al cerrar)
     setSesionIds(prev=>[best.id,...prev]);
     beepOK();
     setQrInput("");
@@ -10069,11 +10077,10 @@ function TabSalida({envios,setEnvios,lc,sesion}){
 
   const handleKey=e=>{if(e.key==="Enter"){procesarScan(qrInput);}};
 
-  // ── Des-despachar (undo) ──────────────────────────────────────────
+  // ── Liberar un envío de la sesión (undo scan) ────────────────────
   const desDespachar=useCallback((envioId)=>{
-    setEnvios(pv=>pv.map(e=>e.id===envioId?{...e,despachado:false,despachoTs:null,despachoLogistica:null,despachoPor:null}:e));
     setSesionIds(prev=>prev.filter(id=>id!==envioId));
-  },[setEnvios]);
+  },[]);
 
   // ── Colores UI ────────────────────────────────────────────────────
   const bg="#0a0e1a",card="#0f1420",brd="#1a1f2e",muted="#6b7280",ok="#10b981",err="#ef4444";
@@ -10516,6 +10523,11 @@ function TabSalida({envios,setEnvios,lc,sesion}){
     if(guardandoCierre)return;
     setGuardandoCierre(true);
     try{
+      // Marcar como despachados al cierre (no al escanear)
+      const ts=new Date().toISOString();
+      const despachoPor=sesion?.nombre||sesion?.email||"";
+      const sesionSet=new Set(sesionIds);
+      setEnvios(pv=>pv.map(e=>sesionSet.has(e.id)?{...e,despachado:true,despachoTs:ts,despachoLogistica:logSel,despachoPor}:e));
       const despachados_cierre=sesionIds.map(id=>enviosMap.get(id)).filter(Boolean);
       const totalFlex=despachados_cierre.filter(e=>(e.origen||"")==="ML").length;
       const totalNoFlex=despachados_cierre.length-totalFlex;
@@ -10617,8 +10629,8 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         doc.text(lineaFirma,60,y+9,{align:"center"});
         doc.save(`salida_${logSel}_${Array.isArray(turnoSel)?turnoSel.join("-"):turnoSel}_${fecha}.pdf`);
       }
-      // Guardar firmante para autocompletar en próximas sesiones
-      if(firmanteNombre)localStorage.setItem("salida_firmante_ultimo",firmanteNombre);
+      // Guardar firmante por logística para autocompletar en próximas sesiones
+      if(firmanteNombre)localStorage.setItem(`salida_firmante_${logSel}`,firmanteNombre);
       // Limpiar sesión activa del localStorage y Firestore
       localStorage.removeItem("salida_sesion_activa");
       deleteDoc(doc(db,"sesionesSalidaActiva","activa_"+(sesion?.id||"anon"))).catch(()=>{});
@@ -10859,9 +10871,6 @@ function TabSalida({envios,setEnvios,lc,sesion}){
             </div>
             <div style={{display:"flex",gap:"10px"}}>
               <button onClick={()=>{
-                const ts=new Date().toISOString();
-                const despachoPor=sesion?.nombre||sesion?.email||"";
-                setEnvios(pv=>pv.map(e=>e.id===confirmBultos.id?{...e,despachado:true,despachoTs:ts,despachoLogistica:logSel,despachoPor}:e));
                 setSesionIds(prev=>[confirmBultos.id,...prev]);
                 beepOK();
                 setResultado({ok:true,envio:confirmBultos,msg:`✓ ${confirmBultos.bultos} bultos despachados: ${confirmBultos.nroOrdenTN?"#"+confirmBultos.nroOrdenTN+" — ":""}${confirmBultos.direccion}`});
@@ -10878,28 +10887,6 @@ function TabSalida({envios,setEnvios,lc,sesion}){
           </div>
         </div>
       )}
-
-      {/* Alerta: pedidos preparados sin logística asignada */}
-      {(()=>{
-        const sinAsignarPrep=envios.filter(e=>{
-          const f=e.fecha||e.fechaVenta||"";
-          return f===fecha&&!e.trans&&e.preparado&&e.estado!=="cancelado";
-        });
-        if(!sinAsignarPrep.length)return null;
-        return(
-          <div style={{background:"#1c1000",border:"1px solid #92400e",borderRadius:"10px",padding:"0.75rem 1rem",marginBottom:"0.75rem",display:"flex",alignItems:"flex-start",gap:"10px"}}>
-            <span style={{fontSize:"1.1rem",flexShrink:0}}>⚠️</span>
-            <div>
-              <div style={{color:"#fbbf24",fontWeight:700,fontSize:"0.82rem"}}>
-                {sinAsignarPrep.length} pedido{sinAsignarPrep.length!==1?"s":""} preparado{sinAsignarPrep.length!==1?"s":""} sin logística asignada
-              </div>
-              <div style={{color:"#d97706",fontSize:"0.72rem",marginTop:"2px"}}>
-                {sinAsignarPrep.map(e=>nroRef(e)||dirCorta(e.direccion)).join(", ")}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* PENDIENTES DE ESCANEAR */}
       <div style={{background:card,border:`1px solid ${brd}`,borderRadius:"14px",padding:"1.2rem",marginBottom:"0.75rem"}}>
@@ -10982,7 +10969,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
                 </div>
                 <button onClick={()=>desDespachar(e.id)}
                   style={{padding:"0.25rem 0.55rem",borderRadius:"6px",background:"transparent",border:"1px solid #374151",color:muted,cursor:"pointer",fontSize:"0.68rem",fontWeight:600,flexShrink:0}}>
-                  Deshacer
+                  ✕ Liberar
                 </button>
               </div>
             ))}
@@ -11028,13 +11015,18 @@ export default function App(){
   const [colectas,setColectas]=useState([]); // colectas ML pendientes de armado (estado=pendiente)
   const [otrosPedidos,setOtrosPedidos]=useState([]);
   useEffect(()=>{
-    // Solo activos (excluye despachado/cancelado/convertido) para no cargar histórico
-    const q=query(collection(db,"otrosPedidos"),where("estado","in",["pendiente","por_preparar","en_expedicion","preparado","enviado"]));
+    // Traer todos salvo convertido_a_ump/despachado (incluye archivado/cancelado para que el filtro local los excluya en tiempo real)
+    const q=query(collection(db,"otrosPedidos"),where("estado","not-in",["convertido_a_ump","despachado"]));
     const unsub=onSnapshot(q,snap=>{
       const docs=snap.docs.map(d=>({...d.data(),id:d.id}));
       docs.sort((a,b)=>(b.fechaVenta||"").localeCompare(a.fechaVenta||""));
       setOtrosPedidos(docs);
     },err=>console.error("otrosPedidos:",err));
+    // Sincronizar automáticamente con TN: archiva los que TN ya cerró
+    fetch("/api/sync-otros-archivados",{method:"POST"})
+      .then(r=>r.json())
+      .then(d=>console.log("sync-otros-archivados:",d))
+      .catch(err=>console.warn("sync-otros-archivados error:",err));
     return()=>unsub();
   },[]);
   useEffect(()=>{

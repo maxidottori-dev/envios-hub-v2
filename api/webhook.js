@@ -262,6 +262,13 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, skipped: "convertido_a_ump", envioExists: envioSnap.exists });
     }
 
+    // TN archiva → archivado (tiene prioridad sobre el check de terminal)
+    if (order.status === "closed" && otroData.estado !== "archivado") {
+      await otroRef.update({ estado: "archivado", archivadoTs: new Date().toISOString() });
+      console.log("WEBHOOK OTRO CLOSED→ARCHIVADO", order.id);
+      return res.status(200).json({ ok: true, action: "otro_archivado" });
+    }
+
     // Estados terminales: no tocar
     if (["cancelado", "archivado", "despachado"].includes(otroData.estado)) {
       return res.status(200).json({ ok: true, skipped: "otro terminal state", estado: otroData.estado });
@@ -272,13 +279,6 @@ export default async function handler(req, res) {
       await otroRef.update({ estado: "cancelado" });
       console.log("WEBHOOK OTRO CANCELLED", order.id);
       return res.status(200).json({ ok: true, action: "otro_cancelled" });
-    }
-
-    // TN archiva → archivado
-    if (order.status === "closed") {
-      await otroRef.update({ estado: "archivado", archivadoTs: new Date().toISOString() });
-      console.log("WEBHOOK OTRO CLOSED→ARCHIVADO", order.id);
-      return res.status(200).json({ ok: true, action: "otro_archivado" });
     }
 
     const update = { notasOrden: order.owner_note || "", notasCliente: order.note || "" };
