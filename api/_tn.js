@@ -42,12 +42,84 @@ export function esEfectivo(order) {
 }
 
 export function getPagoEstadoInicial(order) {
-  // Pagado: payment_status = paid
+  // Pagado explícito
   if (order.payment_status === "paid") return "pagado";
-  // Efectivo contra entrega: se cobra en el momento, no bloquear
-  if (esEfectivo(order)) return "pagado";
-  // Todo lo demás (A convenir, transferencia pendiente, etc): pendiente
+  // Autorizado (Pago Nube aprobado, pendiente de acreditación al comercio)
+  if (order.payment_status === "authorized") return "pagado";
+  // Pagos offline (efectivo, a convenir, transferencia manual) — se cobra fuera de TN
+  const gw = (order.gateway || "").toLowerCase();
+  if (gw === "offline") return "pagado";
+  // Orden cerrada en TN → pago confirmado
+  if (order.status === "closed") return "pagado";
+  // Todo lo demás: pendiente
   return "pendiente";
+}
+
+// Clasifica un pedido no-UMP en tipoOtro + carrier
+export function clasificarOtro(shipping_option) {
+  const s = (shipping_option || "").toUpperCase();
+  if (s.includes("UMPAPEL DISTRIBUIDORA") || s.includes("RETIRADO EN PUNTO DE VENTA")) {
+    return { tipoOtro: "retiro_deposito", carrier: null };
+  }
+  if (s.includes("A CONVENIR") || s.includes("CONVENIR")) {
+    return { tipoOtro: "a_convenir", carrier: null };
+  }
+  // courier — detectar transportista; fallback = nombre real del método de envío
+  let carrier = null;
+  if      (s.includes("OCA"))                                                        carrier = "OCA";
+  else if (s.includes("ANDREANI"))                                                    carrier = "Andreani";
+  else if (s.includes("RÁPIDA") || s.includes("RAPIDA") || s.includes("EPICK") || s.includes("E-PICK")) carrier = "E-pick";
+  else if (s.includes("CORREO"))                                                      carrier = "Correo Arg.";
+  else if (s.includes("VIA CARGO") || s.includes("VIACARGO"))                        carrier = "Via Cargo";
+  else if (s.includes("URBANO"))                                                      carrier = "Urbano";
+  else if (s.includes("LIQEN"))                                                       carrier = "Liqen";
+  // Si no se detectó, usar el nombre del método de envío directamente (sin "Otro")
+  if (!carrier) carrier = shipping_option || "Courier";
+  return { tipoOtro: "courier", carrier };
+}
+
+// Mapea una orden de TN → documento para la colección otrosPedidos
+export function ordenAOtroPedido(order) {
+  const ship = order.shipping_address || {};
+  const cp   = String(ship.zipcode || order.billing_zipcode || "").replace(/\D/g, "");
+  const calleNum  = [ship.address, ship.number].filter(Boolean).join(" ");
+  const pisoDepto = ship.floor ? "Piso/Dto " + ship.floor : "";
+  const dir       = [calleNum, pisoDepto].filter(Boolean).join(", ");
+  const ciudad    = ship.city     || order.billing_city     || "";
+  const localidad = ship.locality || order.billing_locality || "";
+  const partido   = cpAPartido(cp) || localidad || ciudad;
+  const alertaSinDireccion = !dir || !cp;
+  const { tipoOtro, carrier } = clasificarOtro(order.shipping_option);
+
+  return {
+    id:             String(order.id),
+    origen:         "Tienda Nube",
+    idTN:           order.id,
+    nroOrdenTN:     String(order.number || order.id),
+    linkTN:         `https://umpapeldistribuidora.mitiendanube.com/admin/orders/${order.id}`,
+    clienteNombre:  getNombreCliente(order),
+    telefono:       order.contact_phone || ship.phone || "",
+    direccion:      dir || "SIN DIRECCION",
+    ciudad,
+    localidad,
+    cp,
+    partido,
+    provincia:      ship.province || order.billing_province || "",
+    alertaDireccion: alertaSinDireccion,
+    formaPago:      getFormaPago(order),
+    importeOrden:   parseFloat(order.total) || 0,
+    notasOrden:     order.owner_note || "",
+    notasCliente:   order.note      || "",
+    fechaVenta:     (order.created_at || "").split("T")[0],
+    tipoOtro,
+    carrier:        carrier || null,
+    empresa:        "",
+    metodEnvio:     order.shipping_option || "",
+    fulfillmentId:  order.fulfillments?.[0]?.id || null,
+    estado:         "pendiente",
+    pagoEstado:     getPagoEstadoInicial(order),
+    observaciones:  alertaSinDireccion ? "ALERTA: sin direccion o CP" : "",
+  };
 }
 
 export function ordenAEnvio(order) {
@@ -62,29 +134,28 @@ export function ordenAEnvio(order) {
   const partido  = cpAPartido(cp) || localidad || ciudad;
   const alertaSinDireccion = !dir || !cp;
 
-  // IMPORTANTE: en TN, owner_note son MIS notas (donde va el datepicker)
-  //             note son las notas del CLIENTE
-  const notasOrden   = order.owner_note || "";   // mis notas — editable, contiene datepicker
-  const notasCliente = order.note || "";          // notas del cliente — solo lectura
+  // En TN: note = nota del CLIENTE (checkout, donde Smile Datepicker escribe)
+  //         owner_note = nota del DUEÑO de la tienda (interna)
+  const notasOrden   = order.owner_note || "";   // nota interna del dueño
+  const notasCliente = order.note || "";          // nota del cliente (contiene el datepicker)
 
-  const { fecha, turno, datepickerRaw } = parsearDatepicker(notasOrden);
+  const { fecha, turno, datepickerRaw } = parsearDatepicker(notasCliente);
   const formaPago  = getFormaPago(order);
   const efectivo   = esEfectivo(order);
   const importeOrden = parseFloat(order.total) || 0;
 
   return {
     id:            String(order.id),
-    origen:        "Tienda Nube",
-    idTN:          order.id,
+    tipo:          "TN",
+    origen:        "Tienda Nube",  // deprecated — usar tipo
     nroOrdenTN:    String(order.number || order.id),
     nroSeguimiento: "",
     linkTN:        `https://umpapeldistribuidora.mitiendanube.com/admin/orders/${order.id}`,
-    linkML:        "",
     clienteNombre: getNombreCliente(order),
     telefono:      order.contact_phone || ship.phone || "",
     direccion:     dir || "SIN DIRECCION",
     ciudad,
-    localidad,     // barrio
+    localidad,
     cp,
     partido,
     provincia:     ship.province || order.billing_province || "",
@@ -94,18 +165,17 @@ export function ordenAEnvio(order) {
     cobranza:      efectivo ? importeOrden : null,
     notasOrden,
     notasCliente,
-    datepickerRaw,
     fechaVenta:    (order.created_at || "").split("T")[0],
     fecha,
     turno,
     trans:         "",
     pagoEstado:    getPagoEstadoInicial(order),
     estado:        "sin_asignar",
-    importe:       0,
-    bultos:        null,  // NO FLEX — se ingresa manualmente
-    cambio:        null,
+    tarifaLog:     0,
+    bultos:        0,
     retiro:        null,
     observaciones: alertaSinDireccion ? "ALERTA: sin direccion o CP" : "",
     metodEnvio:    order.shipping_option || "",
+    fulfillmentId: order.fulfillments?.[0]?.id || null,
   };
 }
