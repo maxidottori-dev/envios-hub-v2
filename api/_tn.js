@@ -137,12 +137,10 @@ export function ordenAEnvio(order) {
   // En TN: note = nota manual del cliente (instrucciones de entrega, etc.)
   //         customer_note = nota estructurada del cliente (donde Smile Datepicker escribe)
   //         owner_note = nota interna del dueño de la tienda
-  const notasOrden   = order.owner_note || "";   // nota interna del dueño
-  const notasCliente = order.note || "";          // instrucciones manuales del cliente
-  // Smile Datepicker escribe en customer_note; fallback a note por si varía entre versiones
-  const notasDatepicker = order.customer_note || order.note || "";
-
-  const { fecha, turno, datepickerRaw } = parsearDatepicker(notasDatepicker);
+  const notasOrden   = order.owner_note || "";   // nota del dueño — Smile Datepicker escribe aquí
+  const notasCliente = order.note || "";          // nota manual del cliente (instrucciones de entrega)
+  // Smile Datepicker escribe en owner_note (verificado con API real de TN)
+  const { fecha, turno, datepickerRaw } = parsearDatepicker(notasOrden);
   const formaPago  = getFormaPago(order);
   const efectivo   = esEfectivo(order);
   const importeOrden = parseFloat(order.total) || 0;

@@ -61,9 +61,8 @@ export default async function handler(req, res) {
     if (topicFinal === "order/updated") {
       const notasOrden   = order.owner_note || "";
       const notasCliente = order.note || "";
-      // Smile Datepicker escribe en order.customer_note; fallback a order.note por compatibilidad
-      const notasDatepicker = order.customer_note || order.note || "";
-      const { fecha, turno, datepickerRaw } = parsearDatepicker(notasDatepicker);
+      // Smile Datepicker escribe en owner_note (verificado con API real de TN)
+      const { fecha, turno, datepickerRaw } = parsearDatepicker(notasOrden);
 
       if (!existing.exists) {
         const envio = ordenAEnvio(order);

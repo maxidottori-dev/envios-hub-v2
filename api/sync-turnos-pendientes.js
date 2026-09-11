@@ -39,9 +39,9 @@ export default async function handler(req, res) {
   await Promise.all(candidatos.map(async (e) => {
     try {
       // Primero intentar parsear desde Firestore.
+      // Smile Datepicker escribe en owner_note → guardado como notasOrden en Firestore.
       // e.datepickerRaw contiene el texto raw del datepicker si ya fue guardado.
-      // e.notasCliente contiene la nota manual del cliente (no el datepicker).
-      let { fecha, turno, datepickerRaw } = parsearDatepicker(e.datepickerRaw || "");
+      let { fecha, turno, datepickerRaw } = parsearDatepicker(e.datepickerRaw || e.notasOrden || "");
 
       // Si no hay turno en Firestore, ir a buscar a TN
       if (!turno) {
@@ -53,8 +53,8 @@ export default async function handler(req, res) {
         );
         if (!resp.ok) return;
         const order = await resp.json();
-        // Smile Datepicker escribe en order.customer_note; fallback a order.note
-        ({ fecha, turno, datepickerRaw } = parsearDatepicker(order.customer_note || order.note || ""));
+        // Smile Datepicker escribe en order.owner_note (verificado con API real de TN)
+        ({ fecha, turno, datepickerRaw } = parsearDatepicker(order.owner_note || ""));
         if (!turno) return; // genuinamente sin turno todavía
       }
 
