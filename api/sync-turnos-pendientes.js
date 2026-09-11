@@ -38,8 +38,10 @@ export default async function handler(req, res) {
 
   await Promise.all(candidatos.map(async (e) => {
     try {
-      // Primero intentar parsear desde Firestore (notasCliente = nota del cliente = datepicker)
-      let { fecha, turno, datepickerRaw } = parsearDatepicker(e.notasCliente || "");
+      // Primero intentar parsear desde Firestore.
+      // e.datepickerRaw contiene el texto raw del datepicker si ya fue guardado.
+      // e.notasCliente contiene la nota manual del cliente (no el datepicker).
+      let { fecha, turno, datepickerRaw } = parsearDatepicker(e.datepickerRaw || "");
 
       // Si no hay turno en Firestore, ir a buscar a TN
       if (!turno) {

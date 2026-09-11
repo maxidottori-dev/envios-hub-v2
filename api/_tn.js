@@ -171,6 +171,7 @@ export function ordenAEnvio(order) {
     fechaVenta:    (order.created_at || "").split("T")[0],
     fecha,
     turno,
+    datepickerRaw,
     trans:         "",
     pagoEstado:    getPagoEstadoInicial(order),
     estado:        "sin_asignar",
