@@ -3262,7 +3262,7 @@ function TabTarifas({zc,setZc,lc,setLc,mlTarifas=ML_TARIFAS_INIT,setMlTarifas}){
                 ))}
               </div>}
               {tipoMx==="flex"&&historialFlex.length>0&&<div style={{minWidth:"220px"}}>
-                <div style={{color:"#4b5563",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px",color:"#84cc16"}}>Historial FLEX</div>
+                <div style={{fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px",color:"#84cc16"}}>Historial FLEX</div>
                 {[...historialFlex].sort((a,b)=>b.vigenciaDesde.localeCompare(a.vigenciaDesde)).map((h,i)=>(
                   <div key={i} style={{fontSize:"0.72rem",color:"#6b7280",padding:"4px 0",borderBottom:"1px solid #1a1f2e",display:"flex",alignItems:"center",gap:"6px"}}>
                     <span style={{flex:1}}>Desde {h.vigenciaDesde} · {Object.keys(h.tarifaMatrix||{}).length} zonas</span>
