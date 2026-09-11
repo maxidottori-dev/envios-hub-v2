@@ -11054,6 +11054,10 @@ export default function App(){
       .then(r=>r.json())
       .then(d=>console.log("sync-turnos-pendientes:",d))
       .catch(err=>console.warn("sync-turnos-pendientes error:",err));
+    fetch("/api/recover-cobranzas-efectivo",{method:"POST"})
+      .then(r=>r.json())
+      .then(d=>console.log("recover-cobranzas-efectivo:",d))
+      .catch(err=>console.warn("recover-cobranzas-efectivo error:",err));
     return()=>unsub();
   },[]);
   useEffect(()=>{

@@ -26,16 +26,16 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Firestore query failed", detail: e.message });
   }
 
-  // Caso 2: efectivo con cobranza pendiente (cobranzaRecibida no seteada)
-  // Identificamos efectivo por: cobranza > 0, origen TN, sin_asignar o asignado (no cancelado)
+  // Caso 2: efectivo con cobranza pendiente.
+  // NO usamos cobranzaRecibida===false porque el campo puede no existir (undefined).
+  // En cambio buscamos cobranza > 0, que identifica pedidos efectivo con cobro pendiente.
   let snapEfectivo;
   try {
     snapEfectivo = await db.collection("envios")
       .where("origen", "==", "Tienda Nube")
-      .where("cobranzaRecibida", "==", false)
+      .where("cobranza", ">", 0)
       .get();
   } catch(e) {
-    // Si el índice no existe todavía, ignorar silenciosamente
     snapEfectivo = { docs: [] };
   }
 
