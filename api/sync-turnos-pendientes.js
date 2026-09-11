@@ -59,9 +59,9 @@ export default async function handler(req, res) {
       }
 
       const update = { turno, turnoSyncTs: ts };
-      // Si también faltaba fecha, actualizarla
-      if (!e.fecha && fecha) update.fecha = fecha;
-      if (datepickerRaw && !e.datepickerRaw) update.datepickerRaw = datepickerRaw;
+      // Actualizar fecha desde el datepicker (fuente de verdad)
+      if (fecha) update.fecha = fecha;
+      if (datepickerRaw) update.datepickerRaw = datepickerRaw;
 
       await db.collection("envios").doc(e.docId).update(update);
       console.log(`SYNC_TURNOS turno=${turno} fecha=${fecha||e.fecha}`, e.id);

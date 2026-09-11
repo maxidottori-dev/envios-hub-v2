@@ -5304,22 +5304,45 @@ function TabLocalidades({cpExtra,setCpExtra}) {
 // ════════════════════════════════════════════════════════════════════
 // PANTALLA ASIGNACION TN — agrupa por fecha+turno, pre-rellena fecha/turno
 // ════════════════════════════════════════════════════════════════════
-function PantallaAsignacionTN({borrador,onConfirmar,onCancelar,lc,sesion=null}){
+function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCancelar,lc,sesion=null}){
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   // Pre-inicializar asig con fecha y turno del datepicker
-  const initAsig=()=>{const a={};borrador.forEach(e=>{a[e.id]={trans:"",fecha:e.fecha||fechaHoy(),turno:e.turno||""};});return a;};
+  const initAsig=()=>{const a={};borrador.forEach(e=>{a[e.id]={trans:"",fecha:e.fecha||"",turno:e.turno||""};});return a;};
   const [asig,setAsig]=useState(initAsig);
-  const getA=id=>asig[id]||{trans:"",fecha:fechaHoy(),turno:""};
+  const getA=id=>asig[id]||{trans:"",fecha:"",turno:""};
   const setA=(id,k,v)=>setAsig(p=>({...p,[id]:{...getA(id),[k]:v}}));
   const setGrupo=(ids,k,v)=>setAsig(p=>{const n={...p};ids.forEach(id=>{n[id]={...getA(id),[k]:v}});return n;});
   const getGrupo=(ids,k)=>{const vals=[...new Set(ids.map(id=>getA(id)[k]||""))];return vals.length===1?vals[0]:"";};
 
-  // Agrupar por fecha + turno
+  // Cuando Firestore empuja datos nuevos (sync-turnos-pendientes actualizó fecha/turno),
+  // mergear al asig sin pisar elecciones de trans que el usuario ya hizo.
+  useEffect(()=>{
+    if(!enviosFresh.length)return;
+    const map=Object.fromEntries(enviosFresh.map(e=>[e.id,e]));
+    setAsig(prev=>{
+      let changed=false;
+      const next={...prev};
+      borrador.forEach(e=>{
+        const fresh=map[e.id];
+        if(!fresh)return;
+        const cur=next[e.id]||{trans:"",fecha:"",turno:""};
+        const newFecha=cur.fecha||fresh.fecha||"";
+        const newTurno=cur.turno||fresh.turno||"";
+        if(newFecha!==cur.fecha||newTurno!==cur.turno){
+          next[e.id]={...cur,fecha:newFecha,turno:newTurno};
+          changed=true;
+        }
+      });
+      return changed?next:prev;
+    });
+  },[enviosFresh]);
+
+  // Agrupar por fecha + turno (usa asig, que refleja datos frescos de Firestore)
   const grupos={};
   borrador.forEach(e=>{
     const a=getA(e.id);
-    const key=(e.fecha||"Sin fecha")+"|"+(e.turno||"Sin turno");
-    if(!grupos[key])grupos[key]={fecha:e.fecha||"",turno:e.turno||"",envios:[]};
+    const key=(a.fecha||"Sin fecha")+"|"+(a.turno||"Sin turno");
+    if(!grupos[key])grupos[key]={fecha:a.fecha||"",turno:a.turno||"",envios:[]};
     grupos[key].envios.push(e);
   });
   const grupoKeys=Object.keys(grupos).sort();
@@ -11334,7 +11357,7 @@ export default function App(){
   }
 
   if(pantalla==="asignacion"){return<PantallaAsignacion borrador={borrador} fileName={fileName} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc} envios={envios} sesion={sesion}/>;}
-  if(pantalla==="asignacion-tn"){return<PantallaAsignacionTN borrador={borrador} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc} sesion={sesion}/>;}
+  if(pantalla==="asignacion-tn"){return<PantallaAsignacionTN borrador={borrador} envios={envios} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc} sesion={sesion}/>;}
 
   const esAdmin=sesion?.rol==="admin";
   const esColaborador=sesion?.rol==="colaborador";
