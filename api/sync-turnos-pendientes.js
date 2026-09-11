@@ -51,8 +51,8 @@ export default async function handler(req, res) {
         );
         if (!resp.ok) return;
         const order = await resp.json();
-        // El datepicker escribe en order.note (nota del cliente)
-        ({ fecha, turno, datepickerRaw } = parsearDatepicker(order.note || ""));
+        // Smile Datepicker escribe en order.customer_note; fallback a order.note
+        ({ fecha, turno, datepickerRaw } = parsearDatepicker(order.customer_note || order.note || ""));
         if (!turno) return; // genuinamente sin turno todavía
       }
 

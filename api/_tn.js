@@ -134,12 +134,15 @@ export function ordenAEnvio(order) {
   const partido  = cpAPartido(cp) || localidad || ciudad;
   const alertaSinDireccion = !dir || !cp;
 
-  // En TN: note = nota del CLIENTE (checkout, donde Smile Datepicker escribe)
-  //         owner_note = nota del DUEÑO de la tienda (interna)
+  // En TN: note = nota manual del cliente (instrucciones de entrega, etc.)
+  //         customer_note = nota estructurada del cliente (donde Smile Datepicker escribe)
+  //         owner_note = nota interna del dueño de la tienda
   const notasOrden   = order.owner_note || "";   // nota interna del dueño
-  const notasCliente = order.note || "";          // nota del cliente (contiene el datepicker)
+  const notasCliente = order.note || "";          // instrucciones manuales del cliente
+  // Smile Datepicker escribe en customer_note; fallback a note por si varía entre versiones
+  const notasDatepicker = order.customer_note || order.note || "";
 
-  const { fecha, turno, datepickerRaw } = parsearDatepicker(notasCliente);
+  const { fecha, turno, datepickerRaw } = parsearDatepicker(notasDatepicker);
   const formaPago  = getFormaPago(order);
   const efectivo   = esEfectivo(order);
   const importeOrden = parseFloat(order.total) || 0;
