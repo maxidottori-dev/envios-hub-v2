@@ -46,9 +46,10 @@ export function getPagoEstadoInicial(order) {
   if (order.payment_status === "paid") return "pagado";
   // Autorizado (Pago Nube aprobado, pendiente de acreditación al comercio)
   if (order.payment_status === "authorized") return "pagado";
-  // Pagos offline (efectivo, a convenir, transferencia manual) — se cobra fuera de TN
-  const gw = (order.gateway || "").toLowerCase();
-  if (gw === "offline") return "pagado";
+  // Pagos offline: distinguir Efectivo (se cobra a la entrega → pagado) de A convenir u otros (pago no confirmado → pendiente)
+  const gw     = (order.gateway || "").toLowerCase();
+  const gwName = (order.gateway_name || "").toUpperCase();
+  if (gw === "offline" && gwName.includes("EFECTIVO")) return "pagado";
   // Orden cerrada en TN → pago confirmado
   if (order.status === "closed") return "pagado";
   // Todo lo demás: pendiente
