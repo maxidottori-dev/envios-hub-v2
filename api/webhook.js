@@ -58,7 +58,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, action: "created", id: envio.id });
     }
 
-    if (topicFinal === "order/updated") {
+    if (topicFinal === "order/updated" || topicFinal === "order/cancelled") {
       const notasOrden   = order.owner_note || "";
       const notasCliente = order.note || "";
       // Smile Datepicker escribe en owner_note (verificado con API real de TN)
@@ -200,7 +200,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, action: "otro_created", tipoOtro: otro.tipoOtro });
   }
 
-  if (topicFinal === "order/updated") {
+  if (topicFinal === "order/updated" || topicFinal === "order/cancelled") {
     // El pedido actualizó su método de envío a LOGISTICA UMP → moverlo a envios
     if (metodo.includes("LOGISTICA UMP")) {
       const envioRef = db.collection("envios").doc(String(order.id));

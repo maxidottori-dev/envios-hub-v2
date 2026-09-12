@@ -10,7 +10,7 @@ export default async function handler(req, res) {
   const webhookUrl = `https://${APP_URL}/api/webhook`;
   const results = [];
 
-  for (const event of ["order/created", "order/updated"]) {
+  for (const event of ["order/created", "order/updated", "order/cancelled"]) {
     const resp = await fetch(`https://api.tiendanube.com/v1/${TN_STOREID}/webhooks`, {
       method: "POST",
       headers: {
