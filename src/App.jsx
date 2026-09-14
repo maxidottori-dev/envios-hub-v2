@@ -2155,24 +2155,30 @@ function TabImprimir({envios,setEnvios,zc,lc}){
 // ════════════════════════════════════════════════════════════════════
 // TAB POST VENTA
 // ════════════════════════════════════════════════════════════════════
-const TIPOS_PV=[
-  {k:"faltante",          l:"Faltante"},
-  {k:"cruce_etiqueta",    l:"Cruce de etiqueta"},
-  {k:"embalaje",          l:"Embalaje deficiente"},
-  {k:"producto_incorrecto",l:"Producto incorrecto"},
+// Paleta de colores para tipos de incidente Post Venta (se ciclan al crear tipos nuevos)
+const TIPO_PV_COLORS=[
+  {bg:"#1c1500",border:"#78350f",t:"#fbbf24"},
+  {bg:"#0c1a40",border:"#1e3a8a",t:"#93c5fd"},
+  {bg:"#150d25",border:"#7e22ce",t:"#c4b5fd"},
+  {bg:"#1c0a0a",border:"#7f1d1d",t:"#fca5a5"},
+  {bg:"#04231f",border:"#065f46",t:"#6ee7b7"},
+  {bg:"#1a1033",border:"#4c1d95",t:"#c4b5fd"},
+  {bg:"#0b2436",border:"#075985",t:"#7dd3fc"},
+  {bg:"#241505",border:"#7c2d12",t:"#fdba74"},
 ];
-const TIPO_PV_C={
-  faltante:          {bg:"#1c1500",border:"#78350f",t:"#fbbf24"},
-  cruce_etiqueta:    {bg:"#0c1a40",border:"#1e3a8a",t:"#93c5fd"},
-  embalaje:          {bg:"#150d25",border:"#7e22ce",t:"#c4b5fd"},
-  producto_incorrecto:{bg:"#1c0a0a",border:"#7f1d1d",t:"#fca5a5"},
-};
+// Tipos de incidente por defecto — se usan hasta que un admin los gestione desde el tab Post Venta
+// (se guardan entonces en config/expedicion.tiposPV)
+const TIPOS_PV_DEFAULT=[
+  {k:"faltante",          l:"Faltante",           ...TIPO_PV_COLORS[0]},
+  {k:"cruce_etiqueta",    l:"Cruce de etiqueta",  ...TIPO_PV_COLORS[1]},
+  {k:"embalaje",          l:"Embalaje deficiente",...TIPO_PV_COLORS[2]},
+  {k:"producto_incorrecto",l:"Producto incorrecto",...TIPO_PV_COLORS[3]},
+];
 
-function imprimirNotaPV(caso,envioDoc){
-  const TIPO_L={faltante:"Faltante",cruce_etiqueta:"Cruce de etiqueta",embalaje:"Embalaje deficiente",producto_incorrecto:"Producto incorrecto"};
+function imprimirNotaPV(caso,envioDoc,tipoLabelOverride){
   const pvId=caso.nroCaso||("PV-"+caso.id.slice(-6).toUpperCase());
   const fecha=caso.fechaCreacion?new Date(caso.fechaCreacion).toLocaleDateString("es-AR"):"";
-  const tipoLabel=TIPO_L[caso.tipoIncidente]||caso.tipoIncidente||"";
+  const tipoLabel=tipoLabelOverride||caso.tipoIncidente||"";
   const direccionFull=[caso.direccion,caso.localidad,caso.partido,caso.cp].filter(Boolean).join(", ");
   const fechaEntrega=(envioDoc?.fecha)?new Date(envioDoc.fecha+"T12:00:00").toLocaleDateString("es-AR"):"—";
   const esCambio=caso.subtipoEnvio==="cambio";
@@ -2286,7 +2292,7 @@ function semanaActual(){
   const fmt=x=>x.toISOString().split("T")[0];
   return{desde:fmt(lun),hasta:fmt(dom)};
 }
-function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
+function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={},setConfigExpedicion=()=>{},esAdmin=false}){
   const [casos,setCasos]=useState([]);
   const [loading,setLoading]=useState(true);
   const [modo,setModo]=useState("lista"); // "lista" | "nuevo" | "editar" | "stats"
@@ -2304,6 +2310,63 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
 
   const hoy=fechaHoy();
   const logisticas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k).sort();
+
+  // Tipos de incidente: dinámicos vía config/expedicion.tiposPV, con fallback a los 4 por defecto
+  const tiposPV=(configExpedicion.tiposPV&&configExpedicion.tiposPV.length)?configExpedicion.tiposPV:TIPOS_PV_DEFAULT;
+  const tiposPVActivos=tiposPV.filter(t=>t.activo!==false);
+  const tipoPVMap=useMemo(()=>Object.fromEntries(tiposPV.map(t=>[t.k,t])),[tiposPV]);
+
+  // ── Gestión de tipos (solo admin) ──
+  const [nuevoTipoNombre,setNuevoTipoNombre]=useState("");
+  const [editingTipoK,setEditingTipoK]=useState(null);
+  const [editingTipoNombre,setEditingTipoNombre]=useState("");
+  const slugifyTipo=(s)=>{
+    const combining=new RegExp("["+String.fromCharCode(768)+"-"+String.fromCharCode(879)+"]","g");
+    const base=s.trim().toLowerCase().normalize("NFD").replace(combining,"").replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"")||"tipo";
+    let k=base,i=2;
+    while(tiposPV.some(t=>t.k===k)){k=base+"_"+i;i++;}
+    return k;
+  };
+  const agregarTipo=()=>{
+    const nombre=nuevoTipoNombre.trim();
+    if(!nombre)return;
+    const k=slugifyTipo(nombre);
+    const color=TIPO_PV_COLORS[tiposPV.length%TIPO_PV_COLORS.length];
+    setConfigExpedicion(p=>{
+      const base=(p.tiposPV&&p.tiposPV.length)?p.tiposPV:TIPOS_PV_DEFAULT;
+      return {...p,tiposPV:[...base,{k,l:nombre,...color,activo:true}]};
+    });
+    setNuevoTipoNombre("");
+  };
+  const confirmarRenombreTipo=(k)=>{
+    const nombre=editingTipoNombre.trim();
+    if(!nombre){setEditingTipoK(null);return;}
+    setConfigExpedicion(p=>{
+      const base=(p.tiposPV&&p.tiposPV.length)?p.tiposPV:TIPOS_PV_DEFAULT;
+      return {...p,tiposPV:base.map(t=>t.k===k?{...t,l:nombre}:t)};
+    });
+    setEditingTipoK(null);setEditingTipoNombre("");
+  };
+  const toggleActivoTipo=(k,actual)=>{
+    setConfigExpedicion(p=>{
+      const base=(p.tiposPV&&p.tiposPV.length)?p.tiposPV:TIPOS_PV_DEFAULT;
+      return {...p,tiposPV:base.map(t=>t.k===k?{...t,activo:!actual}:t)};
+    });
+  };
+  const cambiarColorTipo=(k,color)=>{
+    setConfigExpedicion(p=>{
+      const base=(p.tiposPV&&p.tiposPV.length)?p.tiposPV:TIPOS_PV_DEFAULT;
+      return {...p,tiposPV:base.map(t=>t.k===k?{...t,...color}:t)};
+    });
+  };
+  const eliminarTipo=(t)=>{
+    if(casos.some(c=>c.tipoIncidente===t.k)){alert("No se puede eliminar: hay casos que usan este tipo. Podés desactivarlo.");return;}
+    if(!window.confirm(`¿Eliminar el tipo "${t.l}"?`))return;
+    setConfigExpedicion(p=>{
+      const base=(p.tiposPV&&p.tiposPV.length)?p.tiposPV:TIPOS_PV_DEFAULT;
+      return {...p,tiposPV:base.filter(x=>x.k!==t.k)};
+    });
+  };
 
   const sugsOrden=useMemo(()=>{
     const q=norm(busqOrden.trim());
@@ -2324,6 +2387,10 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
     envioTrans:"",envioFecha:hoy,envioTurno:"",envioId:"",nroCaso:"",estado:"pendiente"};
   const [f,setF]=useState(VACIO);
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
+  // Si el caso en edición tiene un tipo desactivado, lo mostramos igual para no perder la selección
+  const tiposParaElegir=(f.tipoIncidente&&!tiposPVActivos.some(t=>t.k===f.tipoIncidente)&&tipoPVMap[f.tipoIncidente])
+    ?[...tiposPVActivos,tipoPVMap[f.tipoIncidente]]
+    :tiposPVActivos;
 
   // Cargar desde Firestore — onSnapshot es la única fuente de verdad
   useEffect(()=>{
@@ -2423,7 +2490,7 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
       const pvRef=await addDoc(collection(db,"postventa"),pvData);
       // Si resolución es Envío (o Cambio) → crear envío automáticamente
       if(f.resolucion==="envio"){
-        const tipoLabel=TIPOS_PV.find(t=>t.k===f.tipoIncidente)?.l||f.tipoIncidente;
+        const tipoLabel=tipoPVMap[f.tipoIncidente]?.l||f.tipoIncidente;
         const esCambio=f.subtipoEnvio==="cambio";
         const envioId=nroCaso+"E";
         const obsPartes=[`Post Venta ${nroCaso} — ${tipoLabel} — Ref. #${f.ordenOriginal}`];
@@ -2490,10 +2557,13 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
         <div style={{display:"flex",gap:"6px"}}>
           {esFormulario
             ?<button onClick={cancelar} style={{...S.btn(false),padding:"0.4rem 1rem",fontSize:"0.78rem"}}>← Cancelar</button>
-            :<>
-              <button onClick={()=>setModo(modo==="stats"?"lista":"stats")} style={{...S.btn(modo==="stats","#6366f1"),padding:"0.4rem 0.9rem",fontSize:"0.78rem"}}>📊 Stats</button>
-              <button onClick={abrirNuevo} style={{...S.btn(false,"#6366f1"),padding:"0.4rem 1rem",fontSize:"0.78rem"}}>+ Nuevo caso</button>
-            </>
+            :modo==="tipos"
+              ?<button onClick={()=>setModo("lista")} style={{...S.btn(false),padding:"0.4rem 1rem",fontSize:"0.78rem"}}>← Volver</button>
+              :<>
+                {esAdmin&&<button onClick={()=>setModo("tipos")} style={{...S.btn(false),padding:"0.4rem 0.9rem",fontSize:"0.78rem"}}>⚙ Tipos</button>}
+                <button onClick={()=>setModo(modo==="stats"?"lista":"stats")} style={{...S.btn(modo==="stats","#6366f1"),padding:"0.4rem 0.9rem",fontSize:"0.78rem"}}>📊 Stats</button>
+                <button onClick={abrirNuevo} style={{...S.btn(false,"#6366f1"),padding:"0.4rem 1rem",fontSize:"0.78rem"}}>+ Nuevo caso</button>
+              </>
           }
         </div>
       </div>
@@ -2549,10 +2619,11 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
             <div>
               <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Tipo de incidente</div>
               <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
-                {TIPOS_PV.map(t=>{const c=TIPO_PV_C[t.k];return(
+                {tiposParaElegir.map(t=>(
                   <button key={t.k} onClick={()=>set("tipoIncidente",t.k)}
-                    style={{...S.chip(f.tipoIncidente===t.k,c.t,c.bg),border:`1px solid ${f.tipoIncidente===t.k?c.t:c.border}`,fontSize:"0.68rem",padding:"2px 8px"}}>{t.l}</button>
-                );})}
+                    style={{...S.chip(f.tipoIncidente===t.k,t.t,t.bg),border:`1px solid ${f.tipoIncidente===t.k?t.t:t.border}`,fontSize:"0.68rem",padding:"2px 8px"}}>{t.l}</button>
+                ))}
+                {tiposParaElegir.length===0&&<span style={{color:"#4b5563",fontSize:"0.72rem"}}>Sin tipos configurados{esAdmin?" — agregá uno en ⚙ Tipos":""}</span>}
               </div>
             </div>
           </div>
@@ -2681,6 +2752,57 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
         </div>
       )}
 
+      {/* Gestión de tipos de incidente (solo admin) */}
+      {modo==="tipos"&&esAdmin&&(
+        <div style={{...S.card,padding:"1rem",marginBottom:"1rem"}}>
+          <div style={{fontSize:"0.65rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",marginBottom:"8px"}}>Tipos de incidente ({tiposPVActivos.length} activos)</div>
+          {tiposPV.length===0&&<div style={{padding:"0.75rem",background:"#12172a",borderRadius:"8px",color:"#4b5563",fontSize:"0.8rem",marginBottom:"8px"}}>Sin tipos configurados. Agregá el primero abajo.</div>}
+          <div style={{display:"grid",gap:"6px",marginBottom:"0.75rem"}}>
+            {tiposPV.map((t,i)=>{
+              const inactivo=t.activo===false;
+              const editando=editingTipoK===t.k;
+              const enUso=casos.some(c=>c.tipoIncidente===t.k);
+              return(
+              <div key={t.k} style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 12px",background:inactivo?"#0c0e14":"#12172a",borderRadius:"8px",border:"1px solid "+(inactivo?"#1e2535":"#252d40"),opacity:inactivo?0.6:1,flexWrap:"wrap"}}>
+                <span style={{fontSize:"0.8rem",fontWeight:800,color:"#374151",minWidth:"18px"}}>{i+1}</span>
+                {editando
+                  ?<input autoFocus value={editingTipoNombre} onChange={e=>setEditingTipoNombre(e.target.value)}
+                      onKeyDown={e=>{if(e.key==="Enter")confirmarRenombreTipo(t.k);if(e.key==="Escape")setEditingTipoK(null);}}
+                      style={{...S.input,flex:1,padding:"3px 8px",fontSize:"0.85rem",minWidth:"120px"}}/>
+                  :<span style={{flex:1,fontSize:"0.9rem",fontWeight:600,color:inactivo?"#6b7280":t.t||"#e5e7eb",minWidth:"120px"}}>
+                    {t.l}{inactivo&&<span style={{marginLeft:"6px",fontSize:"0.62rem",background:"#374151",color:"#9ca3af",padding:"1px 5px",borderRadius:"4px",fontWeight:700}}>INACTIVO</span>}
+                  </span>
+                }
+                {editando
+                  ?<button onClick={()=>confirmarRenombreTipo(t.k)} style={{padding:"3px 8px",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700,cursor:"pointer",background:"#0a2a1c",border:"1px solid #10b981",color:"#34d399"}}>✓</button>
+                  :<button onClick={()=>{setEditingTipoK(t.k);setEditingTipoNombre(t.l);}} title="Renombrar"
+                      style={{background:"none",border:"1px solid #374151",borderRadius:"5px",color:"#9ca3af",cursor:"pointer",fontSize:"0.7rem",padding:"2px 6px",flexShrink:0}}>✏️</button>
+                }
+                <button onClick={()=>toggleActivoTipo(t.k,t.activo!==false)} title={inactivo?"Reactivar":"Desactivar"}
+                  style={{padding:"3px 8px",borderRadius:"5px",fontSize:"0.65rem",fontWeight:700,cursor:"pointer",flexShrink:0,
+                    background:inactivo?"#12172a":"#1c0a0a",border:"1px solid "+(inactivo?"#374151":"#b91c1c"),color:inactivo?"#6b7280":"#f87171"}}>
+                  {inactivo?"Reactivar":"Desactivar"}
+                </button>
+                {!inactivo&&<div style={{display:"flex",gap:"4px",flexWrap:"wrap"}}>
+                  {TIPO_PV_COLORS.map((c,ci)=>(
+                    <button key={ci} onClick={()=>cambiarColorTipo(t.k,c)}
+                      style={{width:"16px",height:"16px",borderRadius:"50%",background:c.t,border:t.t===c.t?"2px solid #fff":"2px solid transparent",cursor:"pointer",padding:0,flexShrink:0}}/>
+                  ))}
+                </div>}
+                <button onClick={()=>eliminarTipo(t)} title={enUso?"En uso — no se puede eliminar, desactivalo":"Eliminar"} disabled={enUso}
+                  style={{background:"none",border:"1px solid "+(enUso?"#1e2535":"#7f1d1d"),borderRadius:"5px",color:enUso?"#374151":"#f87171",cursor:enUso?"not-allowed":"pointer",fontSize:"0.7rem",padding:"2px 6px",flexShrink:0}}>🗑</button>
+              </div>
+              );})}
+          </div>
+          <div style={{display:"flex",gap:"8px"}}>
+            <input value={nuevoTipoNombre} onChange={e=>setNuevoTipoNombre(e.target.value)}
+              onKeyDown={e=>{if(e.key==="Enter")agregarTipo();}}
+              placeholder="Nombre del nuevo tipo..." style={{...S.input,flex:1}}/>
+            <button onClick={agregarTipo} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",whiteSpace:"nowrap"}}>+ Agregar</button>
+          </div>
+        </div>
+      )}
+
       {/* Filtros */}
       {modo==="lista"&&(
         <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"0.75rem"}}>
@@ -2688,7 +2810,7 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
             <button key={o.k} onClick={()=>setFiltroEstado(o.k)} style={{...S.btnSm(filtroEstado===o.k,"#6366f1"),fontSize:"0.72rem"}}>{o.l}</button>
           ))}
           <span style={{margin:"0 4px",color:"#374151",alignSelf:"center"}}>|</span>
-          {[{k:"todos",l:"Todos"},...TIPOS_PV].map(t=>(
+          {[{k:"todos",l:"Todos"},...tiposPV].map(t=>(
             <button key={t.k} onClick={()=>setFiltroTipo(t.k)} style={{...S.btnSm(filtroTipo===t.k,"#6b7280"),fontSize:"0.68rem"}}>{t.l}</button>
           ))}
         </div>
@@ -2698,13 +2820,13 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
       {modo==="stats"&&(()=>{
         const casosS=casos.filter(c=>{const f=(c.fechaCreacion||"").slice(0,10);return f>=statsDesde&&f<=statsHasta;});
         const totalCosto=casosS.reduce((s,c)=>s+(c.costoResolucion||0),0);
-        const porTipo=TIPOS_PV.map(t=>({...t,n:casosS.filter(c=>c.tipoIncidente===t.k).length})).filter(x=>x.n>0);
+        const porTipo=tiposPV.map(t=>({...t,n:casosS.filter(c=>c.tipoIncidente===t.k).length})).filter(x=>x.n>0);
         // Agrupación por armador
         const armadores=[...new Set(casosS.map(c=>c.armador||"").filter(Boolean))].sort();
         const armSt=armadores.map(a=>({
           nombre:a,
           total:casosS.filter(c=>c.armador===a).length,
-          porTipo:TIPOS_PV.map(t=>({...t,n:casosS.filter(c=>c.armador===a&&c.tipoIncidente===t.k).length})).filter(x=>x.n>0),
+          porTipo:tiposPV.map(t=>({...t,n:casosS.filter(c=>c.armador===a&&c.tipoIncidente===t.k).length})).filter(x=>x.n>0),
           costo:casosS.filter(c=>c.armador===a).reduce((s,c)=>s+(c.costoResolucion||0),0),
         }));
         const sinArmador=casosS.filter(c=>!c.armador).length;
@@ -2774,8 +2896,8 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
                     <th style={thS}>Estado</th>
                   </tr></thead>
                   <tbody>{casosS.map((c,i)=>{
-                    const tc=TIPO_PV_C[c.tipoIncidente]||{bg:"#1a1f2e",t:"#9ca3af"};
-                    const tipoL=TIPOS_PV.find(t=>t.k===c.tipoIncidente)?.l||c.tipoIncidente||"—";
+                    const tc=tipoPVMap[c.tipoIncidente]||{bg:"#1a1f2e",t:"#9ca3af"};
+                    const tipoL=tipoPVMap[c.tipoIncidente]?.l||c.tipoIncidente||"—";
                     const costo=c.resolucion==="reintegro"&&c.costoResolucion>0?"$"+Number(c.costoResolucion).toLocaleString("es-AR"):"—";
                     const res=c.resolucion==="envio"?("Envío"+(c.envioId?" "+c.envioId:""))
                       :c.resolucion==="reintegro"?"Reintegro"
@@ -2810,8 +2932,8 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
             </div>
           )}
           {casosFiltrados.map(caso=>{
-            const tc=TIPO_PV_C[caso.tipoIncidente]||{bg:"#1a1f2e",border:"#374151",t:"#9ca3af"};
-            const tipoLabel=TIPOS_PV.find(t=>t.k===caso.tipoIncidente)?.l||caso.tipoIncidente||"";
+            const tc=tipoPVMap[caso.tipoIncidente]||{bg:"#1a1f2e",border:"#374151",t:"#9ca3af"};
+            const tipoLabel=tipoPVMap[caso.tipoIncidente]?.l||caso.tipoIncidente||"";
             const numDisplay=caso.nroCaso||"#"+caso.id.slice(-6).toUpperCase();
             return(
               <div key={caso.id} style={{...S.card,padding:"0.75rem 1rem",borderLeft:`3px solid ${tc.t}`}}>
@@ -2841,7 +2963,7 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={}}){
                   </div>
                   <div style={{display:"flex",gap:"4px",flexShrink:0,flexWrap:"wrap",justifyContent:"flex-end"}}>
                     {caso.resolucion==="envio"&&caso.envioId&&(
-                      <button onClick={()=>imprimirNotaPV(caso,envios.find(e=>e.id===caso.envioId))} style={{...S.btnSm(false),color:"#6366f1",border:"1px solid #6366f1",fontSize:"0.68rem",padding:"3px 8px"}}>🖨 Imprimir</button>
+                      <button onClick={()=>imprimirNotaPV(caso,envios.find(e=>e.id===caso.envioId),tipoLabel)} style={{...S.btnSm(false),color:"#6366f1",border:"1px solid #6366f1",fontSize:"0.68rem",padding:"3px 8px"}}>🖨 Imprimir</button>
                     )}
                     <button onClick={()=>abrirEditar(caso)} style={{...S.btnSm(false),color:"#f59e0b",border:"1px solid #78350f",fontSize:"0.68rem",padding:"3px 8px"}}>✏ Editar</button>
                     <button onClick={()=>toggleEstado(caso)} style={{...S.btnSm(caso.estado==="resuelto","#10b981"),fontSize:"0.68rem",padding:"3px 8px"}}>
@@ -11627,7 +11749,7 @@ export default function App(){
         {tab==="flex"    &&<TabEnvios   envios={envios.filter(e=>e.origen==="ML")}  setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin} sesion={sesion} mostrarResumenFlex={true} facturaClientes={facturaClientes} mlTarifas={mlTarifas}/>}
         {tab==="imprimir"&&<TabImprimir envios={envios} setEnvios={setEnvios} zc={zc} lc={lc}/>}
         {tab==="manual"  &&<TabManual   setEnvios={setEnvios} onSuccess={()=>{mostrarToast("Envio agregado");}} lc={lc} enviosExistentes={envios} sesion={sesion}/>}
-        {tab==="postventa"&&<TabPostVenta envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>}
+        {tab==="postventa"&&<TabPostVenta envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc} configExpedicion={configExpedicion} setConfigExpedicion={setConfigExpedicion} esAdmin={esAdmin}/>}
         {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZcPersist} lc={lc} setLc={setLcPersist} mlTarifas={mlTarifas} setMlTarifas={setMlTarifasPersist}/>}
         {tab==="informe"     &&<TabInforme     envios={envios} zc={zc} lc={lc} mlTarifas={mlTarifas}/>}
         {tab==="liquidacion"    &&<TabLiquidacion    envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>}
