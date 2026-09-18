@@ -13,19 +13,15 @@ export default async function handler(req, res) {
 
   const HOY = hoy();
 
-  // Dos queries: despachado==false y despachado==null (documentos sin el campo también entran)
-  const [snapFalse, snapNull] = await Promise.all([
-    db.collection("envios").where("despachado", "==", false).get(),
-    db.collection("envios").where("despachado", "==", null).get(),
-  ]);
+  // Traer todos los envios: algunos no tienen el campo "despachado" (campo ausente != false ni null)
+  // por lo que no se pueden filtrar con where() — se filtra en JS
+  const snap = await db.collection("envios").get();
 
-  const vistos = new Set();
-  const candidatos = [...snapFalse.docs, ...snapNull.docs]
-    .filter(d => { if (vistos.has(d.id)) return false; vistos.add(d.id); return true; })
+  const candidatos = snap.docs
     .map(d => ({ id: d.id, ...d.data() }))
     .filter(e => {
       const f = e.fecha || e.fechaVenta || "";
-      return f < HOY && e.trans && e.estado !== "cancelado";
+      return f < HOY && e.trans && e.estado !== "cancelado" && !e.despachado;
     });
 
   // Agrupar por logistica para el resumen
