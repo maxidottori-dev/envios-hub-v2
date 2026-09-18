@@ -17,11 +17,15 @@ export default async function handler(req, res) {
   // por lo que no se pueden filtrar con where() — se filtra en JS
   const snap = await db.collection("envios").get();
 
+  // hasta: fecha límite inclusive (default: ayer). Ej: ?hasta=2026-09-10
+  const hasta = req.query.hasta || "";
+  const limite = hasta || new Date(Date.now() - 86400000).toISOString().split("T")[0];
+
   const candidatos = snap.docs
     .map(d => ({ id: d.id, ...d.data() }))
     .filter(e => {
       const f = e.fecha || e.fechaVenta || "";
-      return f < HOY && e.trans && e.estado !== "cancelado" && !e.despachado;
+      return f <= limite && e.trans && e.estado !== "cancelado" && !e.despachado;
     });
 
   // Agrupar por logistica para el resumen
