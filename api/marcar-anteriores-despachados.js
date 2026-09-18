@@ -11,13 +11,17 @@ export default async function handler(req, res) {
   let db;
   try { db = initDb(); } catch(e) { return res.status(500).json({ error: e.message }); }
 
-  // Traer todos los envios asignados, no despachados y con fecha anterior a hoy
-  const snap = await db.collection("envios")
-    .where("despachado", "==", false)
-    .get();
-
   const HOY = hoy();
-  const candidatos = snap.docs
+
+  // Dos queries: despachado==false y despachado==null (documentos sin el campo también entran)
+  const [snapFalse, snapNull] = await Promise.all([
+    db.collection("envios").where("despachado", "==", false).get(),
+    db.collection("envios").where("despachado", "==", null).get(),
+  ]);
+
+  const vistos = new Set();
+  const candidatos = [...snapFalse.docs, ...snapNull.docs]
+    .filter(d => { if (vistos.has(d.id)) return false; vistos.add(d.id); return true; })
     .map(d => ({ id: d.id, ...d.data() }))
     .filter(e => {
       const f = e.fecha || e.fechaVenta || "";
