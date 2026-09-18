@@ -10594,10 +10594,14 @@ function TabSalida({envios,setEnvios,lc,sesion}){
               const pedL=envios.filter(e=>{const f=e.fecha||e.fechaVenta||"";return f===fecha&&e.trans===l&&getEstado(e)==="asignado"&&e.estado!=="cancelado";});
               const prepL=pedL.filter(e=>e.preparado).length;
               const despL=pedL.filter(e=>e.despachado).length;
+              // Pendientes sin despachar: hoy y días anteriores
+              const pendHoy=pedL.filter(e=>!e.despachado).length;
+              const pendAnt=envios.filter(e=>{const f=e.fecha||e.fechaVenta||"";return f<fecha&&e.trans===l&&getEstado(e)==="asignado"&&e.estado!=="cancelado"&&!e.despachado;}).length;
+              const hasPend=pendHoy>0||pendAnt>0;
               return(
                 <button key={l} onClick={()=>setLogPreSel(l)}
                   style={{display:"flex",alignItems:"center",gap:"14px",padding:"1rem 1.2rem",borderRadius:"12px",
-                    background:"#12172a",border:`2px solid ${lci.color||brd}22`,cursor:"pointer",textAlign:"left",transition:"border-color 0.15s"}}>
+                    background:"#12172a",border:`2px solid ${hasPend?"#7f1d1d":(lci.color||brd)+"22"}`,cursor:"pointer",textAlign:"left",transition:"border-color 0.15s"}}>
                   <div style={{width:"12px",height:"12px",borderRadius:"50%",background:lci.color||"#6b7280",flexShrink:0}}/>
                   <div style={{flex:1}}>
                     <div style={{fontWeight:800,fontSize:"1rem",color:lci.color||"#fff"}}>{l}</div>
@@ -10606,6 +10610,12 @@ function TabSalida({envios,setEnvios,lc,sesion}){
                   <div style={{textAlign:"right",fontSize:"0.72rem",color:muted}}>
                     <div style={{fontWeight:700,color:"#fff",fontSize:"0.85rem"}}>{pedL.length} pedidos</div>
                     <div>{prepL} prep · {despL} desp</div>
+                    {hasPend&&(
+                      <div style={{display:"flex",gap:"4px",justifyContent:"flex-end",marginTop:"3px"}}>
+                        {pendHoy>0&&<span style={{background:"#450a0a",color:"#fca5a5",border:"1px solid #7f1d1d",borderRadius:"20px",padding:"1px 7px",fontSize:"0.68rem",fontWeight:700}}>{pendHoy} hoy</span>}
+                        {pendAnt>0&&<span style={{background:"#2a0f0f",color:"#f87171",border:"1px solid #4b1c1c",borderRadius:"20px",padding:"1px 7px",fontSize:"0.68rem",fontWeight:700}}>{pendAnt} ant.</span>}
+                      </div>
+                    )}
                   </div>
                   <div style={{color:muted,fontSize:"1rem"}}>›</div>
                 </button>
