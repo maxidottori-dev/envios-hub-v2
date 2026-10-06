@@ -34,6 +34,7 @@ export default async function handler(req, res) {
     const e = { id: d.id, ...d.data() };
     if (!e.cobranza || e.cobranza <= 0) return;
     if (e.estado === "cancelado") return;
+    if (e.cobranzaRecibida) return; // ya cobrado, no es deuda
     const key = (e.clienteNombre || "").toLowerCase().trim().replace(/\s+/g,"_");
     if (ccClientes.has(key)) {
       casos.push({
@@ -43,6 +44,8 @@ export default async function handler(req, res) {
         clienteKey: key,
         cobranza: e.cobranza,
         importeOrden: e.importeOrden,
+        pagoEstado: e.pagoEstado || "",
+        cobranzaRecibida: e.cobranzaRecibida || false,
         fecha: e.fecha || e.fechaVenta || "",
         trans: e.trans || "",
         estado: e.estado || "",
