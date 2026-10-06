@@ -146,8 +146,9 @@ export default async function handler(req, res) {
       await docRef.update(update);
       console.log("WEBHOOK UPDATED", order.id);
 
-      // Si el pedido era CC y TN lo marca como pagado, registrar en pagosCC
-      if (nuevoEstadoPago === "pagado" && (data.pagoEstado === "cuenta_corriente" || data.esCC === true)) {
+      // Si el pedido era CC y TN lo marca como pagado (pago online real), registrar en pagosCC.
+      // Excluir efectivo: en esos casos el cobro es en mano, no un pago automático de TN.
+      if (nuevoEstadoPago === "pagado" && !esEfectivo(order) && (data.pagoEstado === "cuenta_corriente" || data.esCC === true)) {
         const monto = data.cobranza > 0 ? data.cobranza
           : data.importeCC > 0 ? data.importeCC
           : data.importeOrden || parseFloat(order.total) || 0;
