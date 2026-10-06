@@ -1036,6 +1036,7 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
   const handleDesconfirmar=()=>onSave({...e,importeOverride:costoOverride||null,estadoPago:envio.estadoPago==="abonado"?"confirmado":null,estadoPagoFecha:null});
   const pagoOk = puedeAsignar(e);
   const autorizarCC=()=>setE(p=>({...p,pagoEstado:"cuenta_corriente"}));
+  const cambiarEfectivoACC=()=>setE(p=>({...p,pagoEstado:"cuenta_corriente",cobranza:null,importeCC:p.importeCC||p.importeOrden||0}));
   return(
     <div style={{background:"#12172a",border:"1px solid #6366f1",borderRadius:"12px",padding:"0.9rem 1rem",marginTop:"2px"}}>
 
@@ -1096,6 +1097,18 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
       {esTN && e.pagoEstado === "cuenta_corriente" && (
         <div style={{background:"#130d2a",border:"1px solid #a78bfa",borderRadius:"10px",padding:"0.5rem 1rem",marginBottom:"0.75rem",display:"flex",alignItems:"center",gap:"0.5rem"}}>
           <span style={{color:"#a78bfa",fontWeight:700,fontSize:"0.82rem"}}>✓ Autorizado como Cuenta Corriente</span>
+        </div>
+      )}
+      {esTN && e.pagoEstado === "pagado" && e.cobranza > 0 && (
+        <div style={{background:"#111a10",border:"1px solid #4d7c0f",borderRadius:"10px",padding:"0.65rem 1rem",marginBottom:"0.75rem",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
+          <span style={{fontSize:"1.1rem"}}>💵</span>
+          <div style={{flex:1}}>
+            <div style={{color:"#a3e635",fontWeight:700,fontSize:"0.85rem"}}>Cobro en efectivo — ${Number(e.cobranza).toLocaleString("es-AR")}</div>
+            <div style={{color:"#9ca3af",fontSize:"0.72rem",marginTop:"2px"}}>¿El cliente tiene cuenta corriente? Podés reclasificar este pedido.</div>
+          </div>
+          {puedeVer(sesion,"accion_autorizarcc")
+            ?<button onClick={cambiarEfectivoACC} style={{...S.btn(true,"#7c3aed"),padding:"0.35rem 0.9rem",fontSize:"0.72rem",whiteSpace:"nowrap"}}>Cambiar a Cta. Corriente</button>
+            :<span style={{fontSize:"0.68rem",color:"#6b7280",fontStyle:"italic",whiteSpace:"nowrap"}}>No tenés permiso para cambiar</span>}
         </div>
       )}
 
