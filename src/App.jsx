@@ -4588,7 +4588,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
   const getDeudaEnvio=(e)=>{
     if(e.estado==="cancelado")return null;
     if(e.pagoEstado==="cuenta_corriente"&&e.importeOrden>0&&!e.cobranzaRecibida){const monto=e.cobranza>0?e.cobranza:e.importeOrden;return{monto,tipo:"TN CC",logistica:e.trans||""};}
-    if(e.cobranza>0&&e.pagoEstado!=="pagado"&&!e.cobranzaRecibida)return{monto:e.cobranza,tipo:"Efectivo",logistica:e.trans||""};
+    if(e.cobranza>0&&e.pagoEstado==="pagado"&&!e.cobranzaRecibida)return{monto:e.cobranza,tipo:"Efectivo",logistica:e.trans||""};
     if(e.esCC&&e.importeCC>0&&!(e.pagoEstado==="pagado"&&e.importeCC===e.importeOrden))return{monto:e.importeCC,tipo:"Manual CC",logistica:e.trans||""};
     return null;
   };
