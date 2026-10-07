@@ -1952,7 +1952,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
           <td style="padding:3px 4px;text-align:center;width:35px;">${tipoCell}</td>
           <td style="padding:3px 4px;text-align:center;width:25px;font-weight:${e.preparado&&(e.bultos||1)>1?700:400};color:${!e.preparado?"#d97706":"inherit"};">${e.preparado?(e.bultos||1):"N/P"}</td>
           <td style="padding:3px 4px;text-align:center;width:18px;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td>
-          <td style="padding:3px 4px;font-weight:600;">${reprogBadge}${dirCorta}</td>
+          <td style="padding:3px 4px;font-weight:600;">${reprogBadge}${dirCorta}${!esFlex&&e.telefono?`<span style="display:block;font-weight:400;color:#555;font-size:${fs-2}px;">📞 ${e.telefono}</span>`:""}</td>
           <td style="padding:3px 4px;color:#555;">${(e.localidad&&!/referencia/i.test(e.localidad))?e.localidad:""}</td>
           <td style="padding:3px 4px;color:#555;">${e.partido||""}</td>
           <td style="padding:3px 4px;white-space:nowrap;font-size:${fs-1}px;">${zml}</td>
@@ -1969,7 +1969,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
           ${e.tipoEntrega?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;font-size:${fs-2}px;font-weight:700;color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":"#15803d"};background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":"#dcfce7"};">${e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</td>`:`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;color:#aaa;">—</td>`}
           ${td(28,"text-align:center;font-weight:"+(e.preparado&&(e.bultos||1)>1?700:400)+";color:"+(e.preparado?"inherit":"#d97706")+";",e.preparado?(e.bultos||1):"N/P")}
           <td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:18px;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td>
-          ${td("","font-weight:500;",reprogBadge+dir+refExtra)}
+          ${td("","font-weight:500;",reprogBadge+dir+refExtra+(!esFlex&&e.telefono?`<span style="display:block;font-weight:400;color:#555;font-size:${fs-2}px;">📞 ${e.telefono}</span>`:""))}
           ${td("","white-space:nowrap;font-size:"+(fs-1)+"px;",zml)}
           ${td(32,"text-align:center;",e.turno||"—")}
           ${td(42,"text-align:center;",e.fecha?fmtCorta(e.fecha):"—")}
@@ -2135,8 +2135,8 @@ function TabImprimir({envios,setEnvios,zc,lc}){
               <tr key={e.id} style={{borderBottom:"1px solid #1a1f2e",background:i%2===0?"transparent":"#0d1119"}}>
                 <td style={{...tdSt,textAlign:"center",color:"#4b5563"}}>{i+1}</td>
                 <td style={{...tdSt,textAlign:"center",width:"52px"}}>
-                  {esFlex&&e.loteImportacion
-                    ?<span style={{background:"#0d1c04",color:"#84cc16",padding:"1px 5px",borderRadius:"4px",fontSize:"0.68rem",fontWeight:700,whiteSpace:"nowrap"}}>{new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false})}</span>
+                  {e.loteImportacion
+                    ?<span style={{background:esFlex?"#0d1c04":"#0c1a40",color:esFlex?"#84cc16":"#38bdf8",padding:"1px 5px",borderRadius:"4px",fontSize:"0.68rem",fontWeight:700,whiteSpace:"nowrap"}}>{new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false})}</span>
                     :<span style={{color:"#374151"}}>—</span>}
                 </td>
                 <td style={{...tdSt,textAlign:"center"}}>
