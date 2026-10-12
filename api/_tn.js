@@ -182,3 +182,16 @@ export function ordenAEnvio(order) {
     fulfillmentId: order.fulfillments?.[0]?.id || null,
   };
 }
+
+/**
+ * Extrae la zona logística del nombre del método de envío TN.
+ * Formato esperado: "LOGISTICA UMP - NORTE-G - descripcion - ..."
+ * Retorna el segmento entre el 1er y 2do " - ", en mayúsculas y trimmeado.
+ * Devuelve "" si el formato no coincide.
+ */
+export function extraerZona(shippingOption) {
+  if (!shippingOption) return "";
+  const parts = shippingOption.split(" - ");
+  if (parts.length < 2) return "";
+  return parts[1].trim().toUpperCase();
+}

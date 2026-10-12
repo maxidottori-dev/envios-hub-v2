@@ -2,10 +2,17 @@ import { initDb } from "./_firebase.js";
 
 // Recibe la elección de fecha/turno del datepicker (Fase 3 — checkout NubeSDK).
 // Guarda la reserva en Firestore (colección reservasTurno, keyed por session_id).
-// No escribe a Tiendanube todavía — la correlación con el pedido real se resuelve en Fase 3.
 //
 // Body esperado: { session_id, email?, zona, fecha, turno }
 // Respuesta:     { ok: true, session_id }
+//
+// NOTAS para Fase 3:
+// - `fecha` y `turno` se escribirán al pedido TN vía escribirCamposTN() (ver _tn-custom-fields.js)
+//   cuando el pedido se cree/actualice en webhook.js.
+// - `zona` recibida del checkout se guarda para validación interna ÚNICAMENTE.
+//   El valor definitivo de "Zona logística" que va al Custom Field de TN se deriva
+//   del método de envío del pedido real: extraerZona(order.shipping_option) en _tn.js.
+//   NO usar reserva.zona para escribir el CF_ZONA_LOGISTICA.
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
