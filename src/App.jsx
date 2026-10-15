@@ -11597,9 +11597,27 @@ export default function App(){
           <label style={{cursor:"pointer"}}>
             <input type="file" accept=".pdf" style={{display:"none"}} onChange={async ev=>{
               const f=ev.target.files[0];if(!f){return;}ev.target.value="";
-              setModalPDF(f); // Abrir modal de opciones
+              // Auto-detectar Flex vs Colecta buscando la palabra FLEX en las primeras páginas
+              try{
+                const lib=await cargarPDFLib();
+                const buf=await f.arrayBuffer();
+                const pdf=await lib.getDocument({data:buf}).promise;
+                let esFlex=false;
+                const limite=Math.min(pdf.numPages,15);
+                for(let i=1;i<=limite;i++){
+                  const page=await pdf.getPage(i);
+                  const tc=await page.getTextContent();
+                  const txt=tc.items.map(x=>x.str).join(" ");
+                  if(/\bFLEX\b/.test(txt)){esFlex=true;break;}
+                }
+                if(esFlex)setModalPDF(f);
+                else setModalPDFColecta(f);
+              }catch(e){
+                // Si falla la detección, abrir modal Colecta por defecto
+                setModalPDFColecta(f);
+              }
             }}/>
-            <span style={{display:"inline-block",padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#0a1a0a",border:"1px solid #84cc16",color:"#84cc16",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>{loading?"...":"📦 Etiquetas PDF"}</span>
+            <span style={{display:"inline-block",padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#0d1117",border:"1px solid #f59e0b",color:"#f59e0b",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>{loading?(colectaProgMsg||"..."):"📄 Procesar PDF"}</span>
           </label>
           {/* Modal opciones PDF FLEX */}
           {modalPDF&&<ModalOpcionesPDF
@@ -11684,13 +11702,6 @@ export default function App(){
               setLoading(false);
             }}
           />}
-          <label style={{cursor:"pointer"}}>
-            <input type="file" accept=".pdf" style={{display:"none"}} onChange={async ev=>{
-              const f=ev.target.files[0];if(!f){return;}ev.target.value="";
-              setModalPDFColecta(f); // Abrir modal de opciones
-            }}/>
-            <span style={{display:"inline-block",padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#1a0d2e",border:"1px solid #a78bfa",color:"#a78bfa",fontWeight:700,fontSize:"0.72rem",cursor:"pointer",whiteSpace:"nowrap"}}>{loading?(colectaProgMsg||"..."):"📋 Colecta"}</span>
-          </label>
           {/* Modal opciones PDF Colecta */}
           {modalPDFColecta&&<ModalOpcionesColecta
             onCancel={()=>setModalPDFColecta(null)}
