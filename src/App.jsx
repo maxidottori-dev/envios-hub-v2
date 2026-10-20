@@ -180,6 +180,8 @@ const parsearEtiquetasPDF=async(file)=>{
       if(pm&&vm)packToVenta[pm[1].trim()]=vm[1].trim();
     }
   }
+  // DEBUG TEMPORAL
+  console.log("[parsearEtiquetasPDF] packToVenta=",packToVenta,"labelTxts count=",labelTxts.length);
   // Paso 2: procesar páginas de etiqueta
   const etiquetas=[];
   for(const txt of labelTxts){
@@ -190,6 +192,7 @@ const parsearEtiquetasPDF=async(file)=>{
     // Extraer Pack ID para buscar el ventaId (# de venta del Excel) desde armado
     const packM=txt.match(/Pack\s*ID:\s*(\d+)/i);
     const ventaId=packM?(packToVenta[packM[1].trim()]||""):"";
+    console.log("[parsearEtiquetasPDF] packM=",packM?.[1],"ventaId=",ventaId,"nroSeguimiento=",nroSeguimiento);
     const cpM=txt.match(/CP:\s*(\d{4,5})/);
     const tipoM=txt.match(/(COMERCIAL|RESIDENCIAL)/);
     const dirM=txt.match(/Direccion:\s*([^\n]+)/i);
