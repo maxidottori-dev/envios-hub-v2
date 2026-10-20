@@ -195,8 +195,6 @@ const parsearEtiquetasPDF=async(file)=>{
       }
     }
   }
-  // DEBUG TEMPORAL
-  console.log("[parsearEtiquetasPDF] packToVenta=",packToVenta,"labelTxts count=",labelTxts.length);
   // Paso 2: procesar páginas de etiqueta
   const etiquetas=[];
   for(const txt of labelTxts){
@@ -209,7 +207,6 @@ const parsearEtiquetasPDF=async(file)=>{
     const packId=packM?(packM[2]&&packM[1].length<13?packM[1]+packM[2]:packM[1]).trim():null;
     const ventaId=packId?(packToVenta[packId]||""):"";
     const alphaId=packId?(packToAlpha[packId]||""):""; // id 26-char de la página de armado
-    console.log("[parsearEtiquetasPDF] packId=",packId,"ventaId=",ventaId,"alphaId=",alphaId,"nroSeguimiento=",nroSeguimiento);
     const cpM=txt.match(/CP:\s*(\d{4,5})/);
     const tipoM=txt.match(/(COMERCIAL|RESIDENCIAL)/);
     const dirM=txt.match(/Direccion:\s*([^\n]+)/i);
