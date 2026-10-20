@@ -486,7 +486,11 @@ function parsearExcel(file) {
             const cp=String(r[iCP]||"").replace(/\D/g,"");
             const fechaVenta=parseFechaES(r[iFecha]); if(!fechaVenta) continue;
             const partido=cpAPartido(cp)||String(r[iCiudad]||"").trim();
-            const nroSeguimiento=String(r[iSeg]||"").trim();
+            let nroSeguimiento=String(r[iSeg]||"").trim();
+            // Nuevo formato ML: columna seguimiento contiene el ID de 26 chars alfanumérico
+            // (no es el nro de barcode). En ese caso usar el # de venta numérico como nroSeguimiento
+            // para que el dedup contra el PDF funcione correctamente.
+            if(/^[A-Z0-9]{25,30}$/.test(nroSeguimiento)) nroSeguimiento=orden;
             envios.push({id:orden,direccion:dir,ciudad:String(r[iCiudad]||"").trim(),cp,fechaVenta,
               fecha:"",turno:"",trans:"",partido,tarifaLog:0,estado:"sin_asignar",
               nroSeguimiento,linkML:"https://www.mercadolibre.com.ar/ventas/"+orden+"/detalle",
@@ -11632,7 +11636,9 @@ export default function App(){
                 const nuevos=[];
                 if(cargarEnvios&&etiquetas.length){
                   for(const et of etiquetas){
-                    const existe=envios.find(e=>e.nroSeguimiento===et.nroSeguimiento);
+                    // Dedup: comparar por nroSeguimiento O por id (fallback para entradas
+                    // importadas desde Excel donde nroSeguimiento puede diferir del barcode PDF)
+                    const existe=envios.find(e=>e.nroSeguimiento===et.nroSeguimiento||e.id===et.nroSeguimiento);
                     if(existe){
                       const ref=doc(db,"envios",existe.id);
                       const upd={};
