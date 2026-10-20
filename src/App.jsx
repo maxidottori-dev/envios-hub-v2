@@ -11766,6 +11766,7 @@ export default function App(){
                       const m6=et.alphaId&&e.nroSeguimiento===et.alphaId;
                       return m1||m2||m3||m4||m5||m6;
                     });
+                    if(!existe)console.warn("[dedup-nomatch]",et.nroSeguimiento,"|venta:",et.ventaId,"|alpha:",et.alphaId);
                     if(existe){
                       const ref=doc(db,"envios",existe.id);
                       const upd={};
