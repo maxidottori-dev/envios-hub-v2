@@ -169,8 +169,9 @@ const parsearEtiquetasPDF=async(file)=>{
     const txt=tc.items.map(x=>x.str).join("\n");
     if(!txt.includes("FLEX")||!txt.includes("Destinatario:"))continue;
     const nroM=txt.match(/Envio:\s*(\d+)\s+(\d+)/i);
-    if(!nroM)continue;
-    const nroSeguimiento=(nroM[1]+nroM[2]).trim();
+    const nroAlfaM=!nroM?txt.match(/Envio:\s*([A-Z0-9]{25,30})/i):null;
+    if(!nroM&&!nroAlfaM)continue;
+    const nroSeguimiento=nroM?(nroM[1]+nroM[2]).trim():nroAlfaM[1].trim();
     const cpM=txt.match(/CP:\s*(\d{4,5})/);
     const tipoM=txt.match(/(COMERCIAL|RESIDENCIAL)/);
     const dirM=txt.match(/Direccion:\s*([^\n]+)/i);
@@ -486,11 +487,7 @@ function parsearExcel(file) {
             const cp=String(r[iCP]||"").replace(/\D/g,"");
             const fechaVenta=parseFechaES(r[iFecha]); if(!fechaVenta) continue;
             const partido=cpAPartido(cp)||String(r[iCiudad]||"").trim();
-            let nroSeguimiento=String(r[iSeg]||"").trim();
-            // Nuevo formato ML: columna seguimiento contiene el ID de 26 chars alfanumérico
-            // (no es el nro de barcode). En ese caso usar el # de venta numérico como nroSeguimiento
-            // para que el dedup contra el PDF funcione correctamente.
-            if(/^[A-Z0-9]{25,30}$/.test(nroSeguimiento)) nroSeguimiento=orden;
+            const nroSeguimiento=String(r[iSeg]||"").trim();
             envios.push({id:orden,direccion:dir,ciudad:String(r[iCiudad]||"").trim(),cp,fechaVenta,
               fecha:"",turno:"",trans:"",partido,tarifaLog:0,estado:"sin_asignar",
               nroSeguimiento,linkML:"https://www.mercadolibre.com.ar/ventas/"+orden+"/detalle",
