@@ -501,7 +501,8 @@ function parsearExcel(file) {
           if(iDir<0||iSeg<0) throw new Error("El template no tiene las columnas correctas.");
           for(let i=hFila+1;i<filas.length;i++){
             const r=filas[i];
-            const nroSeguimiento=String(r[iSeg]||"").trim();
+            const nroSeguimientoRaw=String(r[iSeg]||"").trim();
+            const nroSeguimiento=/^\d{11}$/.test(nroSeguimientoRaw)?nroSeguimientoRaw:"";
             if(!nroSeguimiento) continue;
             const dir=String(r[iDir]||"").trim(); if(!dir) continue;
             const cp=String(r[iCP]||"").replace(/\D/g,"");
@@ -527,7 +528,8 @@ function parsearExcel(file) {
             const cp=String(r[iCP]||"").replace(/\D/g,"");
             const fechaVenta=parseFechaES(r[iFecha]); if(!fechaVenta) continue;
             const partido=cpAPartido(cp)||String(r[iCiudad]||"").trim();
-            const nroSeguimiento=String(r[iSeg]||"").trim();
+            const nroSeguimientoRaw=String(r[iSeg]||"").trim();
+            const nroSeguimiento=/^\d{11}$/.test(nroSeguimientoRaw)?nroSeguimientoRaw:"";
             envios.push({id:orden,direccion:dir,ciudad:String(r[iCiudad]||"").trim(),cp,fechaVenta,
               fecha:"",turno:"",trans:"",partido,tarifaLog:0,estado:"sin_asignar",
               nroSeguimiento,linkML:"https://www.mercadolibre.com.ar/ventas/"+orden+"/detalle",
