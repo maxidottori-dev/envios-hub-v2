@@ -6,6 +6,8 @@ import { db } from "./firebase.js";
 import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, updateDoc, query, where, getDocs, addDoc, serverTimestamp, limit, orderBy, writeBatch, runTransaction } from "firebase/firestore";
 
 const VERSION = "2.1";
+// eslint-disable-next-line no-undef
+const BUILD_HASH = typeof __BUILD_HASH__ !== "undefined" ? __BUILD_HASH__ : "dev";
 
 // Estado derivado: si tiene trans asignado = asignado, si fue cancelado = cancelado, sino = sin_asignar
 function getEstado(e) {
@@ -705,7 +707,7 @@ function PantallaLogin({onLogin}){
         <div style={{textAlign:"center",marginBottom:"32px"}}>
           <div style={{width:"56px",height:"56px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:"14px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"26px",margin:"0 auto 16px"}}>🛵</div>
           <div style={{fontWeight:800,fontSize:"1.5rem",color:"#fff"}}>EnviosHub</div>
-          <div style={{color:"#4b5563",fontSize:"0.8rem",marginTop:"4px"}}>v{VERSION} · UMP Papel Distribuidora</div>
+          <div style={{color:"#4b5563",fontSize:"0.8rem",marginTop:"4px"}}>v{VERSION} ({BUILD_HASH}) · UMP Papel Distribuidora</div>
         </div>
         <div style={{background:"#1a1f2e",border:"1px solid #252d40",borderRadius:"16px",padding:"28px"}}>
           <div style={{marginBottom:"16px"}}>
@@ -5997,7 +5999,7 @@ function VistaLogistica({envios,sesion,lc}){
       <div style={{position:"sticky",top:0,zIndex:100,background:"#0f1420",borderBottom:"1px solid #1a1f2e",padding:"0.7rem 1rem",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
         <div style={{width:"26px",height:"26px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:"7px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>🛵</div>
         <div>
-          <div style={{fontWeight:800,fontSize:"0.92rem"}}>EnviosHub <span style={{color:"#374151",fontSize:"0.6rem",fontWeight:400}}>v{VERSION}</span></div>
+          <div style={{fontWeight:800,fontSize:"0.92rem"}}>EnviosHub <span style={{color:"#374151",fontSize:"0.6rem",fontWeight:400}}>v{VERSION} <span style={{color:"#374151",fontSize:"0.55rem",fontWeight:400}}>({BUILD_HASH})</span></span></div>
           <div style={{color:lcD.color,fontSize:"0.65rem",fontWeight:700}}>{logNombre}</div>
         </div>
         <div style={{display:"flex",gap:"3px",flexWrap:"wrap",marginLeft:"8px"}}>
@@ -6400,7 +6402,7 @@ function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armado
         <div style={{padding:"0.7rem 1rem",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
           <div style={{width:"26px",height:"26px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:"7px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:"14px"}}>📦</div>
           <div>
-            <div style={{fontWeight:800,fontSize:"0.92rem"}}>EnviosHub <span style={{color:"#374151",fontSize:"0.6rem",fontWeight:400}}>v{VERSION}</span></div>
+            <div style={{fontWeight:800,fontSize:"0.92rem"}}>EnviosHub <span style={{color:"#374151",fontSize:"0.6rem",fontWeight:400}}>v{VERSION} <span style={{color:"#374151",fontSize:"0.55rem",fontWeight:400}}>({BUILD_HASH})</span></span></div>
             <div style={{color:armador.color||"#06b6d4",fontSize:"0.7rem",fontWeight:700}}>{armador.nombre}</div>
           </div>
           {sesion.puedeSalida&&(
@@ -6566,7 +6568,7 @@ function VistaChofer({envios,setEnvios,sesion,lc}){
         <div style={{padding:"0.7rem 1rem",display:"flex",alignItems:"center",gap:"0.75rem"}}>
           <div style={{width:"26px",height:"26px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:"7px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:"14px"}}>🛵</div>
           <div>
-            <div style={{fontWeight:800,fontSize:"0.92rem"}}>EnviosHub <span style={{color:"#374151",fontSize:"0.6rem",fontWeight:400}}>v{VERSION}</span></div>
+            <div style={{fontWeight:800,fontSize:"0.92rem"}}>EnviosHub <span style={{color:"#374151",fontSize:"0.6rem",fontWeight:400}}>v{VERSION} <span style={{color:"#374151",fontSize:"0.55rem",fontWeight:400}}>({BUILD_HASH})</span></span></div>
             <div style={{color:lcD.color,fontSize:"0.65rem",fontWeight:700}}>{logNombre}</div>
           </div>
           <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:"0.75rem"}}>
@@ -7894,7 +7896,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
       <div style={{position:"sticky",top:0,zIndex:100,background:"#0f1420",borderBottom:"1px solid #1a1f2e",padding:"0.7rem 1rem",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
         <div style={{width:"26px",height:"26px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:"7px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>🛵</div>
         <div>
-          <div style={{fontWeight:800,fontSize:"0.92rem"}}>EnviosHub <span style={{color:"#374151",fontSize:"0.6rem",fontWeight:400}}>v{VERSION}</span></div>
+          <div style={{fontWeight:800,fontSize:"0.92rem"}}>EnviosHub <span style={{color:"#374151",fontSize:"0.6rem",fontWeight:400}}>v{VERSION} <span style={{color:"#374151",fontSize:"0.55rem",fontWeight:400}}>({BUILD_HASH})</span></span></div>
           <div style={{color:"#f59e0b",fontSize:"0.65rem",fontWeight:700}}>Expedición</div>
         </div>
         <div style={{display:"flex",gap:"4px",marginLeft:"0.75rem"}}>
@@ -11593,7 +11595,7 @@ export default function App(){
       <div style={{position:"sticky",top:0,zIndex:100,background:"#0f1420",borderBottom:"1px solid #1a1f2e",padding:"0.7rem 1rem",display:"flex",alignItems:"center",gap:"0.55rem",flexWrap:"wrap"}}>
         <div style={{width:"26px",height:"26px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:"7px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>🛵</div>
         <div style={{marginRight:"0.2rem"}}>
-          <div style={{fontWeight:800,fontSize:"0.92rem"}}>EnviosHub <span style={{color:"#374151",fontSize:"0.6rem",fontWeight:400}}>v{VERSION}</span></div>
+          <div style={{fontWeight:800,fontSize:"0.92rem"}}>EnviosHub <span style={{color:"#374151",fontSize:"0.6rem",fontWeight:400}}>v{VERSION} <span style={{color:"#374151",fontSize:"0.55rem",fontWeight:400}}>({BUILD_HASH})</span></span></div>
           <div style={{color:"#374151",fontSize:"0.58rem"}}>{syncLoading?"Conectando...":(envios.length>0?envios.length+" envios":"Sin envios")}</div>
         </div>
         <div style={{display:"flex",alignItems:"center",gap:"8px",padding:"4px 12px",borderRadius:"7px",background:"#12172a",border:"1px solid #1e2535",flexShrink:0,marginRight:"0.2rem"}}>
