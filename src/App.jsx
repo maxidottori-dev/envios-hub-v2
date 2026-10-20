@@ -177,14 +177,22 @@ const parsearEtiquetasPDF=async(file)=>{
     if(txt.includes("FLEX")&&txt.includes("Envio:")){
       labelTxts.push(txt);
     } else if(txt.includes("Venta:")){
-      // Página de armado: extraer Pack ID y Venta (# de venta = id en Firestore)
-      const pm=txt.match(/Pack\s*ID:\s*(\d+)/i);
-      const vm=txt.match(/Venta:\s*(\d+)/i);
-      if(pm&&vm)packToVenta[pm[1].trim()]=vm[1].trim();
-      // También extraer el id alfanumérico de 26 chars que ML usa como nuevo nroSeguimiento
-      // Aparece al inicio de la página de armado antes del nombre del producto, ej: "HK5BUZHHTNIJTGADOYBTO6LJT4 Vaso..."
-      const alphaM=txt.match(/\b([A-Z0-9]{20,30})\b/);
-      if(pm&&alphaM)packToAlpha[pm[1].trim()]=alphaM[1].trim();
+      // Página de armado: puede tener MÚLTIPLES pedidos — usar matchAll para iterar todos
+      const packRe=/Pack\s*ID:\s*(\d+)(?:[\s\n]+(\d+))?/gi;
+      const ventaRe=/Venta:\s*(\d+)/gi;
+      const packMatches=[...txt.matchAll(packRe)];
+      const ventaMatches=[...txt.matchAll(ventaRe)];
+      for(let j=0;j<packMatches.length;j++){
+        const pm=packMatches[j];
+        const raw1=pm[1].trim(),raw2=(pm[2]||"").trim();
+        const packId=(raw2&&raw1.length<13?raw1+raw2:raw1);
+        if(ventaMatches[j])packToVenta[packId]=ventaMatches[j][1].trim();
+        // Buscar alphaId: último token [A-Z0-9]{20,30} ANTES de este Pack ID en el texto
+        // Así cada pedido toma su propio identificador 26-char (si lo tiene)
+        const before=txt.substring(0,pm.index);
+        const alphas=[...before.matchAll(/\b([A-Z0-9]{20,30})\b/g)];
+        if(alphas.length>0)packToAlpha[packId]=alphas[alphas.length-1][1];
+      }
     }
   }
   // DEBUG TEMPORAL
