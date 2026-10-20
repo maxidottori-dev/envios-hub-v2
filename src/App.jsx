@@ -968,6 +968,57 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc,envios=
 // ════════════════════════════════════════════════════════════════════
 // MODAL OPCIONES PDF FLEX
 // ════════════════════════════════════════════════════════════════════
+function ModalDuplicadosFlex({duplicados, onConfirm, onCancel}){
+  const [seleccionados,setSeleccionados]=useState(new Set());
+  const toggleTodos=(val)=>setSeleccionados(val?new Set(duplicados.map((_,i)=>i)):new Set());
+  const toggle=(i)=>{
+    const s=new Set(seleccionados);
+    if(s.has(i))s.delete(i);else s.add(i);
+    setSeleccionados(s);
+  };
+  const selArr=duplicados.filter((_,i)=>seleccionados.has(i));
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:"16px"}}>
+      <div style={{background:"#12172a",border:"1px solid #f59e0b",borderRadius:"16px",padding:"28px 28px 24px",width:"100%",maxWidth:"560px",maxHeight:"80vh",display:"flex",flexDirection:"column",boxShadow:"0 8px 40px #0009"}}>
+        <div style={{color:"#fbbf24",fontWeight:800,fontSize:"1rem",marginBottom:"4px"}}>⚠️ Envíos ya existentes en EnviosHub</div>
+        <div style={{color:"#9ca3af",fontSize:"0.75rem",marginBottom:"16px"}}>Los siguientes envíos ya fueron importados antes. Seleccioná los que querés volver a importar (se agregarán a la pantalla de asignación).</div>
+        {/* Botones seleccionar todos / ninguno */}
+        <div style={{display:"flex",gap:"8px",marginBottom:"10px"}}>
+          <button onClick={()=>toggleTodos(true)} style={{background:"#1a2640",border:"1px solid #374151",color:"#d1d5db",padding:"4px 12px",borderRadius:"6px",cursor:"pointer",fontSize:"0.72rem"}}>Seleccionar todos</button>
+          <button onClick={()=>toggleTodos(false)} style={{background:"#1a2640",border:"1px solid #374151",color:"#d1d5db",padding:"4px 12px",borderRadius:"6px",cursor:"pointer",fontSize:"0.72rem"}}>Ninguno</button>
+        </div>
+        {/* Lista de duplicados */}
+        <div style={{overflowY:"auto",flex:1,marginBottom:"16px",display:"flex",flexDirection:"column",gap:"6px"}}>
+          {duplicados.map(({et,existe},i)=>{
+            const sel=seleccionados.has(i);
+            return(
+              <label key={i} style={{display:"flex",alignItems:"flex-start",gap:"10px",cursor:"pointer",padding:"10px 12px",background:sel?"#1c2540":"#0f1420",border:"1px solid "+(sel?"#f59e0b":"#252d40"),borderRadius:"8px",transition:"all 0.12s"}}>
+                <input type="checkbox" checked={sel} onChange={()=>toggle(i)} style={{width:"15px",height:"15px",accentColor:"#f59e0b",marginTop:"2px",flexShrink:0}}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{color:"#e5e7eb",fontWeight:700,fontSize:"0.8rem",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{et.destinatario||existe.destinatario||"—"}</div>
+                  <div style={{color:"#6b7280",fontSize:"0.7rem",marginTop:"1px"}}>{et.nroSeguimiento}</div>
+                  {et.ventaId&&<div style={{color:"#6b7280",fontSize:"0.7rem"}}>Venta: {et.ventaId}</div>}
+                  <div style={{color:"#9ca3af",fontSize:"0.7rem",marginTop:"2px"}}>{et.direccion||existe.direccion||""}{et.localidad?" · "+et.localidad:""}</div>
+                </div>
+                <div style={{textAlign:"right",flexShrink:0}}>
+                  {existe.trans&&<div style={{color:"#84cc16",fontSize:"0.7rem",fontWeight:700}}>{existe.trans}</div>}
+                  <div style={{color:"#4b5563",fontSize:"0.65rem",marginTop:"2px"}}>ya existe</div>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+        <div style={{display:"flex",gap:"10px",justifyContent:"flex-end"}}>
+          <button onClick={onCancel} style={{background:"#1a1f2e",border:"1px solid #252d40",color:"#9ca3af",padding:"8px 20px",borderRadius:"8px",cursor:"pointer",fontSize:"0.82rem"}}>Cancelar</button>
+          <button onClick={()=>onConfirm(selArr)} style={{background:"linear-gradient(135deg,#f59e0b,#d97706)",color:"#0f1420",border:"none",padding:"8px 24px",borderRadius:"8px",cursor:"pointer",fontWeight:800,fontSize:"0.82rem"}}>
+            {selArr.length>0?`Importar ${selArr.length} seleccionado${selArr.length>1?"s":""}` : "Continuar sin importar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ModalOpcionesPDF({onConfirm, onCancel}){
   const [cargarEnvios, setCargarEnvios] = useState(true);
   const [procesarArmado, setProcesarArmado] = useState(true);
@@ -11315,6 +11366,7 @@ export default function App(){
   const [pendingMLFile,setPendingMLFile]=useState(null); // PDF flex guardado para enviar a ML Armado tras confirmar asignación
   const [modalPDF,setModalPDF]=useState(null); // archivo pendiente mientras modal abierto
   const [modalPDFColecta,setModalPDFColecta]=useState(null); // archivo Colecta pendiente mientras modal abierto
+  const [modalDuplicadosFlex,setModalDuplicadosFlex]=useState(null); // {duplicados:[{et,existe}], nuevos:[], file, procesarArmado, etiquetas, loteTs}
   const [colectaProgMsg,setColectaProgMsg]=useState(""); // texto de progreso a mostrar en el botón "Colecta" mientras se espera ML Armado
   const [envios,setEnviosLocal]=useState([]);
   const [colectas,setColectas]=useState([]); // colectas ML pendientes de armado (estado=pendiente)
@@ -11754,6 +11806,7 @@ export default function App(){
                 const hoy=fechaHoy();
                 const loteTs=new Date().toISOString();
                 const nuevos=[];
+                const duplicados=[];
                 if(cargarEnvios&&etiquetas.length){
                   for(const et of etiquetas){
                     // Dedup: comparar por nroSeguimiento, ventaId o alphaId (id 26-char extraído de armado).
@@ -11770,6 +11823,7 @@ export default function App(){
                     });
                     if(!existe)console.warn("[dedup-nomatch]",et.nroSeguimiento,"|venta:",et.ventaId,"|alpha:",et.alphaId);
                     if(existe){
+                      // Actualizar campos siempre (silencioso)
                       const ref=doc(db,"envios",existe.id);
                       const upd={};
                       if(et.destinatario)upd.destinatario=et.destinatario;
@@ -11780,6 +11834,8 @@ export default function App(){
                       // Si el entry importado del Excel tiene el 26-char, reemplazarlo con el barcode real de 11 dígitos
                       if(et.nroSeguimiento&&/^\d{10,15}$/.test(et.nroSeguimiento)&&existe.nroSeguimiento!==et.nroSeguimiento)upd.nroSeguimiento=et.nroSeguimiento;
                       if(Object.keys(upd).length)await setDoc(ref,upd,{merge:true});
+                      // Guardar en duplicados para mostrar al usuario
+                      duplicados.push({et,existe});
                     } else {
                       nuevos.push({
                         id:et.nroSeguimiento,
@@ -11810,6 +11866,12 @@ export default function App(){
                     }
                   }
                 }
+                // Si hay duplicados, mostrar modal para que el usuario decida
+                if(duplicados.length>0){
+                  setLoading(false);
+                  setModalDuplicadosFlex({duplicados,nuevos,file:f,procesarArmado,etiquetas,loteTs,hoy});
+                  return;
+                }
                 // Toast resumen
                 const partes=[];
                 if(cargarEnvios){
@@ -11832,6 +11894,85 @@ export default function App(){
                     envios.forEach(e=>{if(e.nroSeguimiento&&e.trans)logMap[e.nroSeguimiento]=e.trans;});
                     // También indexar por alphaId (26-char) y por barcode real de etiquetas procesadas
                     // para que el script Python encuentre la logística aunque el nroSeguimiento aún no se actualizó
+                    for(const et of etiquetas){
+                      const existeEt=envios.find(e=>{
+                        const m1=e.nroSeguimiento===et.nroSeguimiento;
+                        const m2=e.id===et.nroSeguimiento;
+                        const m3=et.ventaId&&e.id===et.ventaId;
+                        const m4=et.ventaId&&e.nroSeguimiento===et.ventaId;
+                        const m5=et.alphaId&&e.id===et.alphaId;
+                        const m6=et.alphaId&&e.nroSeguimiento===et.alphaId;
+                        return m1||m2||m3||m4||m5||m6;
+                      });
+                      if(existeEt&&existeEt.trans){
+                        if(et.nroSeguimiento)logMap[et.nroSeguimiento]=existeEt.trans;
+                        if(et.alphaId)logMap[et.alphaId]=existeEt.trans;
+                        if(et.ventaId)logMap[et.ventaId]=existeEt.trans;
+                      }
+                    }
+                    await procesarConMLArmado(f,"Flex",null,logMap);
+                    mostrarToast("PDF procesado por ML Armado");
+                  }catch(mlErr){
+                    mostrarToast("ML Armado no disponible — intentá de nuevo en unos segundos");
+                  }
+                }
+              }catch(err){mostrarToast("Error: "+err.message);}
+              setLoading(false);
+            }}
+          />}
+          {/* Modal duplicados Flex */}
+          {modalDuplicadosFlex&&<ModalDuplicadosFlex
+            duplicados={modalDuplicadosFlex.duplicados}
+            onCancel={()=>setModalDuplicadosFlex(null)}
+            onConfirm={async(seleccionados)=>{
+              const {nuevos,file:f,procesarArmado,etiquetas,loteTs,hoy}=modalDuplicadosFlex;
+              setModalDuplicadosFlex(null);
+              setLoading(true);
+              try{
+                // Construir objetos envío para los duplicados seleccionados
+                const todosNuevos=[...nuevos];
+                for(const {et} of seleccionados){
+                  todosNuevos.push({
+                    id:et.nroSeguimiento,
+                    nroSeguimiento:et.nroSeguimiento,
+                    linkML:"https://www.mercadolibre.com.ar/ventas/"+et.nroSeguimiento+"/detalle",
+                    origen:"ML",
+                    direccion:et.direccion||"",
+                    localidad:et.localidad||"",
+                    partido:cpAPartido(et.cp)||"",
+                    cp:et.cp||"",
+                    ciudad:"",
+                    fecha:et.fecha||hoy,
+                    fechaVenta:hoy,
+                    turno:"",
+                    trans:"",
+                    bultos:0,
+                    cobranza:null,
+                    cambio:null,
+                    retiro:null,
+                    observaciones:"",
+                    tarifaLog:0,
+                    destinatario:et.destinatario||"",
+                    referencia:et.referencia||"",
+                    tipoEntrega:et.tipoEntrega||"",
+                    preparado:false,
+                    loteImportacion:loteTs,
+                  });
+                }
+                const partes=[];
+                if(todosNuevos.length)partes.push(todosNuevos.length+" envio(s) a asignar");
+                else partes.push("Ningún envío nuevo seleccionado");
+                if(partes.length)mostrarToast(partes.join(" · "));
+                if(todosNuevos.length){
+                  setBorrador(todosNuevos);
+                  setFileName(f.name);
+                  if(procesarArmado)setPendingMLFile(f);
+                  setPantalla("asignacion");
+                } else if(procesarArmado){
+                  try{
+                    mostrarToast("Enviando a ML Armado...");
+                    const logMap={};
+                    envios.forEach(e=>{if(e.nroSeguimiento&&e.trans)logMap[e.nroSeguimiento]=e.trans;});
                     for(const et of etiquetas){
                       const existeEt=envios.find(e=>{
                         const m1=e.nroSeguimiento===et.nroSeguimiento;
