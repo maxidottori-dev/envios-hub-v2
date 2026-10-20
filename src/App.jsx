@@ -190,9 +190,10 @@ const parsearEtiquetasPDF=async(file)=>{
     if(!nroM)continue;
     const nroSeguimiento=nroM[2]?(nroM[1]+nroM[2]).trim():nroM[1].trim();
     // Extraer Pack ID para buscar el ventaId (# de venta del Excel) desde armado
-    const packM=txt.match(/Pack\s*ID:\s*(\d+)/i);
-    const ventaId=packM?(packToVenta[packM[1].trim()]||""):"";
-    console.log("[parsearEtiquetasPDF] packM=",packM?.[1],"ventaId=",ventaId,"nroSeguimiento=",nroSeguimiento);
+    const packM=txt.match(/Pack\s*ID:\s*(\d+)(?:[\s\n]+(\d+))?/i);
+    const packId=packM?(packM[2]&&packM[1].length<13?packM[1]+packM[2]:packM[1]).trim():null;
+    const ventaId=packId?(packToVenta[packId]||""):"";
+    console.log("[parsearEtiquetasPDF] packId=",packId,"ventaId=",ventaId,"nroSeguimiento=",nroSeguimiento);
     const cpM=txt.match(/CP:\s*(\d{4,5})/);
     const tipoM=txt.match(/(COMERCIAL|RESIDENCIAL)/);
     const dirM=txt.match(/Direccion:\s*([^\n]+)/i);
