@@ -162,16 +162,34 @@ const parsearEtiquetasPDF=async(file)=>{
   const lib=await cargarPDFLib();
   const buf=await file.arrayBuffer();
   const pdf=await lib.getDocument({data:buf}).promise;
-  const etiquetas=[];
+  // Paso 1: recolectar páginas de etiqueta y construir mapa packId→ventaId desde páginas de armado.
+  // Las etiquetas Flex tienen "FLEX" + "Destinatario:"; las de armado tienen "Venta:".
+  // El Pack ID es el campo común que las une.
+  const labelTxts=[];
+  const packToVenta={};
   for(let i=1;i<=pdf.numPages;i++){
     const page=await pdf.getPage(i);
     const tc=await page.getTextContent();
     const txt=tc.items.map(x=>x.str).join("\n");
-    if(!txt.includes("FLEX")||!txt.includes("Destinatario:"))continue;
-    const nroM=txt.match(/Envio:\s*(\d+)\s+(\d+)/i);
-    const nroAlfaM=!nroM?txt.match(/Envio:\s*([A-Z0-9]{25,30})/i):null;
-    if(!nroM&&!nroAlfaM)continue;
-    const nroSeguimiento=nroM?(nroM[1]+nroM[2]).trim():nroAlfaM[1].trim();
+    if(txt.includes("FLEX")&&txt.includes("Destinatario:")){
+      labelTxts.push(txt);
+    } else if(txt.includes("Venta:")){
+      // Página de armado: extraer Pack ID y Venta (# de venta = id en Firestore)
+      const pm=txt.match(/Pack\s*ID:\s*(\d+)/i);
+      const vm=txt.match(/Venta:\s*(\d+)/i);
+      if(pm&&vm)packToVenta[pm[1].trim()]=vm[1].trim();
+    }
+  }
+  // Paso 2: procesar páginas de etiqueta
+  const etiquetas=[];
+  for(const txt of labelTxts){
+    // Soportar formato dividido ("48272\n235036") y formato unificado ("48294075310")
+    const nroM=txt.match(/Envio:\s*(\d+)(?:\s+(\d+))?/i);
+    if(!nroM)continue;
+    const nroSeguimiento=nroM[2]?(nroM[1]+nroM[2]).trim():nroM[1].trim();
+    // Extraer Pack ID para buscar el ventaId (# de venta del Excel) desde armado
+    const packM=txt.match(/Pack\s*ID:(\d+)/i);
+    const ventaId=packM?(packToVenta[packM[1].trim()]||""):"";
     const cpM=txt.match(/CP:\s*(\d{4,5})/);
     const tipoM=txt.match(/(COMERCIAL|RESIDENCIAL)/);
     const dirM=txt.match(/Direccion:\s*([^\n]+)/i);
@@ -180,6 +198,7 @@ const parsearEtiquetasPDF=async(file)=>{
     const destM=txt.match(/Destinatario:\s*([^\n]+)/i);
     etiquetas.push({
       nroSeguimiento,
+      ventaId,
       cp:cpM?cpM[1].trim():"",
       tipoEntrega:tipoM?tipoM[1]:"",
       direccion:dirM?dirM[1].trim():"",
@@ -11633,9 +11652,14 @@ export default function App(){
                 const nuevos=[];
                 if(cargarEnvios&&etiquetas.length){
                   for(const et of etiquetas){
-                    // Dedup: comparar por nroSeguimiento O por id (fallback para entradas
-                    // importadas desde Excel donde nroSeguimiento puede diferir del barcode PDF)
-                    const existe=envios.find(e=>e.nroSeguimiento===et.nroSeguimiento||e.id===et.nroSeguimiento);
+                    // Dedup: comparar por nroSeguimiento, por id, o por ventaId (# de venta del Excel).
+                    // ventaId es el puente cuando ML cambia el seguimiento a formato 26 char alfanumérico:
+                    // el PDF todavía tiene el barcode de 11 dígitos en "Envio:" pero el Excel tiene el 26-char.
+                    const existe=envios.find(e=>
+                      e.nroSeguimiento===et.nroSeguimiento||
+                      e.id===et.nroSeguimiento||
+                      (et.ventaId&&(e.id===et.ventaId||e.nroSeguimiento===et.ventaId))
+                    );
                     if(existe){
                       const ref=doc(db,"envios",existe.id);
                       const upd={};
@@ -11644,6 +11668,8 @@ export default function App(){
                       if(et.tipoEntrega)upd.tipoEntrega=et.tipoEntrega;
                       if(et.localidad&&!existe.localidad)upd.localidad=et.localidad;
                       if(et.fecha&&!existe.fecha)upd.fecha=et.fecha;
+                      // Si el entry importado del Excel tiene el 26-char, reemplazarlo con el barcode real de 11 dígitos
+                      if(et.nroSeguimiento&&/^\d{10,15}$/.test(et.nroSeguimiento)&&existe.nroSeguimiento!==et.nroSeguimiento)upd.nroSeguimiento=et.nroSeguimiento;
                       if(Object.keys(upd).length)await setDoc(ref,upd,{merge:true});
                     } else {
                       nuevos.push({
