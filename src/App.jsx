@@ -1380,6 +1380,19 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
   const [editId,setEditId]=useState(null);
   const [seleccionados,setSeleccionados]=useState(new Set());
   const [modoSel,setModoSel]=useState(false);
+  // Histórico: para buscar envíos anteriores a 60 días
+  const [enviosHistTab,setEnviosHistTab]=useState(null);
+  const [loadingHistTab,setLoadingHistTab]=useState(false);
+  const enviosTodos=enviosHistTab!==null?enviosHistTab:envios;
+  const cargarHistoricoTab=async()=>{
+    setLoadingHistTab(true);
+    try{
+      const snap=await getDocs(collection(db,"envios"));
+      const todos=snap.docs.map(d=>({...d.data(),id:d.id}));
+      setEnviosHistTab(todos.filter(e=>mostrarResumenFlex?e.origen==="ML":e.origen!=="ML"));
+    }catch(e){console.error(e);}
+    setLoadingHistTab(false);
+  };
   const tmap=buildTarifaMap(zc);
   const getImp=e=>calcImp(e,tmap,lc,zc);
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
@@ -1392,7 +1405,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
     return{d:rangoD,h:rangoH};
   };
   const{d:desde,h:hasta}=getRango();
-  const filtrados=envios.filter(e=>{
+  const filtrados=enviosTodos.filter(e=>{
     const f=e.fecha||e.fechaVenta||"";
     if(desde&&f<desde)return false;
     if(hasta&&f>hasta)return false;
@@ -1541,6 +1554,10 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
           </>}
           <button onClick={()=>setSoloReprog(!soloReprog)} style={{...S.btnSm(soloReprog,"#fbbf24"),marginLeft:mostrarResumenFlex?"0":"auto"}}>⟳ Reprog.</button>
           <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="🔍 Buscar..." style={{...S.input,width:"190px",marginLeft:mostrarResumenFlex?"auto":"0"}}/>
+          {enviosHistTab===null
+            ?<button onClick={cargarHistoricoTab} disabled={loadingHistTab} title="Carga toda la historia (antes de 60 días)" style={{...S.btnSm(false),background:"#1e1b4b",borderColor:"#4338ca",color:"#a5b4fc",fontSize:"0.65rem",whiteSpace:"nowrap"}}>{loadingHistTab?"⏳":"🔍 +Histórico"}</button>
+            :<span title="Historial completo cargado" style={{fontSize:"0.62rem",color:"#6b7280",whiteSpace:"nowrap"}}>✓ Hist.</span>
+          }
           <button onClick={()=>{
             const tmap2=buildTarifaMap(zc);
             const filas=filtradosOrdenados.map((e,i)=>({
@@ -3687,11 +3704,26 @@ function TabInforme({envios,zc,lc,mlTarifas={}}){
   const [filTipos,setFilTipos]=useState(new Set());
   const [showCaros,setShowCaros]=useState(false);
   const toggleTipo=t=>setFilTipos(prev=>{const n=new Set(prev);n.has(t)?n.delete(t):n.add(t);return n;});
+  // Histórico: cuando el rango cae antes del corte de 60 días
+  const cutoff60=useMemo(()=>{const d=new Date();d.setDate(d.getDate()-60);return d.toISOString().split("T")[0];},[]);
+  const [enviosHist,setEnviosHist]=useState(null);  // null=no cargado
+  const [loadingHist,setLoadingHist]=useState(false);
+  useEffect(()=>{setEnviosHist(null);},[desde,hasta]);
+  const necesitaHist=desde<cutoff60;
+  const enviosEfectivos=enviosHist!==null?enviosHist:envios;
+  const cargarHistoricoInforme=async()=>{
+    setLoadingHist(true);
+    try{
+      const snap=await getDocs(query(collection(db,"envios"),where("fechaVenta",">=",desde),where("fechaVenta","<=",hasta)));
+      setEnviosHist(snap.docs.map(d=>({...d.data(),id:d.id})));
+    }catch(e){console.error(e);}
+    setLoadingHist(false);
+  };
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const tmap=buildTarifaMap(zc);
   const getImp=e=>e.importeOverride>0?e.importeOverride:calcImp(e,tmap,lc,zc);
   const getTipo=e=>e.origen==="ML"?"FLEX":e.origen==="Tienda Nube"?"TN":"Manual";
-  const envSem=envios.filter(e=>{
+  const envSem=enviosEfectivos.filter(e=>{
     const ds=e.fecha||e.fechaVenta||"";
     if(e.estado==="cancelado")return false;
     if(logSel!=="TODAS"&&e.trans!==logSel)return false;
@@ -3716,7 +3748,7 @@ function TabInforme({envios,zc,lc,mlTarifas={}}){
     return Object.values(m).sort((a,b)=>b.count-a.count);
   })();
 
-  if(!envios.length)return<div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📊</div><p>Sin envios para mostrar</p></div>;
+  if(!enviosEfectivos.length&&!necesitaHist)return<div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📊</div><p>Sin envios para mostrar</p></div>;
   return(
     <div>
       {/* Filtros fecha */}
@@ -3726,6 +3758,8 @@ function TabInforme({envios,zc,lc,mlTarifas={}}){
         <span style={{color:"#4b5563",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Hasta</span>
         <input type="date" value={hasta} onChange={ev=>setHasta(ev.target.value)} style={{...S.input,padding:"4px 8px",width:"140px"}}/>
         <button onClick={()=>{const s=initSem();setDesde(s.d);setHasta(s.h);}} style={S.btnSm(false)}>Esta semana</button>
+        {necesitaHist&&enviosHist===null&&<button onClick={cargarHistoricoInforme} disabled={loadingHist} style={{...S.btnSm(false),background:"#1e1b4b",borderColor:"#4338ca",color:"#a5b4fc"}}>{loadingHist?"Cargando...":"🔍 Buscar en histórico"}</button>}
+        {enviosHist!==null&&<span style={{fontSize:"0.65rem",color:"#6b7280",marginLeft:"4px"}}>✓ Histórico cargado ({enviosHist.length} envíos)</span>}
       </div>
       {/* Filtro tipo */}
       <div style={{...S.card,padding:"0.55rem 1rem",marginBottom:"0.8rem",display:"flex",gap:"0.35rem",flexWrap:"wrap",alignItems:"center"}}>
@@ -4191,12 +4225,22 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
   const [busqueda, setBusqueda] = useState("");
   const logActivas = Object.entries(lc).filter(([,v]) => v.activa).map(([k]) => k);
 
+  const [enviosLocalesLiq,setEnviosLocalesLiq]=useState(null);
+  const [loadingHistLiq,setLoadingHistLiq]=useState(false);
+  const enviosEfectivos=enviosLocalesLiq!==null?enviosLocalesLiq:envios;
+  const cargarHistorialLiq=async()=>{
+    setLoadingHistLiq(true);
+    try{const snap=await getDocs(collection(db,"envios"));setEnviosLocalesLiq(snap.docs.map(d=>({...d.data(),id:d.id})));}
+    catch(e){console.error(e);}
+    setLoadingHistLiq(false);
+  };
+
   // Envios con cobranza
-  const conCobranza = envios.filter(e =>
+  const conCobranza = enviosEfectivos.filter(e =>
     e.cobranza !== null && e.cobranza !== undefined && e.cobranza > 0 && getEstado(e) !== "cancelado"
   );
   // Envios con cambio, retiro, o devolución por cancelación tras despacho
-  const conRetiro = envios.filter(e =>
+  const conRetiro = enviosEfectivos.filter(e =>
     ((!!e.cambio || e.retiro !== null) && getEstado(e) !== "cancelado") ||
     (e.devolucionPendiente && !e.devolucionCancelacionRecibida)
   );
@@ -4298,6 +4342,10 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
         <span style={{ color: "#374151", fontSize: "0.6rem" }}>|</span>
         <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar nro orden o dirección..." style={{...S.input,width:"200px",padding:"3px 8px",fontSize:"0.75rem"}}/>
         {busqueda&&<button onClick={()=>setBusqueda("")} style={{...S.btnSm(false),color:"#6b7280"}}>x</button>}
+        {enviosLocalesLiq===null
+          ?<button onClick={cargarHistorialLiq} disabled={loadingHistLiq} title="Carga toda la historia (antes de 60 días)" style={{...S.btnSm(false),background:"#1e1b4b",borderColor:"#4338ca",color:"#a5b4fc",fontSize:"0.65rem",whiteSpace:"nowrap"}}>{loadingHistLiq?"⏳":"🔍 +Histórico"}</button>
+          :<span title="Historial completo cargado" style={{fontSize:"0.62rem",color:"#6b7280",whiteSpace:"nowrap"}}>✓ Hist.</span>
+        }
         <button onClick={()=>{
           const filas=lista.map((e,i)=>{
             const recibido=seccion==="cobranzas"?!!e.cobranzaRecibida:!!e.retiroRecibido;
@@ -4575,6 +4623,16 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
   const [pagoExpandido,setPagoExpandido]=useState(null); // id del pago con detalle visible
   const [mostrarTodosEnvios,setMostrarTodosEnvios]=useState(false);
 
+  const [enviosLocalesCC,setEnviosLocalesCC]=useState(null);
+  const [loadingHistCC,setLoadingHistCC]=useState(false);
+  const enviosEfectivos=enviosLocalesCC!==null?enviosLocalesCC:envios;
+  const cargarHistorialCC=async()=>{
+    setLoadingHistCC(true);
+    try{const snap=await getDocs(collection(db,"envios"));setEnviosLocalesCC(snap.docs.map(d=>({...d.data(),id:d.id})));}
+    catch(e){console.error(e);}
+    setLoadingHistCC(false);
+  };
+
   useEffect(()=>{setMostrarTodosEnvios(false);},[vistaCliente]);
 
   const eliminarPago=async(id)=>{
@@ -4628,7 +4686,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
 
   // Agrupar envios con deuda por cliente
   const clientesMap={};
-  envios.forEach(e=>{
+  enviosEfectivos.forEach(e=>{
     const deuda=getDeudaEnvio(e);
     if(!deuda)return;
     const key=getClienteKey(e);
@@ -4766,7 +4824,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
           }).filter(e=>e._saldoEnvio>0);
 
           // Todos los pedidos del cliente (incluyendo sin deuda)
-          const todosEnviosCliente=envios.filter(e=>getClienteKey(e)===c.key).sort((a,b)=>(b.fechaVenta||b.fecha||"").localeCompare(a.fechaVenta||a.fecha||""));
+          const todosEnviosCliente=enviosEfectivos.filter(e=>getClienteKey(e)===c.key).sort((a,b)=>(b.fechaVenta||b.fecha||"").localeCompare(a.fechaVenta||a.fecha||""));
 
           const listaDeuda=mostrarTodosEnvios?null:enviosConSaldo;
           const listaTodos=mostrarTodosEnvios?todosEnviosCliente:null;
@@ -4920,6 +4978,11 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
 
   return(
     <div>
+      {enviosLocalesCC===null&&<div style={{display:"flex",alignItems:"center",gap:"0.5rem",marginBottom:"0.5rem",padding:"0.4rem 0.7rem",background:"#1e1b4b",borderRadius:"6px",border:"1px solid #4338ca"}}>
+        <span style={{fontSize:"0.72rem",color:"#a5b4fc"}}>Solo se muestran cuentas corrientes de los últimos 60 días.</span>
+        <button onClick={cargarHistorialCC} disabled={loadingHistCC} style={{...S.btnSm(false),background:"#312e81",borderColor:"#6366f1",color:"#c7d2fe",fontSize:"0.68rem",whiteSpace:"nowrap"}}>{loadingHistCC?"⏳ Cargando...":"🔍 Cargar historial completo"}</button>
+      </div>}
+      {enviosLocalesCC!==null&&<div style={{fontSize:"0.68rem",color:"#6b7280",marginBottom:"0.4rem"}}>✓ Historial completo cargado ({enviosLocalesCC.length} envíos)</div>}
       {/* Botón sync TN + resultado */}
       <div style={{display:"flex",alignItems:"center",gap:"0.75rem",marginBottom:"0.8rem",flexWrap:"wrap"}}>
         {syncPagos==="confirm"?(
@@ -6718,6 +6781,16 @@ function TabClientes({envios,lc,pagosCC=[],facturaClientes={},setFacturaCliente=
   const [editando,setEditando]=useState({}); // {key:{telefono,notas}}
   const [guardando,setGuardando]=useState({});
 
+  const [enviosLocalesCli,setEnviosLocalesCli]=useState(null);
+  const [loadingHistCli,setLoadingHistCli]=useState(false);
+  const enviosEfectivosCli=enviosLocalesCli!==null?enviosLocalesCli:envios;
+  const cargarHistorialCli=async()=>{
+    setLoadingHistCli(true);
+    try{const snap=await getDocs(collection(db,"envios"));setEnviosLocalesCli(snap.docs.map(d=>({...d.data(),id:d.id})));}
+    catch(e){console.error(e);}
+    setLoadingHistCli(false);
+  };
+
   // Cargar metadata editable de clientes desde Firestore
   useEffect(()=>{
     const unsub=onSnapshot(collection(db,"clientes"),snap=>{
@@ -6736,7 +6809,7 @@ function TabClientes({envios,lc,pagosCC=[],facturaClientes={},setFacturaCliente=
   };
 
   // Solo Manual + TN (sin ML)
-  const enviosFiltrados=useMemo(()=>envios.filter(e=>e.origen!=="ML"),[envios]);
+  const enviosFiltrados=useMemo(()=>enviosEfectivosCli.filter(e=>e.origen!=="ML"),[enviosEfectivosCli]);
 
   // Agrupar por clienteKey
   const clientes=useMemo(()=>{
@@ -6875,6 +6948,10 @@ function TabClientes({envios,lc,pagosCC=[],facturaClientes={},setFacturaCliente=
       <div style={{display:"flex",gap:"0.5rem",alignItems:"center",marginBottom:"1rem",flexWrap:"wrap"}}>
         <h2 style={{margin:0,fontWeight:800,fontSize:"1rem",color:"#e5e7eb"}}>Clientes</h2>
         <span style={{fontSize:"0.72rem",color:"#4b5563",background:"#12172a",padding:"2px 8px",borderRadius:"10px"}}>{clientesFiltrados.length} clientes · Manual + TN</span>
+        {enviosLocalesCli===null
+          ?<button onClick={cargarHistorialCli} disabled={loadingHistCli} title="Carga toda la historia (antes de 60 días)" style={{...S.btnSm(false),background:"#1e1b4b",borderColor:"#4338ca",color:"#a5b4fc",fontSize:"0.65rem",whiteSpace:"nowrap"}}>{loadingHistCli?"⏳":"🔍 +Histórico"}</button>
+          :<span title="Historial completo cargado" style={{fontSize:"0.62rem",color:"#6b7280",whiteSpace:"nowrap"}}>✓ Hist.</span>
+        }
         <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar por nombre o teléfono..." style={{...S.input,width:"260px",marginLeft:"auto",padding:"0.3rem 0.7rem",fontSize:"0.78rem"}}/>
       </div>
 
@@ -11389,7 +11466,11 @@ export default function App(){
   useEffect(()=>{
     prevEnviosRef.current=null; // reset para no disparar alertas falsas al montar
     setSyncLoading(true);
-    const unsub=onSnapshot(collection(db,"envios"),(snap)=>{
+    // Filtro 60 días: sólo carga los últimos 60 días en tiempo real (~10k docs vs 27k)
+    const cutoff60=new Date();
+    cutoff60.setDate(cutoff60.getDate()-60);
+    const desde60=cutoff60.toISOString().split("T")[0];
+    const unsub=onSnapshot(query(collection(db,"envios"),where("fechaVenta",">=",desde60)),(snap)=>{
       const docs=snap.docs.map(d=>({...d.data(),id:d.id}));
       docs.sort((a,b)=>(b.fechaVenta||b.fecha||"").localeCompare(a.fechaVenta||a.fecha||""));
 
