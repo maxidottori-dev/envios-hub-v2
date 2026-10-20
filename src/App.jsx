@@ -205,7 +205,10 @@ const parsearEtiquetasPDF=async(file)=>{
     // Extraer Pack ID para buscar el ventaId (# de venta del Excel) desde armado
     const packM=txt.match(/Pack\s*ID:\s*(\d+)(?:[\s\n]+(\d+))?/i);
     const packId=packM?(packM[2]&&packM[1].length<13?packM[1]+packM[2]:packM[1]).trim():null;
-    const ventaId=packId?(packToVenta[packId]||""):"";
+    const ventaIdFromPack=packId?(packToVenta[packId]||""):"";
+    // Fallback: algunas etiquetas Flex tienen "Venta:" directo (sin Pack ID, ej. envíos a domicilio sin pack)
+    const ventaIdDirect=(()=>{const vm=txt.match(/\bVenta:\s*(\d{10,20})\b/);return vm?vm[1].trim():"";})();
+    const ventaId=ventaIdFromPack||ventaIdDirect;
     const alphaId=packId?(packToAlpha[packId]||""):""; // id 26-char de la página de armado
     const cpM=txt.match(/CP:\s*(\d{4,5})/);
     const tipoM=txt.match(/(COMERCIAL|RESIDENCIAL)/);
@@ -11750,11 +11753,7 @@ export default function App(){
                 const loteTs=new Date().toISOString();
                 const nuevos=[];
                 if(cargarEnvios&&etiquetas.length){
-                  // DEBUG TEMPORAL - búsqueda específica
-                  console.log("[dedup] total envios en state:",envios.length);
                   for(const et of etiquetas){
-                    // DEBUG TEMPORAL
-                    console.log("[dedup] et.nroSeg=",et.nroSeguimiento,"et.ventaId=",et.ventaId,"et.alphaId=",et.alphaId);
                     // Dedup: comparar por nroSeguimiento, ventaId o alphaId (id 26-char extraído de armado).
                     // alphaId es el puente cuando el entry fue creado por viejo código PDF con id=26char
                     // y el Excel todavía no fue cargado para ese pedido.
@@ -11765,10 +11764,8 @@ export default function App(){
                       const m4=et.ventaId&&e.nroSeguimiento===et.ventaId;
                       const m5=et.alphaId&&e.id===et.alphaId;
                       const m6=et.alphaId&&e.nroSeguimiento===et.alphaId;
-                      if(m1||m2||m3||m4||m5||m6)console.log("[dedup] MATCH:",e.id,e.nroSeguimiento,"flags",m1,m2,m3,m4,m5,m6);
                       return m1||m2||m3||m4||m5||m6;
                     });
-                    if(!existe)console.log("[dedup] NO MATCH nroSeg=",et.nroSeguimiento,"ventaId=",et.ventaId,"alphaId=",et.alphaId);
                     if(existe){
                       const ref=doc(db,"envios",existe.id);
                       const upd={};
