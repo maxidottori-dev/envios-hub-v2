@@ -188,7 +188,7 @@ const parsearEtiquetasPDF=async(file)=>{
     if(!nroM)continue;
     const nroSeguimiento=nroM[2]?(nroM[1]+nroM[2]).trim():nroM[1].trim();
     // Extraer Pack ID para buscar el ventaId (# de venta del Excel) desde armado
-    const packM=txt.match(/Pack\s*ID:(\d+)/i);
+    const packM=txt.match(/Pack\s*ID:\s*(\d+)/i);
     const ventaId=packM?(packToVenta[packM[1].trim()]||""):"";
     const cpM=txt.match(/CP:\s*(\d{4,5})/);
     const tipoM=txt.match(/(COMERCIAL|RESIDENCIAL)/);
