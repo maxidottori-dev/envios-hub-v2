@@ -171,7 +171,7 @@ const parsearEtiquetasPDF=async(file)=>{
     const page=await pdf.getPage(i);
     const tc=await page.getTextContent();
     const txt=tc.items.map(x=>x.str).join("\n");
-    if(txt.includes("FLEX")&&txt.includes("Destinatario:")){
+    if(txt.includes("FLEX")&&txt.includes("Envio:")){
       labelTxts.push(txt);
     } else if(txt.includes("Venta:")){
       // Página de armado: extraer Pack ID y Venta (# de venta = id en Firestore)
