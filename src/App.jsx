@@ -169,6 +169,7 @@ const parsearEtiquetasPDF=async(file)=>{
   // El Pack ID es el campo común que las une.
   const labelTxts=[];
   const packToVenta={};
+  const packToAlpha={}; // packId → 26-char alphanumeric id (nuevo formato ML en col AV Excel)
   for(let i=1;i<=pdf.numPages;i++){
     const page=await pdf.getPage(i);
     const tc=await page.getTextContent();
@@ -180,6 +181,10 @@ const parsearEtiquetasPDF=async(file)=>{
       const pm=txt.match(/Pack\s*ID:\s*(\d+)/i);
       const vm=txt.match(/Venta:\s*(\d+)/i);
       if(pm&&vm)packToVenta[pm[1].trim()]=vm[1].trim();
+      // También extraer el id alfanumérico de 26 chars que ML usa como nuevo nroSeguimiento
+      // Aparece al inicio de la página de armado antes del nombre del producto, ej: "HK5BUZHHTNIJTGADOYBTO6LJT4 Vaso..."
+      const alphaM=txt.match(/\b([A-Z0-9]{20,30})\b/);
+      if(pm&&alphaM)packToAlpha[pm[1].trim()]=alphaM[1].trim();
     }
   }
   // DEBUG TEMPORAL
@@ -195,7 +200,8 @@ const parsearEtiquetasPDF=async(file)=>{
     const packM=txt.match(/Pack\s*ID:\s*(\d+)(?:[\s\n]+(\d+))?/i);
     const packId=packM?(packM[2]&&packM[1].length<13?packM[1]+packM[2]:packM[1]).trim():null;
     const ventaId=packId?(packToVenta[packId]||""):"";
-    console.log("[parsearEtiquetasPDF] packId=",packId,"ventaId=",ventaId,"nroSeguimiento=",nroSeguimiento);
+    const alphaId=packId?(packToAlpha[packId]||""):""; // id 26-char de la página de armado
+    console.log("[parsearEtiquetasPDF] packId=",packId,"ventaId=",ventaId,"alphaId=",alphaId,"nroSeguimiento=",nroSeguimiento);
     const cpM=txt.match(/CP:\s*(\d{4,5})/);
     const tipoM=txt.match(/(COMERCIAL|RESIDENCIAL)/);
     const dirM=txt.match(/Direccion:\s*([^\n]+)/i);
@@ -205,6 +211,7 @@ const parsearEtiquetasPDF=async(file)=>{
     etiquetas.push({
       nroSeguimiento,
       ventaId,
+      alphaId,
       cp:cpM?cpM[1].trim():"",
       tipoEntrega:tipoM?tipoM[1]:"",
       direccion:dirM?dirM[1].trim():"",
@@ -11660,26 +11667,22 @@ export default function App(){
                   // DEBUG TEMPORAL - búsqueda específica
                   console.log("[dedup] total envios en state:",envios.length);
                   for(const et of etiquetas){
-                    // Buscar el entry HK5 o cualquiera que matchee
-                    const byVentaId=envios.filter(e=>e.id===et.ventaId||e.nroSeguimiento===et.ventaId);
-                    const byNroSeg=envios.filter(e=>e.id===et.nroSeguimiento||e.nroSeguimiento===et.nroSeguimiento);
-                    const byHK=envios.filter(e=>/^[A-Z0-9]{26}$/.test(e.id)||/^[A-Z0-9]{26}$/.test(e.nroSeguimiento||""));
-                    console.log("[dedup] et.nroSeg=",et.nroSeguimiento,"et.ventaId=",et.ventaId);
-                    console.log("[dedup] byVentaId=",byVentaId.map(e=>({id:e.id,nroSeg:e.nroSeguimiento})));
-                    console.log("[dedup] byNroSeg=",byNroSeg.map(e=>({id:e.id,nroSeg:e.nroSeguimiento})));
-                    console.log("[dedup] 26-char entries:",byHK.map(e=>({id:e.id,nroSeg:e.nroSeguimiento,dest:e.destinatario?.slice(0,20)})));
-                    // Dedup: comparar por nroSeguimiento, por id, o por ventaId (# de venta del Excel).
-                    // ventaId es el puente cuando ML cambia el seguimiento a formato 26 char alfanumérico:
-                    // el PDF todavía tiene el barcode de 11 dígitos en "Envio:" pero el Excel tiene el 26-char.
+                    // DEBUG TEMPORAL
+                    console.log("[dedup] et.nroSeg=",et.nroSeguimiento,"et.ventaId=",et.ventaId,"et.alphaId=",et.alphaId);
+                    // Dedup: comparar por nroSeguimiento, ventaId o alphaId (id 26-char extraído de armado).
+                    // alphaId es el puente cuando el entry fue creado por viejo código PDF con id=26char
+                    // y el Excel todavía no fue cargado para ese pedido.
                     const existe=envios.find(e=>{
                       const m1=e.nroSeguimiento===et.nroSeguimiento;
                       const m2=e.id===et.nroSeguimiento;
                       const m3=et.ventaId&&e.id===et.ventaId;
                       const m4=et.ventaId&&e.nroSeguimiento===et.ventaId;
-                      if(m1||m2||m3||m4)console.log("[dedup] MATCH found:",e.id,e.nroSeguimiento,"m1",m1,"m2",m2,"m3",m3,"m4",m4);
-                      return m1||m2||m3||m4;
+                      const m5=et.alphaId&&e.id===et.alphaId;
+                      const m6=et.alphaId&&e.nroSeguimiento===et.alphaId;
+                      if(m1||m2||m3||m4||m5||m6)console.log("[dedup] MATCH:",e.id,e.nroSeguimiento,"flags",m1,m2,m3,m4,m5,m6);
+                      return m1||m2||m3||m4||m5||m6;
                     });
-                    if(!existe)console.log("[dedup] NO MATCH for nroSeg=",et.nroSeguimiento,"ventaId=",et.ventaId);
+                    if(!existe)console.log("[dedup] NO MATCH nroSeg=",et.nroSeguimiento,"ventaId=",et.ventaId,"alphaId=",et.alphaId);
                     if(existe){
                       const ref=doc(db,"envios",existe.id);
                       const upd={};
