@@ -11655,15 +11655,23 @@ export default function App(){
                 const loteTs=new Date().toISOString();
                 const nuevos=[];
                 if(cargarEnvios&&etiquetas.length){
+                  // DEBUG TEMPORAL - ver qué ids hay en envios
+                  console.log("[dedup] total envios en state:",envios.length);
+                  console.log("[dedup] sample ids:",envios.slice(0,5).map(e=>({id:e.id,nroSeg:e.nroSeguimiento,dest:e.destinatario?.slice(0,15)})));
                   for(const et of etiquetas){
+                    console.log("[dedup] checking et.nroSeg=",et.nroSeguimiento,"et.ventaId=",et.ventaId);
                     // Dedup: comparar por nroSeguimiento, por id, o por ventaId (# de venta del Excel).
                     // ventaId es el puente cuando ML cambia el seguimiento a formato 26 char alfanumérico:
                     // el PDF todavía tiene el barcode de 11 dígitos en "Envio:" pero el Excel tiene el 26-char.
-                    const existe=envios.find(e=>
-                      e.nroSeguimiento===et.nroSeguimiento||
-                      e.id===et.nroSeguimiento||
-                      (et.ventaId&&(e.id===et.ventaId||e.nroSeguimiento===et.ventaId))
-                    );
+                    const existe=envios.find(e=>{
+                      const m1=e.nroSeguimiento===et.nroSeguimiento;
+                      const m2=e.id===et.nroSeguimiento;
+                      const m3=et.ventaId&&e.id===et.ventaId;
+                      const m4=et.ventaId&&e.nroSeguimiento===et.ventaId;
+                      if(m1||m2||m3||m4)console.log("[dedup] MATCH found:",e.id,e.nroSeguimiento,"m1",m1,"m2",m2,"m3",m3,"m4",m4);
+                      return m1||m2||m3||m4;
+                    });
+                    if(!existe)console.log("[dedup] NO MATCH for nroSeg=",et.nroSeguimiento,"ventaId=",et.ventaId);
                     if(existe){
                       const ref=doc(db,"envios",existe.id);
                       const upd={};
