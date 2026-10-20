@@ -206,9 +206,11 @@ const parsearEtiquetasPDF=async(file)=>{
     const packM=txt.match(/Pack\s*ID:\s*(\d+)(?:[\s\n]+(\d+))?/i);
     const packId=packM?(packM[2]&&packM[1].length<13?packM[1]+packM[2]:packM[1]).trim():null;
     const ventaIdFromPack=packId?(packToVenta[packId]||""):"";
-    // Fallback: algunas etiquetas Flex tienen "Venta:" directo (sin Pack ID, ej. envíos a domicilio sin pack)
+    // Fallback 1: etiquetas con "Venta:" explícito
     const ventaIdDirect=(()=>{const vm=txt.match(/\bVenta:\s*(\d{10,20})\b/);return vm?vm[1].trim():"";})();
-    const ventaId=ventaIdFromPack||ventaIdDirect;
+    // Fallback 2: buscar nro de venta ML directo (empieza con 200001, ~16 dígitos) — aparece en etiquetas Flex aunque no haya páginas de armado
+    const ventaIdFallback=(()=>{const vm=txt.match(/\b(200001\d{8,12})\b/);return vm?vm[1].trim():"";})();
+    const ventaId=ventaIdFromPack||ventaIdDirect||ventaIdFallback;
     const alphaId=packId?(packToAlpha[packId]||""):""; // id 26-char de la página de armado
     const cpM=txt.match(/CP:\s*(\d{4,5})/);
     const tipoM=txt.match(/(COMERCIAL|RESIDENCIAL)/);
