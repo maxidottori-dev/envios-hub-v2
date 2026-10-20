@@ -11744,6 +11744,24 @@ export default function App(){
                     mostrarToast("Enviando a ML Armado...");
                     const logMap={};
                     envios.forEach(e=>{if(e.nroSeguimiento&&e.trans)logMap[e.nroSeguimiento]=e.trans;});
+                    // También indexar por alphaId (26-char) y por barcode real de etiquetas procesadas
+                    // para que el script Python encuentre la logística aunque el nroSeguimiento aún no se actualizó
+                    for(const et of etiquetas){
+                      const existeEt=envios.find(e=>{
+                        const m1=e.nroSeguimiento===et.nroSeguimiento;
+                        const m2=e.id===et.nroSeguimiento;
+                        const m3=et.ventaId&&e.id===et.ventaId;
+                        const m4=et.ventaId&&e.nroSeguimiento===et.ventaId;
+                        const m5=et.alphaId&&e.id===et.alphaId;
+                        const m6=et.alphaId&&e.nroSeguimiento===et.alphaId;
+                        return m1||m2||m3||m4||m5||m6;
+                      });
+                      if(existeEt&&existeEt.trans){
+                        if(et.nroSeguimiento)logMap[et.nroSeguimiento]=existeEt.trans;
+                        if(et.alphaId)logMap[et.alphaId]=existeEt.trans;
+                        if(et.ventaId)logMap[et.ventaId]=existeEt.trans;
+                      }
+                    }
                     await procesarConMLArmado(f,"Flex",null,logMap);
                     mostrarToast("PDF procesado por ML Armado");
                   }catch(mlErr){
