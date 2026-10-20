@@ -11810,6 +11810,8 @@ export default function App(){
                 const nuevos=[];
                 const duplicados=[];
                 if(cargarEnvios&&etiquetas.length){
+                  // DEBUG: mostrar muestra de envios en estado para diagnóstico
+                  console.log("[debug-envios-state] total:",envios.length,"muestra ids:",envios.slice(0,5).map(e=>e.id+"|seg:"+e.nroSeguimiento));
                   for(const et of etiquetas){
                     // Dedup: comparar por nroSeguimiento, ventaId o alphaId (id 26-char extraído de armado).
                     // alphaId es el puente cuando el entry fue creado por viejo código PDF con id=26char
