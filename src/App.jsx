@@ -11834,8 +11834,7 @@ export default function App(){
                       // Si el entry importado del Excel tiene el 26-char, reemplazarlo con el barcode real de 11 dígitos
                       if(et.nroSeguimiento&&/^\d{10,15}$/.test(et.nroSeguimiento)&&existe.nroSeguimiento!==et.nroSeguimiento)upd.nroSeguimiento=et.nroSeguimiento;
                       if(Object.keys(upd).length)await setDoc(ref,upd,{merge:true});
-                      // Guardar en duplicados para mostrar al usuario
-                      duplicados.push({et,existe});
+                      // Match encontrado: actualización silenciosa, no mostrar modal
                     } else {
                       nuevos.push({
                         id:et.nroSeguimiento,
