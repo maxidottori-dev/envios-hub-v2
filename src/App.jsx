@@ -1229,20 +1229,14 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
       ) : (
         <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.75rem",background:"#0d1119",border:"1px solid #1e2535"}}>
           <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"8px"}}>Cliente</div>
-          <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:"0.5rem",marginBottom:e.nroSeguimiento?"0.5rem":"0"}}>
-            <div>
-              <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nombre</div>
-              <input value={e.clienteNombre||""} onChange={ev=>set("clienteNombre",ev.target.value)} style={{...S.input,width:"100%",fontSize:"0.8rem"}} placeholder="Nombre del cliente"/>
-            </div>
-            <div>
-              <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Teléfono</div>
-              <input value={e.telefono||""} onChange={ev=>set("telefono",ev.target.value)} style={{...S.input,width:"100%",fontSize:"0.8rem"}} placeholder="11 xxxx-xxxx"/>
-            </div>
+          <div style={{marginBottom:"0.5rem"}}>
+            <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nombre</div>
+            <input value={e.clienteNombre||e.destinatario||""} onChange={ev=>set("clienteNombre",ev.target.value)} style={{...S.input,width:"100%",fontSize:"0.8rem"}} placeholder="Nombre del destinatario"/>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.5rem",marginTop:"0.5rem"}}>
             <div>
-              <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. pedido</div>
-              <input value={e.nroOrdenTN||""} onChange={ev=>set("nroOrdenTN",ev.target.value)} style={{...S.input,width:"100%",fontSize:"0.8rem"}} placeholder="Nro de pedido"/>
+              <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Venta ML</div>
+              <div style={{...S.input,width:"100%",fontSize:"0.8rem",color:"#f59e0b",fontWeight:600,display:"flex",alignItems:"center"}}>{envio.id||"—"}</div>
             </div>
             <div>
               <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. seguimiento</div>
