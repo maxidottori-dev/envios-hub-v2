@@ -170,6 +170,7 @@ const parsearEtiquetasPDF=async(file)=>{
   const labelTxts=[];
   const packToVenta={};
   const packToAlpha={}; // packId → 26-char alphanumeric id (nuevo formato ML en col AV Excel)
+  const ventaToPackId={}; // mapa inverso: ventaId → packId para labels que muestran Venta: sin Pack ID:
   for(let i=1;i<=pdf.numPages;i++){
     const page=await pdf.getPage(i);
     const tc=await page.getTextContent();
@@ -188,10 +189,17 @@ const parsearEtiquetasPDF=async(file)=>{
         const packId=(raw2&&raw1.length<13?raw1+raw2:raw1);
         if(ventaMatches[j])packToVenta[packId]=ventaMatches[j][1].trim();
         // Buscar alphaId: último token [A-Z0-9]{20,30} ANTES de este Pack ID en el texto
-        // Así cada pedido toma su propio identificador 26-char (si lo tiene)
         const before=txt.substring(0,pm.index);
         const alphas=[...before.matchAll(/\b([A-Z0-9]{20,30})\b/g)];
         if(alphas.length>0)packToAlpha[packId]=alphas[alphas.length-1][1];
+      }
+      // Mapa inverso ventaId→packId: para cada Venta en armado, el packId es el último Pack ID anterior
+      // Esto permite matchear labels que muestran "Venta: SUB-ITEM-ID" sin Pack ID explícito
+      for(const vm of ventaMatches){
+        const vi=vm[1].trim();
+        let curPackId="";
+        for(const pm of packMatches){if(pm.index<vm.index){const r1=pm[1].trim(),r2=(pm[2]||"").trim();curPackId=(r2&&r1.length<13?r1+r2:r1);}}
+        if(curPackId)ventaToPackId[vi]=curPackId;
       }
     }
   }
@@ -210,9 +218,11 @@ const parsearEtiquetasPDF=async(file)=>{
     const ventaIdDirect=(()=>{const vm=txt.match(/\bVenta:\s*(\d{10,20})\b/);return vm?vm[1].trim():"";})();
     // Fallback 2: buscar nro de venta ML directo (empieza con 200001, ~16 dígitos) — aparece en etiquetas Flex aunque no haya páginas de armado
     const ventaIdFallback=(()=>{const vm=txt.match(/\b(200001\d{8,12})\b/);return vm?vm[1].trim():"";})();
-    // packId ES el # de venta del Excel para pedidos pack (e.g. "2000015622644915") → usarlo primero como clave de match
-    // ventaIdFromPack apunta al sub-artículo (no existe en Firestore como doc independiente)
-    const ventaId=packId||ventaIdFromPack||ventaIdDirect||ventaIdFallback;
+    // packId ES el # de venta del Excel para pedidos pack → usarlo primero
+    // Para labels sin Pack ID (sub-artículos de packs multi-ítem): buscar pack padre via mapa inverso
+    const ventaFromLabel=ventaIdDirect||ventaIdFallback;
+    const packIdViaVenta=(!packId&&ventaFromLabel)?(ventaToPackId[ventaFromLabel]||""):"";
+    const ventaId=packId||packIdViaVenta||ventaFromLabel;
     const alphaId=packId?(packToAlpha[packId]||""):""; // id 26-char de la página de armado
     const cpM=txt.match(/CP:\s*(\d{4,5})/);
     const tipoM=txt.match(/(COMERCIAL|RESIDENCIAL)/);
