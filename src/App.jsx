@@ -11854,12 +11854,12 @@ export default function App(){
                   if(probEnvios.length)console.log("[debug-prob-envios-estado]",probEnvios.map(e=>"id:"+e.id+"|seg:"+e.nroSeguimiento+"|origen:"+e.origen));
                   for(const et of etiquetas){
                     // Dedup: comparar por nroSeguimiento, ventaId o alphaId (id 26-char extraído de armado).
-                    // alphaId es el puente cuando el entry fue creado por viejo código PDF con id=26char
-                    // y el Excel todavía no fue cargado para ese pedido.
-                    const existe=envios.find(e=>{
+                    // m3 (ventaId→id directo) tiene PRIORIDAD: si la etiqueta tiene ventaId que coincide exactamente
+                    // con el id de un envío, ese es el match correcto aunque otro doc ya tenga el mismo nroSeguimiento.
+                    const existeM3=et.ventaId?envios.find(e=>e.id===et.ventaId):null;
+                    const existe=existeM3||envios.find(e=>{
                       const m1=e.nroSeguimiento===et.nroSeguimiento;
                       const m2=e.id===et.nroSeguimiento;
-                      const m3=et.ventaId&&e.id===et.ventaId;
                       const m4=et.ventaId&&e.nroSeguimiento===et.ventaId;
                       const m5=et.alphaId&&e.id===et.alphaId;
                       const m6=et.alphaId&&e.nroSeguimiento===et.alphaId;
@@ -11869,7 +11869,7 @@ export default function App(){
                       // packToVenta resuelve packId → ventaNumber del armado (ej: 2000015XXX → 2000019090623248)
                       const m8=et.ventaIdFromPack&&e.nroSeguimiento===et.ventaIdFromPack;
                       const m9=et.ventaIdFromPack&&e.id===et.ventaIdFromPack;
-                      return m1||m2||m3||m4||m5||m6||m7||m8||m9;
+                      return m1||m2||m4||m5||m6||m7||m8||m9;
                     });
                     if(!existe)console.warn("[dedup-nomatch]",et.nroSeguimiento,"|venta:",et.ventaId,"|ventaFromPack:",et.ventaIdFromPack,"|parent:",et.parentPackId,"|alpha:",et.alphaId);
                     if(existe){
