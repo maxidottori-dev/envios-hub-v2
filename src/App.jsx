@@ -205,11 +205,16 @@ const parsearEtiquetasPDF=async(file)=>{
   }
   // Paso 2: procesar páginas de etiqueta
   const etiquetas=[];
+  console.log(`[debug-labels] páginas de etiqueta encontradas: ${labelTxts.length}`);
   for(const txt of labelTxts){
     // Soportar formato dividido ("48272\n235036") y formato unificado ("48294075310")
     const nroM=txt.match(/Envio:\s*(\d+)(?:\s+(\d+))?/i);
-    if(!nroM)continue;
-    const nroSeguimiento=nroM[2]?(nroM[1]+nroM[2]).trim():nroM[1].trim();
+    // Intentar también "Envío:" con acento en la i
+    const nroMAlt=!nroM?txt.match(/Env[íi]o:\s*(\d+)(?:\s+(\d+))?/i):null;
+    const nroMFinal=nroM||nroMAlt;
+    if(!nroMFinal){console.warn("[debug-label-sin-envio] texto:",txt.substring(0,300));continue;}
+    if(nroMAlt)console.warn("[debug-label-acento] etiqueta con 'Envío:' (con acento) detectada");
+    const nroSeguimiento=nroMFinal[2]?(nroMFinal[1]+nroMFinal[2]).trim():nroMFinal[1].trim();
     // Extraer Pack ID para buscar el ventaId (# de venta del Excel) desde armado
     const packM=txt.match(/Pack\s*ID:\s*(\d+)(?:[\s\n]+(\d+))?/i);
     const packId=packM?(packM[2]&&packM[1].length<13?packM[1]+packM[2]:packM[1]).trim():null;
