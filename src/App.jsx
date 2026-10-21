@@ -223,6 +223,7 @@ const parsearEtiquetasPDF=async(file)=>{
     const ventaFromLabel=ventaIdDirect||ventaIdFallback;
     const packIdViaVenta=(!packId&&ventaFromLabel)?(ventaToPackId[ventaFromLabel]||""):"";
     const ventaId=packId||packIdViaVenta||ventaFromLabel;
+    if(!ventaId)console.warn("[debug-label-sin-venta] nro:",nroSeguimiento,"\n---LABEL TEXT---\n",txt.substring(0,500));
     const alphaId=packId?(packToAlpha[packId]||""):""; // id 26-char de la página de armado
     const cpM=txt.match(/CP:\s*(\d{4,5})/);
     const tipoM=txt.match(/(COMERCIAL|RESIDENCIAL)/);
