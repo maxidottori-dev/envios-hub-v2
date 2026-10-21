@@ -1466,6 +1466,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
   const [filOrigen,setFilOrigen]=useState("TODOS");
   const [filTipoEntrega,setFilTipoEntrega]=useState("TODOS");
   const [soloReprog,setSoloReprog]=useState(false);
+  const [soloSinEtiqueta,setSoloSinEtiqueta]=useState(false);
   const [busqueda,setBusqueda]=useState("");
   const [editId,setEditId]=useState(null);
   const [seleccionados,setSeleccionados]=useState(new Set());
@@ -1515,6 +1516,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
       else if(e.tipoEntrega!==filTipoEntrega)return false;
     }
     if(soloReprog&&!e.reprogramado)return false;
+    if(soloSinEtiqueta&&(e.origen!=="ML"||/^4\d{10}$/.test(e.nroSeguimiento||"")))return false;
     if(busqueda){const srch=norm(busqueda);return norm(e.direccion).includes(srch)||norm(e.id).includes(srch)||norm(e.partido).includes(srch)||norm(e.nroSeguimiento||"").includes(srch)||norm(e.clienteNombre).includes(srch)||(String(e.nroOrdenTN||"")).includes(srch);}
     return true;
   });
@@ -1643,6 +1645,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
             </div>
           </>}
           <button onClick={()=>setSoloReprog(!soloReprog)} style={{...S.btnSm(soloReprog,"#fbbf24"),marginLeft:mostrarResumenFlex?"0":"auto"}}>⟳ Reprog.</button>
+          {mostrarResumenFlex&&<button onClick={()=>setSoloSinEtiqueta(!soloSinEtiqueta)} style={S.btnSm(soloSinEtiqueta,"#f97316")}>⚠ Sin etiqueta</button>}
           <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="🔍 Buscar..." style={{...S.input,width:"190px",marginLeft:mostrarResumenFlex?"auto":"0"}}/>
           {enviosHistTab===null
             ?<button onClick={cargarHistoricoTab} disabled={loadingHistTab} title="Carga toda la historia (antes de 60 días)" style={{...S.btnSm(false),background:"#1e1b4b",borderColor:"#4338ca",color:"#a5b4fc",fontSize:"0.65rem",whiteSpace:"nowrap"}}>{loadingHistTab?"⏳":"🔍 +Histórico"}</button>
