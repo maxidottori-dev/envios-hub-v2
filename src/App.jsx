@@ -1877,6 +1877,8 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                   <div style={{color:"#9ca3af",fontSize:"0.74rem",marginTop:"2px",display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center"}}>
                     {/* nroSeguimiento: solo para no-FLEX (FLEX ya lo muestra arriba en verde) */}
                     {e.nroSeguimiento&&e.origen!=="ML"&&<span style={{background:"#0f1420",padding:"0 5px",borderRadius:"4px",border:"1px solid #252d40",color:"#94a3b8"}}>📦 {e.nroSeguimiento}</span>}
+                    {/* Alerta FLEX sin etiqueta PDF: nroSeguimiento ausente o no tiene formato 11 dígitos empezando en 4 */}
+                    {e.origen==="ML"&&!/^4\d{10}$/.test(e.nroSeguimiento||"")&&<span title="Falta procesar las etiquetas PDF para este envío" style={{background:"#2d1a00",color:"#f97316",border:"1px solid #7c3400",borderRadius:"4px",padding:"0 5px",fontSize:"0.68rem",fontWeight:700}}>⚠ Sin etiqueta</span>}
                     {e.tipoEntrega&&<span style={{background:e.tipoEntrega==="COMERCIAL"?"#0c1a40":"#0a1a0a",color:e.tipoEntrega==="COMERCIAL"?"#38bdf8":"#86efac",border:"1px solid "+(e.tipoEntrega==="COMERCIAL"?"#1e4060":"#1a3a1a"),borderRadius:"4px",padding:"0 5px",fontSize:"0.68rem",fontWeight:700}}>{e.tipoEntrega}</span>}
                     {e.destinatario&&e.origen!=="ML"&&<span style={{color:"#cbd5e1",fontWeight:500,fontSize:"0.74rem"}}>· {e.destinatario}</span>}
                     <span style={{color:"#cbd5e1",fontWeight:500,fontSize:"14px"}}>· {e.localidad?e.localidad+" · ":""}{e.partido}{e.cp?" · "+e.cp:""}</span>
