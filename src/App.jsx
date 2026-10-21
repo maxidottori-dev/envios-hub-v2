@@ -11884,7 +11884,11 @@ export default function App(){
                       // Si el entry importado del Excel tiene el 26-char, reemplazarlo con el barcode real de 11 dígitos
                       if(et.nroSeguimiento&&/^\d{10,15}$/.test(et.nroSeguimiento)&&existe.nroSeguimiento!==et.nroSeguimiento)upd.nroSeguimiento=et.nroSeguimiento;
                       else if(et.nroSeguimiento&&!/^\d{10,15}$/.test(et.nroSeguimiento))console.warn("[dedup-nro-skip]",existe.id,"nroSeguimiento extraído:",et.nroSeguimiento,"(no pasa filtro 10-15 dígitos)");
-                      if(Object.keys(upd).length)await setDoc(ref,upd,{merge:true}).catch(err=>console.error("[dedup-setDoc-error]",existe.id,err.message));
+                      if(Object.keys(upd).length){
+                        await setDoc(ref,upd,{merge:true}).catch(err=>console.error("[dedup-setDoc-error]",existe.id,err.message));
+                        // Actualizar estado local para que la UI refleje el cambio sin recargar
+                        setEnvios(prev=>prev.map(e=>e.id===existe.id?{...e,...upd}:e));
+                      }
                       // Si el match fue via pack padre (m7) y hay ventaId propio distinto, actualizar también el sub-doc
                       // SOLO tipoEntrega — nunca nroSeguimiento, para evitar que dos labels del mismo pack
                       // sobreescriban el tracking del otro sub-item (nroSeguimiento es único por envío)
