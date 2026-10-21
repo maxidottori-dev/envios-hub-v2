@@ -175,7 +175,9 @@ const parsearEtiquetasPDF=async(file)=>{
     const page=await pdf.getPage(i);
     const tc=await page.getTextContent();
     const txt=tc.items.map(x=>x.str).join("\n");
-    if(txt.includes("FLEX")&&txt.includes("Envio:")){
+    // Clasificar página: etiqueta FLEX tiene "FLEX" + "Envio:" (o "Envío:" con acento, o "Envio" y ":" separados por pdfjs)
+    const isFlexLabel=txt.includes("FLEX")&&/(Env[ií]o\s*:)/i.test(txt);
+    if(isFlexLabel){
       labelTxts.push(txt);
     } else if(txt.includes("Venta:")){
       // Página de armado: puede tener MÚLTIPLES pedidos — usar matchAll para iterar todos
@@ -208,12 +210,9 @@ const parsearEtiquetasPDF=async(file)=>{
   console.log(`[debug-labels] páginas de etiqueta encontradas: ${labelTxts.length}`);
   for(const txt of labelTxts){
     // Soportar formato dividido ("48272\n235036") y formato unificado ("48294075310")
-    const nroM=txt.match(/Envio:\s*(\d+)(?:\s+(\d+))?/i);
-    // Intentar también "Envío:" con acento en la i
-    const nroMAlt=!nroM?txt.match(/Env[íi]o:\s*(\d+)(?:\s+(\d+))?/i):null;
-    const nroMFinal=nroM||nroMAlt;
+    // Regex robusta: soporta "Envio:" / "Envío:" / "Envio :" / "Envio\n:" (pdfjs puede separar "Envio" y ":" como items distintos)
+    const nroMFinal=txt.match(/Env[ií]o\s*:\s*(\d+)(?:\s+(\d+))?/i);
     if(!nroMFinal){console.warn("[debug-label-sin-envio] texto:",txt.substring(0,300));continue;}
-    if(nroMAlt)console.warn("[debug-label-acento] etiqueta con 'Envío:' (con acento) detectada");
     const nroSeguimiento=nroMFinal[2]?(nroMFinal[1]+nroMFinal[2]).trim():nroMFinal[1].trim();
     // Extraer Pack ID para buscar el ventaId (# de venta del Excel) desde armado
     const packM=txt.match(/Pack\s*ID:\s*(\d+)(?:[\s\n]+(\d+))?/i);
