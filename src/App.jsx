@@ -214,8 +214,13 @@ const parsearEtiquetasPDF=async(file)=>{
     const packM=txt.match(/Pack\s*ID:\s*(\d+)(?:[\s\n]+(\d+))?/i);
     const packId=packM?(packM[2]&&packM[1].length<13?packM[1]+packM[2]:packM[1]).trim():null;
     const ventaIdFromPack=packId?(packToVenta[packId]||""):"";
-    // Fallback 1: etiquetas con "Venta:" explícito
-    const ventaIdDirect=(()=>{const vm=txt.match(/\bVenta:\s*(\d{10,20})\b/);return vm?vm[1].trim():"";})();
+    // Fallback 1: etiquetas con "Venta:" explícito — el nro puede estar partido en dos líneas (igual que Envio:)
+    const ventaIdDirect=(()=>{
+      const vm=txt.match(/\bVenta:\s*(\d+)(?:\s+(\d+))?/i);
+      if(!vm)return"";
+      const combined=vm[2]?(vm[1].trim()+vm[2].trim()):vm[1].trim();
+      return combined.length>=10?combined:"";
+    })();
     // Fallback 2: buscar nro de venta ML directo (empieza con 200001, ~16 dígitos) — aparece en etiquetas Flex aunque no haya páginas de armado
     const ventaIdFallback=(()=>{const vm=txt.match(/\b(200001\d{8,12})\b/);return vm?vm[1].trim():"";})();
     // packId ES el # de venta del Excel para pedidos pack → usarlo primero
