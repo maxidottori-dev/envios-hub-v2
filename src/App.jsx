@@ -11890,10 +11890,13 @@ export default function App(){
                       if(et.destinatario)upd.destinatario=et.destinatario;
                       if(et.referencia)upd.referencia=et.referencia;
                       if(et.tipoEntrega)upd.tipoEntrega=et.tipoEntrega;
+                      // Campos de ubicación: solo si el envío no los tiene (son datos del destinatario, no cambian)
+                      if(et.direccion&&!existe.direccion)upd.direccion=et.direccion;
                       if(et.localidad&&!existe.localidad)upd.localidad=et.localidad;
+                      if(et.cp&&!existe.cp)upd.cp=et.cp;
                       if(et.fecha&&!existe.fecha)upd.fecha=et.fecha;
-                      // Si el entry importado del Excel tiene el 26-char, reemplazarlo con el barcode real de 11 dígitos
-                      if(et.nroSeguimiento&&/^\d{10,15}$/.test(et.nroSeguimiento)&&existe.nroSeguimiento!==et.nroSeguimiento)upd.nroSeguimiento=et.nroSeguimiento;
+                      // nroSeguimiento: solo si aún no tiene uno válido (nunca se repite, no sobreescribir)
+                      if(et.nroSeguimiento&&/^\d{10,15}$/.test(et.nroSeguimiento)&&!existe.nroSeguimiento)upd.nroSeguimiento=et.nroSeguimiento;
                       else if(et.nroSeguimiento&&!/^\d{10,15}$/.test(et.nroSeguimiento))console.warn("[dedup-nro-skip]",existe.id,"nroSeguimiento extraído:",et.nroSeguimiento,"(no pasa filtro 10-15 dígitos)");
                       if(Object.keys(upd).length){
                         console.log("[dedup-upd]",existe.id,"upd:",JSON.stringify(upd));
