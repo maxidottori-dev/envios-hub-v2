@@ -1048,6 +1048,51 @@ function ModalDuplicadosFlex({duplicados, onConfirm, onCancel}){
   );
 }
 
+function ModalEtiquetasSinMatch({sinMatch, onConfirm, onCancel}){
+  const [seleccionados,setSeleccionados]=useState(new Set());
+  const toggleTodos=(val)=>setSeleccionados(val?new Set(sinMatch.map((_,i)=>i)):new Set());
+  const toggle=(i)=>{const s=new Set(seleccionados);s.has(i)?s.delete(i):s.add(i);setSeleccionados(s);};
+  const selArr=sinMatch.filter((_,i)=>seleccionados.has(i));
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:"16px"}}>
+      <div style={{background:"#12172a",border:"1px solid #f97316",borderRadius:"16px",padding:"28px 28px 24px",width:"100%",maxWidth:"560px",maxHeight:"80vh",display:"flex",flexDirection:"column",boxShadow:"0 8px 40px #0009"}}>
+        <div style={{color:"#f97316",fontWeight:800,fontSize:"1rem",marginBottom:"4px"}}>⚠️ Etiquetas sin pedido en EnviosHub</div>
+        <div style={{color:"#9ca3af",fontSize:"0.75rem",marginBottom:"16px"}}>Estas etiquetas no coinciden con ningún envío existente. Verificá que el Excel ya fue cargado. Si son pedidos nuevos, seleccioná los que querés agregar.</div>
+        <div style={{display:"flex",gap:"8px",marginBottom:"10px"}}>
+          <button onClick={()=>toggleTodos(true)} style={{background:"#1a2640",border:"1px solid #374151",color:"#d1d5db",padding:"4px 12px",borderRadius:"6px",cursor:"pointer",fontSize:"0.72rem"}}>Seleccionar todos</button>
+          <button onClick={()=>toggleTodos(false)} style={{background:"#1a2640",border:"1px solid #374151",color:"#d1d5db",padding:"4px 12px",borderRadius:"6px",cursor:"pointer",fontSize:"0.72rem"}}>Ninguno</button>
+        </div>
+        <div style={{overflowY:"auto",flex:1,marginBottom:"16px",display:"flex",flexDirection:"column",gap:"6px"}}>
+          {sinMatch.map((et,i)=>{
+            const sel=seleccionados.has(i);
+            return(
+              <label key={i} style={{display:"flex",alignItems:"flex-start",gap:"10px",cursor:"pointer",padding:"10px 12px",background:sel?"#1c1a10":"#0f1420",border:"1px solid "+(sel?"#f97316":"#252d40"),borderRadius:"8px",transition:"all 0.12s"}}>
+                <input type="checkbox" checked={sel} onChange={()=>toggle(i)} style={{width:"15px",height:"15px",accentColor:"#f97316",marginTop:"2px",flexShrink:0}}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{color:"#e5e7eb",fontWeight:700,fontSize:"0.8rem",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{et.destinatario||"Sin destinatario"}</div>
+                  <div style={{color:"#fbbf24",fontSize:"0.7rem",marginTop:"1px"}}>🏷️ {et.nroSeguimiento}</div>
+                  {et.ventaId&&<div style={{color:"#6b7280",fontSize:"0.7rem"}}>Venta: {et.ventaId}</div>}
+                  <div style={{color:"#9ca3af",fontSize:"0.7rem",marginTop:"2px"}}>{et.direccion||""}{et.localidad?" · "+et.localidad:""}</div>
+                </div>
+                <div style={{textAlign:"right",flexShrink:0}}>
+                  {et.tipoEntrega&&<div style={{color:"#38bdf8",fontSize:"0.68rem",fontWeight:700}}>{et.tipoEntrega}</div>}
+                  <div style={{color:"#dc2626",fontSize:"0.65rem",marginTop:"2px"}}>sin match</div>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+        <div style={{display:"flex",gap:"10px",justifyContent:"flex-end"}}>
+          <button onClick={onCancel} style={{background:"#1a1f2e",border:"1px solid #252d40",color:"#9ca3af",padding:"8px 20px",borderRadius:"8px",cursor:"pointer",fontSize:"0.82rem"}}>Cancelar todo</button>
+          <button onClick={()=>onConfirm(selArr)} style={{background:selArr.length>0?"linear-gradient(135deg,#f97316,#dc2626)":"#1a2640",color:selArr.length>0?"#fff":"#9ca3af",border:"1px solid "+(selArr.length>0?"transparent":"#374151"),padding:"8px 24px",borderRadius:"8px",cursor:"pointer",fontWeight:800,fontSize:"0.82rem"}}>
+            {selArr.length>0?`Agregar ${selArr.length} como nuevo${selArr.length>1?"s":""}` : "Continuar sin agregar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ModalOpcionesPDF({onConfirm, onCancel}){
   const [cargarEnvios, setCargarEnvios] = useState(true);
   const [procesarArmado, setProcesarArmado] = useState(true);
@@ -11425,6 +11470,7 @@ export default function App(){
   const [modalPDF,setModalPDF]=useState(null); // archivo pendiente mientras modal abierto
   const [modalPDFColecta,setModalPDFColecta]=useState(null); // archivo Colecta pendiente mientras modal abierto
   const [modalDuplicadosFlex,setModalDuplicadosFlex]=useState(null); // {duplicados:[{et,existe}], nuevos:[], file, procesarArmado, etiquetas, loteTs}
+  const [modalSinMatch,setModalSinMatch]=useState(null); // {sinMatch:[et,...], nuevosAprobados:[], file, procesarArmado, loteTs, hoy}
   const [colectaProgMsg,setColectaProgMsg]=useState(""); // texto de progreso a mostrar en el botón "Colecta" mientras se espera ML Armado
   const [envios,setEnviosLocal]=useState([]);
   const [colectas,setColectas]=useState([]); // colectas ML pendientes de armado (estado=pendiente)
@@ -11865,6 +11911,7 @@ export default function App(){
                 const loteTs=new Date().toISOString();
                 const nuevos=[];
                 const duplicados=[];
+                const sinMatch=[];
                 if(cargarEnvios&&etiquetas.length){
                   // DEBUG: mostrar etiquetas extraídas y buscar las 3 órdenes problemáticas en el estado
                   console.log("[debug-etiquetas-extraidas]",etiquetas.map(et=>"nro:"+et.nroSeguimiento+"|venta:"+et.ventaId));
@@ -11933,39 +11980,21 @@ export default function App(){
                       }
                       // Match encontrado: actualización silenciosa, no mostrar modal
                     } else {
-                      nuevos.push({
-                        id:et.nroSeguimiento,
-                        nroSeguimiento:et.nroSeguimiento,
-                        linkML:"https://www.mercadolibre.com.ar/ventas/"+et.nroSeguimiento+"/detalle",
-                        origen:"ML",
-                        direccion:et.direccion||"",
-                        localidad:et.localidad||"",
-                        partido:cpAPartido(et.cp)||"",
-                        cp:et.cp||"",
-                        ciudad:"",
-                        fecha:et.fecha||hoy,
-                        fechaVenta:hoy,
-                        turno:"",
-                        trans:"",
-                        bultos:0,
-                        cobranza:null,
-                        cambio:null,
-                        retiro:null,
-                        observaciones:"",
-                        tarifaLog:0,
-                        destinatario:et.destinatario||"",
-                        referencia:et.referencia||"",
-                        tipoEntrega:et.tipoEntrega||"",
-                        preparado:false,
-                        loteImportacion:loteTs,
-                      });
+                      // Sin match → acumular para revisión manual (no agregar automáticamente)
+                      sinMatch.push(et);
                     }
                   }
                 }
                 // Si hay duplicados, mostrar modal para que el usuario decida
                 if(duplicados.length>0){
                   setLoading(false);
-                  setModalDuplicadosFlex({duplicados,nuevos,file:f,procesarArmado,etiquetas,loteTs,hoy});
+                  setModalDuplicadosFlex({duplicados,nuevos,sinMatch,file:f,procesarArmado,etiquetas,loteTs,hoy});
+                  return;
+                }
+                // Si hay etiquetas sin match, mostrar modal de revisión antes de continuar
+                if(sinMatch.length>0){
+                  setLoading(false);
+                  setModalSinMatch({sinMatch,nuevosAprobados:nuevos,file:f,procesarArmado,loteTs,hoy});
                   return;
                 }
                 // Toast resumen
@@ -12021,11 +12050,16 @@ export default function App(){
             duplicados={modalDuplicadosFlex.duplicados}
             onCancel={()=>setModalDuplicadosFlex(null)}
             onConfirm={async(seleccionados)=>{
-              const {nuevos,file:f,procesarArmado,etiquetas,loteTs,hoy}=modalDuplicadosFlex;
+              const {nuevos,sinMatch:smDup=[],file:f,procesarArmado,etiquetas,loteTs,hoy}=modalDuplicadosFlex;
               setModalDuplicadosFlex(null);
               setLoading(true);
               try{
                 // Construir objetos envío para los duplicados seleccionados
+                // Si hay etiquetas sin match pendientes de revisión, mostrar ese modal después
+                if(smDup.length>0){
+                  setModalSinMatch({sinMatch:smDup,nuevosAprobados:nuevos,file:f,procesarArmado,loteTs,hoy});
+                  setLoading(false);return;
+                }
                 const todosNuevos=[...nuevos];
                 for(const {et} of seleccionados){
                   todosNuevos.push({
@@ -12093,6 +12127,34 @@ export default function App(){
                 }
               }catch(err){mostrarToast("Error: "+err.message);}
               setLoading(false);
+            }}
+          />}
+          {modalSinMatch&&<ModalEtiquetasSinMatch
+            sinMatch={modalSinMatch.sinMatch}
+            onCancel={()=>setModalSinMatch(null)}
+            onConfirm={(seleccionados)=>{
+              const {nuevosAprobados,file:f,procesarArmado,loteTs,hoy}=modalSinMatch;
+              setModalSinMatch(null);
+              const etToEnvio=(et)=>({
+                id:et.nroSeguimiento,nroSeguimiento:et.nroSeguimiento,
+                linkML:"https://www.mercadolibre.com.ar/ventas/"+et.nroSeguimiento+"/detalle",
+                origen:"ML",direccion:et.direccion||"",localidad:et.localidad||"",
+                partido:cpAPartido(et.cp)||"",cp:et.cp||"",ciudad:"",
+                fecha:et.fecha||hoy,fechaVenta:hoy,turno:"",trans:"",bultos:0,
+                cobranza:null,cambio:null,retiro:null,observaciones:"",tarifaLog:0,
+                destinatario:et.destinatario||"",referencia:et.referencia||"",
+                tipoEntrega:et.tipoEntrega||"",preparado:false,loteImportacion:loteTs,
+              });
+              const todosNuevos=[...nuevosAprobados,...seleccionados.map(etToEnvio)];
+              if(todosNuevos.length){
+                mostrarToast(todosNuevos.length+" envio(s) a asignar");
+                setBorrador(todosNuevos);setFileName(f.name);
+                if(procesarArmado)setPendingMLFile(f);
+                setPantalla("asignacion");
+              } else {
+                mostrarToast("Ningún envío nuevo seleccionado");
+                if(procesarArmado)setPendingMLFile(f);
+              }
             }}
           />}
           {/* Modal opciones PDF Colecta */}
