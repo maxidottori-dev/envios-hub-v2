@@ -224,11 +224,14 @@ const parsearEtiquetasPDF=async(file)=>{
     // Fallback 2: buscar nro de venta ML directo (empieza con 200001, ~16 dígitos) — aparece en etiquetas Flex aunque no haya páginas de armado
     const ventaIdFallback=(()=>{const vm=txt.match(/\b(200001\d{8,12})\b/);return vm?vm[1].trim():"";})();
     // packId ES el # de venta del Excel para pedidos pack → usarlo primero
-    // Para labels sin Pack ID (sub-artículos de packs multi-ítem): buscar pack padre via mapa inverso
+    // Para sub-artículos sin Pack ID: intentar match directo primero (si está en Firestore);
+    // si no, usar el pack padre como fallback (parentPackId) — el dedup prueba ambos en orden
     const ventaFromLabel=ventaIdDirect||ventaIdFallback;
     const packIdViaVenta=(!packId&&ventaFromLabel)?(ventaToPackId[ventaFromLabel]||""):"";
-    const ventaId=packId||packIdViaVenta||ventaFromLabel;
-    if(!ventaId)console.warn("[debug-label-sin-venta] nro:",nroSeguimiento,"\n---LABEL TEXT---\n",txt.substring(0,500));
+    // ventaId: match primario; parentPackId: fallback si ventaId no existe en Firestore
+    const ventaId=packId||ventaFromLabel;
+    const parentPackId=packIdViaVenta; // pack padre para sub-artículos que NO están en Firestore individualmente
+    if(!ventaId&&!parentPackId)console.warn("[debug-label-sin-venta] nro:",nroSeguimiento,"\n---LABEL TEXT---\n",txt.substring(0,500));
     const alphaId=packId?(packToAlpha[packId]||""):""; // id 26-char de la página de armado
     const cpM=txt.match(/CP:\s*(\d{4,5})/);
     const tipoM=txt.match(/(COMERCIAL|RESIDENCIAL)/);
@@ -239,6 +242,7 @@ const parsearEtiquetasPDF=async(file)=>{
     etiquetas.push({
       nroSeguimiento,
       ventaId,
+      parentPackId,
       alphaId,
       cp:cpM?cpM[1].trim():"",
       tipoEntrega:tipoM?tipoM[1]:"",
@@ -11841,9 +11845,11 @@ export default function App(){
                       const m4=et.ventaId&&e.nroSeguimiento===et.ventaId;
                       const m5=et.alphaId&&e.id===et.alphaId;
                       const m6=et.alphaId&&e.nroSeguimiento===et.alphaId;
-                      return m1||m2||m3||m4||m5||m6;
+                      // m7: fallback para sub-artículos que no están en Firestore individualmente → match por pack padre
+                      const m7=et.parentPackId&&e.id===et.parentPackId;
+                      return m1||m2||m3||m4||m5||m6||m7;
                     });
-                    if(!existe)console.warn("[dedup-nomatch]",et.nroSeguimiento,"|venta:",et.ventaId,"|alpha:",et.alphaId);
+                    if(!existe)console.warn("[dedup-nomatch]",et.nroSeguimiento,"|venta:",et.ventaId,"|parent:",et.parentPackId,"|alpha:",et.alphaId);
                     if(existe){
                       // Actualizar campos siempre (silencioso)
                       const ref=doc(db,"envios",existe.id);
