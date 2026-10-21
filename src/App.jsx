@@ -3199,6 +3199,13 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
     return (enviosExistentes||[]).some(e=>e.id===id||String(e.nroOrdenTN||"")===id);
   },[f.id,enviosExistentes]);
 
+  // Validación de nroSeguimiento único — no puede existir el mismo tracking en otro envío
+  const nroSeguimientoDuplicado=useMemo(()=>{
+    const nro=f.nroSeguimiento.trim();
+    if(!nro)return false;
+    return (enviosExistentes||[]).some(e=>e.nroSeguimiento===nro&&e.id!==f.id.trim());
+  },[f.nroSeguimiento,f.id,enviosExistentes]);
+
   const handleTrans=l=>{const t=f.trans===l?"":l;setF(p=>({...p,trans:t,estado:t?"asignado":"sin_asignar"}));};
 
   const guardar=async()=>{
@@ -3206,6 +3213,7 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
     if(!id){setErr(esML?"El nro de venta es obligatorio.":"El nro de pedido es obligatorio.");return;}
     if(idDuplicado){setErr(esML?"Ya existe un envio con ese nro de venta.":"Ya existe un envio con ese nro de pedido ("+id+").");return;}
     if(esML&&!f.nroSeguimiento.trim()){setErr("El nro de seguimiento es obligatorio para pedidos ML.");return;}
+    if(nroSeguimientoDuplicado){setErr("Ya existe un envio con ese nro de seguimiento ("+f.nroSeguimiento.trim()+"). Cada envío debe tener un tracking único.");return;}
     if(!f.clienteNombre.trim()){setErr("El nombre del cliente es obligatorio.");return;}
     if(!f.direccion.trim()){setErr("La dirección es obligatoria.");return;}
     if(!f.fecha){setErr("La fecha es obligatoria.");return;}
@@ -3260,8 +3268,8 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
               <input value={f.id} onChange={e=>set("id",e.target.value)} style={{...S.input,width:"100%",borderColor:idDuplicado?"#7f1d1d":"#252d40"}} placeholder="ej. 2000012345"/>
             </div>
             <div>
-              <Lbl>Nro de seguimiento *</Lbl>
-              <input value={f.nroSeguimiento} onChange={e=>set("nroSeguimiento",e.target.value)} style={{...S.input,width:"100%"}} placeholder="ej. 46669555629"/>
+              <Lbl>Nro de seguimiento * <span style={{color:nroSeguimientoDuplicado?"#f87171":"#374151",fontSize:"0.6rem",fontWeight:400,textTransform:"none"}}>{nroSeguimientoDuplicado?"— ya existe en otro envío":""}</span></Lbl>
+              <input value={f.nroSeguimiento} onChange={e=>set("nroSeguimiento",e.target.value)} style={{...S.input,width:"100%",borderColor:nroSeguimientoDuplicado?"#7f1d1d":"#252d40"}} placeholder="ej. 46669555629"/>
             </div>
           </div>
         )}
