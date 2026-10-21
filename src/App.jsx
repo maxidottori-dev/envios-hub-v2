@@ -1137,7 +1137,11 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
   const transAsignado=e.trans&&e.trans!==envio.trans;
   // Si el envío ya fue despachado y se cambia fecha/turno/logística → marcar reprogramado
   const esReprogramado=envio.despachado&&(e.fecha!==envio.fecha||e.turno!==envio.turno||e.trans!==envio.trans);
-  const handleSave=()=>{setGuardando(true);onSave({...e,importeOverride:costoOverride||null,
+  const nroSegCambiado=e.nroSeguimiento&&e.nroSeguimiento!==(envio.nroSeguimiento||"");
+  const nroSegDuplicado=nroSegCambiado&&envios.some(o=>o.id!==envio.id&&o.nroSeguimiento===e.nroSeguimiento);
+  const handleSave=()=>{
+    if(nroSegDuplicado){alert("⚠️ Ese nro. de seguimiento ya está asignado a otro envío. Cada nro. es único.");return;}
+    setGuardando(true);onSave({...e,importeOverride:costoOverride||null,
     ...(esReprogramado?{reprogramado:true}:{}),
     ...(audit?{ultimaEdicionPor:audit}:{}),
     ...(transAsignado&&audit?{asignadoPor:audit}:{}),
@@ -1198,7 +1202,8 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
             </div>
             <div>
               <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. seguimiento</div>
-              <input value={e.nroSeguimiento||""} onChange={ev=>set("nroSeguimiento",ev.target.value)} style={{...S.input,width:"100%",fontSize:"0.8rem"}} placeholder="Nro de tracking"/>
+              <input value={e.nroSeguimiento||""} onChange={ev=>set("nroSeguimiento",ev.target.value)} style={{...S.input,width:"100%",fontSize:"0.8rem",borderColor:nroSegDuplicado?"#f97316":undefined}} placeholder="Nro de tracking"/>
+              {nroSegDuplicado&&<div style={{color:"#f97316",fontSize:"0.65rem",marginTop:"2px"}}>⚠ Ya asignado a otro envío</div>}
             </div>
           </div>
         </div>
@@ -11872,6 +11877,7 @@ export default function App(){
                     // con el id de un envío, ese es el match correcto aunque otro doc ya tenga el mismo nroSeguimiento.
                     const existeM3=et.ventaId?envios.find(e=>e.id===et.ventaId):null;
                     const existe=existeM3||envios.find(e=>{
+                      // m1: solo confirmar si el envío YA tiene este nroSeguimiento asignado (no reasignar a otro)
                       const m1=e.nroSeguimiento===et.nroSeguimiento;
                       const m2=e.id===et.nroSeguimiento;
                       const m4=et.ventaId&&e.nroSeguimiento===et.ventaId;
@@ -11899,7 +11905,11 @@ export default function App(){
                       if(et.cp&&!existe.cp)upd.cp=et.cp;
                       if(et.fecha&&!existe.fecha)upd.fecha=et.fecha;
                       // nroSeguimiento: solo si aún no tiene uno válido (nunca se repite, no sobreescribir)
-                      if(et.nroSeguimiento&&/^\d{10,15}$/.test(et.nroSeguimiento)&&!existe.nroSeguimiento)upd.nroSeguimiento=et.nroSeguimiento;
+                      // Además: si el match fue solo por m1 (el envío ya tenía este nro), no hace falta reasignar.
+                      // Si el match fue por m3/m2/m4+ (match por id de venta), sí asignar aunque el envío no lo tenga.
+                      const matchFuePorId=!!existeM3||(existe.id===et.nroSeguimiento)||(et.ventaId&&existe.nroSeguimiento===et.ventaId)||(et.alphaId&&(existe.id===et.alphaId||existe.nroSeguimiento===et.alphaId))||(et.ventaIdFromPack&&(existe.nroSeguimiento===et.ventaIdFromPack||existe.id===et.ventaIdFromPack));
+                      if(et.nroSeguimiento&&/^\d{10,15}$/.test(et.nroSeguimiento)&&!existe.nroSeguimiento&&matchFuePorId)upd.nroSeguimiento=et.nroSeguimiento;
+                      else if(et.nroSeguimiento&&/^\d{10,15}$/.test(et.nroSeguimiento)&&!existe.nroSeguimiento&&!matchFuePorId)console.warn("[dedup-nro-skip-sinid]",existe.id,"match solo por nroSeguimiento, no se reasigna");
                       else if(et.nroSeguimiento&&!/^\d{10,15}$/.test(et.nroSeguimiento))console.warn("[dedup-nro-skip]",existe.id,"nroSeguimiento extraído:",et.nroSeguimiento,"(no pasa filtro 10-15 dígitos)");
                       if(Object.keys(upd).length){
                         console.log("[dedup-upd]",existe.id,"upd:",JSON.stringify(upd));
