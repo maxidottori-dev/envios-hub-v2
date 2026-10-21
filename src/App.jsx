@@ -242,6 +242,7 @@ const parsearEtiquetasPDF=async(file)=>{
     etiquetas.push({
       nroSeguimiento,
       ventaId,
+      ventaIdFromPack, // ventaNumber del armado para pedidos pack (packId→ventaNum), usado en dedup m8/m9
       parentPackId,
       alphaId,
       cp:cpM?cpM[1].trim():"",
@@ -11857,9 +11858,13 @@ export default function App(){
                       const m6=et.alphaId&&e.nroSeguimiento===et.alphaId;
                       // m7: fallback para sub-artículos que no están en Firestore individualmente → match por pack padre
                       const m7=et.parentPackId&&e.id===et.parentPackId;
-                      return m1||m2||m3||m4||m5||m6||m7;
+                      // m8/m9: pedidos PACK donde la etiqueta tiene packId pero el envío fue guardado con el nroVenta
+                      // packToVenta resuelve packId → ventaNumber del armado (ej: 2000015XXX → 2000019090623248)
+                      const m8=et.ventaIdFromPack&&e.nroSeguimiento===et.ventaIdFromPack;
+                      const m9=et.ventaIdFromPack&&e.id===et.ventaIdFromPack;
+                      return m1||m2||m3||m4||m5||m6||m7||m8||m9;
                     });
-                    if(!existe)console.warn("[dedup-nomatch]",et.nroSeguimiento,"|venta:",et.ventaId,"|parent:",et.parentPackId,"|alpha:",et.alphaId);
+                    if(!existe)console.warn("[dedup-nomatch]",et.nroSeguimiento,"|venta:",et.ventaId,"|ventaFromPack:",et.ventaIdFromPack,"|parent:",et.parentPackId,"|alpha:",et.alphaId);
                     if(existe){
                       // Actualizar campos siempre (silencioso)
                       const ref=doc(db,"envios",existe.id);
