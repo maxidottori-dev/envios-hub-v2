@@ -210,7 +210,9 @@ const parsearEtiquetasPDF=async(file)=>{
     const ventaIdDirect=(()=>{const vm=txt.match(/\bVenta:\s*(\d{10,20})\b/);return vm?vm[1].trim():"";})();
     // Fallback 2: buscar nro de venta ML directo (empieza con 200001, ~16 dígitos) — aparece en etiquetas Flex aunque no haya páginas de armado
     const ventaIdFallback=(()=>{const vm=txt.match(/\b(200001\d{8,12})\b/);return vm?vm[1].trim():"";})();
-    const ventaId=ventaIdFromPack||ventaIdDirect||ventaIdFallback;
+    // packId ES el # de venta del Excel para pedidos pack (e.g. "2000015622644915") → usarlo primero como clave de match
+    // ventaIdFromPack apunta al sub-artículo (no existe en Firestore como doc independiente)
+    const ventaId=packId||ventaIdFromPack||ventaIdDirect||ventaIdFallback;
     const alphaId=packId?(packToAlpha[packId]||""):""; // id 26-char de la página de armado
     const cpM=txt.match(/CP:\s*(\d{4,5})/);
     const tipoM=txt.match(/(COMERCIAL|RESIDENCIAL)/);
