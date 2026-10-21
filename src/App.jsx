@@ -207,12 +207,11 @@ const parsearEtiquetasPDF=async(file)=>{
   }
   // Paso 2: procesar páginas de etiqueta
   const etiquetas=[];
-  console.log(`[debug-labels] páginas de etiqueta encontradas: ${labelTxts.length}`);
   for(const txt of labelTxts){
     // Soportar formato dividido ("48272\n235036") y formato unificado ("48294075310")
     // Regex robusta: soporta "Envio:" / "Envío:" / "Envio :" / "Envio\n:" (pdfjs puede separar "Envio" y ":" como items distintos)
     const nroMFinal=txt.match(/Env[ií]o\s*:\s*(\d+)(?:\s+(\d+))?/i);
-    if(!nroMFinal){console.warn("[debug-label-sin-envio] texto:",txt.substring(0,300));continue;}
+    if(!nroMFinal){continue;}
     const nroSeguimiento=nroMFinal[2]?(nroMFinal[1]+nroMFinal[2]).trim():nroMFinal[1].trim();
     // Extraer Pack ID para buscar el ventaId (# de venta del Excel) desde armado
     const packM=txt.match(/Pack\s*ID:\s*(\d+)(?:[\s\n]+(\d+))?/i);
@@ -11913,11 +11912,6 @@ export default function App(){
                 const duplicados=[];
                 const sinMatch=[];
                 if(cargarEnvios&&etiquetas.length){
-                  // DEBUG: mostrar etiquetas extraídas y buscar las 3 órdenes problemáticas en el estado
-                  console.log("[debug-etiquetas-extraidas]",etiquetas.map(et=>"nro:"+et.nroSeguimiento+"|venta:"+et.ventaId));
-                  const PROB_IDS=["2000019090623248","2000019089220162","2000019086789444"];
-                  const probEnvios=envios.filter(e=>PROB_IDS.includes(e.id)||PROB_IDS.includes(e.nroSeguimiento));
-                  if(probEnvios.length)console.log("[debug-prob-envios-estado]",probEnvios.map(e=>"id:"+e.id+"|seg:"+e.nroSeguimiento+"|origen:"+e.origen));
                   for(const et of etiquetas){
                     // Dedup: comparar por nroSeguimiento, ventaId o alphaId (id 26-char extraído de armado).
                     // m3 (ventaId→id directo) tiene PRIORIDAD: si la etiqueta tiene ventaId que coincide exactamente
@@ -11956,18 +11950,10 @@ export default function App(){
                       // Si el match fue por m3/m2/m4+ (match por id de venta), sí asignar aunque el envío no lo tenga.
                       const matchFuePorId=!!existeM3||(existe.id===et.nroSeguimiento)||(et.ventaId&&existe.nroSeguimiento===et.ventaId)||(et.alphaId&&(existe.id===et.alphaId||existe.nroSeguimiento===et.alphaId))||(et.ventaIdFromPack&&(existe.nroSeguimiento===et.ventaIdFromPack||existe.id===et.ventaIdFromPack));
                       if(et.nroSeguimiento&&/^\d{10,15}$/.test(et.nroSeguimiento)&&!existe.nroSeguimiento&&matchFuePorId)upd.nroSeguimiento=et.nroSeguimiento;
-                      else if(et.nroSeguimiento&&/^\d{10,15}$/.test(et.nroSeguimiento)&&!existe.nroSeguimiento&&!matchFuePorId)console.warn("[dedup-nro-skip-sinid]",existe.id,"match solo por nroSeguimiento, no se reasigna");
                       else if(et.nroSeguimiento&&!/^\d{10,15}$/.test(et.nroSeguimiento))console.warn("[dedup-nro-skip]",existe.id,"nroSeguimiento extraído:",et.nroSeguimiento,"(no pasa filtro 10-15 dígitos)");
                       if(Object.keys(upd).length){
-                        console.log("[dedup-upd]",existe.id,"upd:",JSON.stringify(upd));
                         await setDoc(ref,upd,{merge:true}).catch(err=>console.error("[dedup-setDoc-error]",existe.id,err.message));
-                        // Actualizar estado local para que la UI refleje el cambio sin recargar
-                        setEnvios(prev=>{
-                          const next=prev.map(e=>e.id===existe.id?{...e,...upd}:e);
-                          const chk=next.find(e=>e.id===existe.id);
-                          console.log("[dedup-post-setEnvios]",existe.id,"seg:",chk?.nroSeguimiento);
-                          return next;
-                        });
+                        setEnvios(prev=>prev.map(e=>e.id===existe.id?{...e,...upd}:e));
                       } else {
                         console.log("[dedup-noupd]",existe.id,"ya tiene seg:",existe.nroSeguimiento);
                       }
