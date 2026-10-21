@@ -11863,14 +11863,11 @@ export default function App(){
                       if(et.nroSeguimiento&&/^\d{10,15}$/.test(et.nroSeguimiento)&&existe.nroSeguimiento!==et.nroSeguimiento)upd.nroSeguimiento=et.nroSeguimiento;
                       if(Object.keys(upd).length)await setDoc(ref,upd,{merge:true}).catch(err=>console.error("[dedup-setDoc-error]",existe.id,err.message));
                       // Si el match fue via pack padre (m7) y hay ventaId propio distinto, actualizar también el sub-doc
-                      if(et.ventaId&&et.ventaId!==existe.id){
-                        const subUpd={};
-                        if(et.tipoEntrega)subUpd.tipoEntrega=et.tipoEntrega;
-                        if(et.nroSeguimiento&&/^\d{10,15}$/.test(et.nroSeguimiento))subUpd.nroSeguimiento=et.nroSeguimiento;
-                        if(Object.keys(subUpd).length){
-                          const subRef=doc(db,"envios",et.ventaId);
-                          await updateDoc(subRef,subUpd).catch(()=>{/* sub-doc no existe en Firestore, ignorar */});
-                        }
+                      // SOLO tipoEntrega — nunca nroSeguimiento, para evitar que dos labels del mismo pack
+                      // sobreescriban el tracking del otro sub-item (nroSeguimiento es único por envío)
+                      if(et.ventaId&&et.ventaId!==existe.id&&et.tipoEntrega){
+                        const subRef=doc(db,"envios",et.ventaId);
+                        await updateDoc(subRef,{tipoEntrega:et.tipoEntrega}).catch(()=>{/* sub-doc no existe en Firestore, ignorar */});
                       }
                       // Match encontrado: actualización silenciosa, no mostrar modal
                     } else {
