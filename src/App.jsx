@@ -1858,12 +1858,23 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                         <span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.82rem",flexShrink:0}}>#{e.nroOrdenTN}</span>
                         {nombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nombre}</span>}
                       </div>);
-                    // FLEX: muestra nroSeguimiento prominente
-                    if(esFlex)return(
-                      <div style={{display:"flex",gap:"8px",alignItems:"baseline",marginBottom:"1px",overflow:"hidden"}}>
-                        <span style={{color:"#4ade80",fontWeight:700,fontSize:"0.82rem",flexShrink:0}}>{e.nroSeguimiento||e.id}</span>
-                        {nombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nombre}</span>}
-                      </div>);
+                    // FLEX: línea 1 → 🛒 id (amarillo) + nombre; línea 2 → 🏷️ nroSeguimiento
+                    if(esFlex){
+                      const nroOk=/^4\d{10}$/.test(e.nroSeguimiento||"");
+                      const nroColor=nroOk?"#4ade80":"#f97316";
+                      const nroLabel=e.nroSeguimiento||(e.id?"Sin etiqueta":"—");
+                      return(
+                        <div style={{marginBottom:"1px",overflow:"hidden"}}>
+                          <div style={{display:"flex",gap:"6px",alignItems:"baseline",overflow:"hidden"}}>
+                            <span style={{color:"#fbbf24",fontWeight:700,fontSize:"0.82rem",flexShrink:0}}>🛒 {e.id}</span>
+                            {nombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nombre}</span>}
+                          </div>
+                          <div style={{display:"flex",gap:"6px",alignItems:"center",marginTop:"2px",overflow:"hidden"}}>
+                            <span style={{color:nroColor,fontWeight:600,fontSize:"0.78rem",flexShrink:0}}>🏷️ {nroLabel}</span>
+                            {(e.direccion||e.localidad)&&<span style={{color:"#6b7280",fontSize:"0.74rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📍 {e.direccion?e.direccion.split("/")[0].split(",")[0].trim()+(e.localidad?" · "+e.localidad:""):e.localidad}</span>}
+                          </div>
+                        </div>);
+                    }
                     // PostVenta: muestra ID en violeta
                     if(esPV)return(
                       <div style={{display:"flex",gap:"8px",alignItems:"baseline",marginBottom:"1px",overflow:"hidden"}}>
