@@ -11847,8 +11847,11 @@ export default function App(){
                 const nuevos=[];
                 const duplicados=[];
                 if(cargarEnvios&&etiquetas.length){
-                  // DEBUG: mostrar muestra de envios en estado para diagnóstico
-                  console.log("[debug-envios-state] total:",envios.length,"muestra ids:",envios.slice(0,5).map(e=>e.id+"|seg:"+e.nroSeguimiento));
+                  // DEBUG: mostrar etiquetas extraídas y buscar las 3 órdenes problemáticas en el estado
+                  console.log("[debug-etiquetas-extraidas]",etiquetas.map(et=>"nro:"+et.nroSeguimiento+"|venta:"+et.ventaId));
+                  const PROB_IDS=["2000019090623248","2000019089220162","2000019086789444"];
+                  const probEnvios=envios.filter(e=>PROB_IDS.includes(e.id)||PROB_IDS.includes(e.nroSeguimiento));
+                  if(probEnvios.length)console.log("[debug-prob-envios-estado]",probEnvios.map(e=>"id:"+e.id+"|seg:"+e.nroSeguimiento+"|origen:"+e.origen));
                   for(const et of etiquetas){
                     // Dedup: comparar por nroSeguimiento, ventaId o alphaId (id 26-char extraído de armado).
                     // alphaId es el puente cuando el entry fue creado por viejo código PDF con id=26char
