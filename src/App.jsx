@@ -11861,7 +11861,8 @@ export default function App(){
                       if(et.fecha&&!existe.fecha)upd.fecha=et.fecha;
                       // Si el entry importado del Excel tiene el 26-char, reemplazarlo con el barcode real de 11 dígitos
                       if(et.nroSeguimiento&&/^\d{10,15}$/.test(et.nroSeguimiento)&&existe.nroSeguimiento!==et.nroSeguimiento)upd.nroSeguimiento=et.nroSeguimiento;
-                      if(Object.keys(upd).length)await setDoc(ref,upd,{merge:true});
+                      console.log("[dedup-update]",et.nroSeguimiento,"→ existe.id:",existe.id,"| upd:",JSON.stringify(upd),"| et.tipoEntrega:",et.tipoEntrega,"| et.nroSeg:",et.nroSeguimiento,"| existe.nroSeg:",existe.nroSeguimiento);
+                      if(Object.keys(upd).length)await setDoc(ref,upd,{merge:true}).catch(err=>console.error("[dedup-setDoc-error]",existe.id,err.message));
                       // Match encontrado: actualización silenciosa, no mostrar modal
                     } else {
                       nuevos.push({
