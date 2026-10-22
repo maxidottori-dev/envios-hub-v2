@@ -5569,12 +5569,17 @@ function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCanc
     });
   },[enviosFresh]);
 
-  // Filtrar pedidos cancelados en tiempo real: si enviosFresh los marca como cancelados, sacarlos del panel
+  // Filtrar en tiempo real pedidos que ya no son elegibles:
+  // - cancelados en Firestore
+  // - asignados desde otra pestaña (fresh.trans existe pero este panel aún no les puso logística)
   const freshMap=Object.fromEntries(enviosFresh.map(e=>[e.id,e]));
   const borradorActivo=borrador.filter(e=>{
     const fresh=freshMap[e.id];
-    if(!fresh)return true; // si no está en fresh aún, mantener
-    return fresh.estado!=="cancelado";
+    if(!fresh)return true; // todavía no llegó el snapshot, mantener
+    if(fresh.estado==="cancelado")return false;
+    const localTrans=getA(e.id).trans;
+    if(fresh.trans&&!localTrans)return false; // ya asignado desde otra pestaña
+    return true;
   });
   const canceladosEnVivo=borrador.length-borradorActivo.length;
 
