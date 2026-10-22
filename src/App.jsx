@@ -5569,26 +5569,35 @@ function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCanc
     });
   },[enviosFresh]);
 
+  // Filtrar pedidos cancelados en tiempo real: si enviosFresh los marca como cancelados, sacarlos del panel
+  const freshMap=Object.fromEntries(enviosFresh.map(e=>[e.id,e]));
+  const borradorActivo=borrador.filter(e=>{
+    const fresh=freshMap[e.id];
+    if(!fresh)return true; // si no está en fresh aún, mantener
+    return fresh.estado!=="cancelado";
+  });
+  const canceladosEnVivo=borrador.length-borradorActivo.length;
+
   // Agrupar por fecha + turno (usa asig, que refleja datos frescos de Firestore)
   const grupos={};
-  borrador.forEach(e=>{
+  borradorActivo.forEach(e=>{
     const a=getA(e.id);
     const key=(a.fecha||"Sin fecha")+"|"+(a.turno||"Sin turno");
     if(!grupos[key])grupos[key]={fecha:a.fecha||"",turno:a.turno||"",envios:[]};
     grupos[key].envios.push(e);
   });
   const grupoKeys=Object.keys(grupos).sort();
-  const totalAsig=borrador.filter(e=>getA(e.id).trans).length;
+  const totalAsig=borradorActivo.filter(e=>getA(e.id).trans).length;
   // Bloquea confirmar si algún pedido quedó con logística asignada pero sin turno
-  const incompletosTN=borrador.filter(e=>{const a=getA(e.id);return a.trans&&!a.turno;});
+  const incompletosTN=borradorActivo.filter(e=>{const a=getA(e.id);return a.trans&&!a.turno;});
   const puedeConfirmarTN=incompletosTN.length===0;
   const [confirmando,setConfirmando]=useState(false);
   const auditTN=mkAudit(sesion);
-  const confirmar=()=>{if(confirmando||!puedeConfirmarTN)return;setConfirmando(true);onConfirmar(borrador.map(e=>({...e,...getA(e.id),estado:getA(e.id).trans?"asignado":"sin_asignar",...(getA(e.id).trans&&auditTN?{asignadoPor:auditTN}:{})})));};
+  const confirmar=()=>{if(confirmando||!puedeConfirmarTN)return;setConfirmando(true);onConfirmar(borradorActivo.map(e=>({...e,...getA(e.id),estado:getA(e.id).trans?"asignado":"sin_asignar",...(getA(e.id).trans&&auditTN?{asignadoPor:auditTN}:{})})));};
   const btnConfirmarTN=(padding="")=>(
     <button onClick={confirmar} disabled={confirmando||!puedeConfirmarTN} style={{...S.btn(true),background:confirmando?"#0a1520":"#0d1c2e",border:"1px solid #38bdf8",color:confirmando?"#4b5563":"#38bdf8",...(padding?{padding}:{}),display:"flex",alignItems:"center",gap:"6px",opacity:(confirmando||!puedeConfirmarTN)?0.7:1}}>
       {confirmando&&<span style={{width:"10px",height:"10px",border:"2px solid #38bdf8",borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin 0.7s linear infinite"}}/>}
-      {confirmando?`Guardando ${borrador.length} envíos...`:`Confirmar (${totalAsig}/${borrador.length})`}
+      {confirmando?`Guardando ${borradorActivo.length} envíos...`:`Confirmar (${totalAsig}/${borradorActivo.length})`}
       {!puedeConfirmarTN&&!confirmando&&<span style={{fontSize:"0.68rem",marginLeft:"5px",color:"#f59e0b"}}>⚠ {incompletosTN.length}</span>}
     </button>
   );
@@ -5598,9 +5607,15 @@ function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCanc
       <style>{`*{box-sizing:border-box;}`}</style>
       <div style={{position:"sticky",top:0,zIndex:100,background:"#0f1420",borderBottom:"1px solid #1a1f2e",padding:"0.75rem 1rem",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
         <div style={{width:"28px",height:"28px",background:"#0d1c2e",border:"1px solid #38bdf8",borderRadius:"7px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.85rem"}}>TN</div>
-        <div><div style={{fontWeight:800,fontSize:"0.95rem"}}>Asignar pedidos Tienda Nube</div><div style={{color:"#4b5563",fontSize:"0.62rem"}}>{borrador.length} pedidos sin asignar · agrupados por fecha y turno</div></div>
+        <div>
+          <div style={{fontWeight:800,fontSize:"0.95rem"}}>Asignar pedidos Tienda Nube</div>
+          <div style={{color:"#4b5563",fontSize:"0.62rem"}}>
+            {borradorActivo.length} pedidos · agrupados por fecha y turno
+            {canceladosEnVivo>0&&<span style={{color:"#ef4444",marginLeft:"0.5rem"}}>· {canceladosEnVivo} cancelado{canceladosEnVivo>1?"s":""} en tiempo real</span>}
+          </div>
+        </div>
         <div style={{marginLeft:"auto",display:"flex",gap:"0.5rem",alignItems:"center"}}>
-          <span style={{color:totalAsig===borrador.length?"#10b981":"#f59e0b",fontSize:"0.82rem",fontWeight:700}}>{totalAsig}/{borrador.length}</span>
+          <span style={{color:totalAsig===borradorActivo.length?"#10b981":"#f59e0b",fontSize:"0.82rem",fontWeight:700}}>{totalAsig}/{borradorActivo.length}</span>
           <button onClick={onCancelar} style={S.btn(false)}>Cancelar</button>
           {btnConfirmarTN()}
         </div>
