@@ -170,72 +170,38 @@ const parsearEtiquetasPDF=async(file)=>{
   const labelTxts=[];
   const packToVenta={};
   const packToAlpha={}; // packId → 26-char alphanumeric id (nuevo formato ML en col AV Excel)
-  const ventaToPackId={}; // mapa inverso: ventaId → packId para labels que muestran Venta: sin Pack ID:
   for(let i=1;i<=pdf.numPages;i++){
     const page=await pdf.getPage(i);
     const tc=await page.getTextContent();
     const txt=tc.items.map(x=>x.str).join("\n");
-    // Clasificar página: etiqueta FLEX tiene "FLEX" + "Envio:" (o "Envío:" con acento, o "Envio" y ":" separados por pdfjs)
-    const isFlexLabel=txt.includes("FLEX")&&/(Env[ií]o\s*:)/i.test(txt);
-    if(isFlexLabel){
+    if(txt.includes("FLEX")&&txt.includes("Envio:")){
       labelTxts.push(txt);
     } else if(txt.includes("Venta:")){
-      // Página de armado: puede tener MÚLTIPLES pedidos — usar matchAll para iterar todos
-      const packRe=/Pack\s*ID:\s*(\d+)(?:[\s\n]+(\d+))?/gi;
-      const ventaRe=/Venta:\s*(\d+)/gi;
-      const packMatches=[...txt.matchAll(packRe)];
-      const ventaMatches=[...txt.matchAll(ventaRe)];
-      for(let j=0;j<packMatches.length;j++){
-        const pm=packMatches[j];
-        const raw1=pm[1].trim(),raw2=(pm[2]||"").trim();
-        const packId=(raw2&&raw1.length<13?raw1+raw2:raw1);
-        if(ventaMatches[j])packToVenta[packId]=ventaMatches[j][1].trim();
-        // Buscar alphaId: último token [A-Z0-9]{20,30} ANTES de este Pack ID en el texto
-        const before=txt.substring(0,pm.index);
-        const alphas=[...before.matchAll(/\b([A-Z0-9]{20,30})\b/g)];
-        if(alphas.length>0)packToAlpha[packId]=alphas[alphas.length-1][1];
-      }
-      // Mapa inverso ventaId→packId: para cada Venta en armado, el packId es el último Pack ID anterior
-      // Esto permite matchear labels que muestran "Venta: SUB-ITEM-ID" sin Pack ID explícito
-      for(const vm of ventaMatches){
-        const vi=vm[1].trim();
-        let curPackId="";
-        for(const pm of packMatches){if(pm.index<vm.index){const r1=pm[1].trim(),r2=(pm[2]||"").trim();curPackId=(r2&&r1.length<13?r1+r2:r1);}}
-        if(curPackId)ventaToPackId[vi]=curPackId;
-      }
+      // Página de armado: extraer Pack ID y Venta (# de venta = id en Firestore)
+      const pm=txt.match(/Pack\s*ID:\s*(\d+)/i);
+      const vm=txt.match(/Venta:\s*(\d+)/i);
+      if(pm&&vm)packToVenta[pm[1].trim()]=vm[1].trim();
+      // También extraer el id alfanumérico de 26 chars que ML usa como nuevo nroSeguimiento
+      // Aparece al inicio de la página de armado antes del nombre del producto, ej: "HK5BUZHHTNIJTGADOYBTO6LJT4 Vaso..."
+      const alphaM=txt.match(/\b([A-Z0-9]{20,30})\b/);
+      if(pm&&alphaM)packToAlpha[pm[1].trim()]=alphaM[1].trim();
     }
   }
+  // DEBUG TEMPORAL
+  console.log("[parsearEtiquetasPDF] packToVenta=",packToVenta,"labelTxts count=",labelTxts.length);
   // Paso 2: procesar páginas de etiqueta
   const etiquetas=[];
   for(const txt of labelTxts){
     // Soportar formato dividido ("48272\n235036") y formato unificado ("48294075310")
-    // Regex robusta: soporta "Envio:" / "Envío:" / "Envio :" / "Envio\n:" (pdfjs puede separar "Envio" y ":" como items distintos)
-    const nroMFinal=txt.match(/Env[ií]o\s*:\s*(\d+)(?:\s+(\d+))?/i);
-    if(!nroMFinal){continue;}
-    const nroSeguimiento=nroMFinal[2]?(nroMFinal[1]+nroMFinal[2]).trim():nroMFinal[1].trim();
+    const nroM=txt.match(/Envio:\s*(\d+)(?:\s+(\d+))?/i);
+    if(!nroM)continue;
+    const nroSeguimiento=nroM[2]?(nroM[1]+nroM[2]).trim():nroM[1].trim();
     // Extraer Pack ID para buscar el ventaId (# de venta del Excel) desde armado
     const packM=txt.match(/Pack\s*ID:\s*(\d+)(?:[\s\n]+(\d+))?/i);
     const packId=packM?(packM[2]&&packM[1].length<13?packM[1]+packM[2]:packM[1]).trim():null;
-    const ventaIdFromPack=packId?(packToVenta[packId]||""):"";
-    // Fallback 1: etiquetas con "Venta:" explícito — el nro puede estar partido en dos líneas (igual que Envio:)
-    const ventaIdDirect=(()=>{
-      const vm=txt.match(/\bVenta:\s*(\d+)(?:\s+(\d+))?/i);
-      if(!vm)return"";
-      const combined=vm[2]?(vm[1].trim()+vm[2].trim()):vm[1].trim();
-      return combined.length>=10?combined:"";
-    })();
-    // Fallback 2: buscar nro de venta ML directo (empieza con 200001, ~16 dígitos) — aparece en etiquetas Flex aunque no haya páginas de armado
-    const ventaIdFallback=(()=>{const vm=txt.match(/\b(200001\d{8,12})\b/);return vm?vm[1].trim():"";})();
-    // packId ES el # de venta del Excel para pedidos pack → usarlo primero
-    // Para sub-artículos sin Pack ID: intentar match directo primero (si está en Firestore);
-    // si no, usar el pack padre como fallback (parentPackId) — el dedup prueba ambos en orden
-    const ventaFromLabel=ventaIdDirect||ventaIdFallback;
-    const packIdViaVenta=(!packId&&ventaFromLabel)?(ventaToPackId[ventaFromLabel]||""):"";
-    // ventaId: match primario; parentPackId: fallback si ventaId no existe en Firestore
-    const ventaId=packId||ventaFromLabel;
-    const parentPackId=packIdViaVenta; // pack padre para sub-artículos que NO están en Firestore individualmente
-    if(!ventaId&&!parentPackId)console.warn("[debug-label-sin-venta] nro:",nroSeguimiento,"\n---LABEL TEXT---\n",txt.substring(0,500));
+    const ventaId=packId?(packToVenta[packId]||""):"";
     const alphaId=packId?(packToAlpha[packId]||""):""; // id 26-char de la página de armado
+    console.log("[parsearEtiquetasPDF] packId=",packId,"ventaId=",ventaId,"alphaId=",alphaId,"nroSeguimiento=",nroSeguimiento);
     const cpM=txt.match(/CP:\s*(\d{4,5})/);
     const tipoM=txt.match(/(COMERCIAL|RESIDENCIAL)/);
     const dirM=txt.match(/Direccion:\s*([^\n]+)/i);
@@ -245,8 +211,6 @@ const parsearEtiquetasPDF=async(file)=>{
     etiquetas.push({
       nroSeguimiento,
       ventaId,
-      ventaIdFromPack, // ventaNumber del armado para pedidos pack (packId→ventaNum), usado en dedup m8/m9
-      parentPackId,
       alphaId,
       cp:cpM?cpM[1].trim():"",
       tipoEntrega:tipoM?tipoM[1]:"",
@@ -529,8 +493,7 @@ function parsearExcel(file) {
           if(iDir<0||iSeg<0) throw new Error("El template no tiene las columnas correctas.");
           for(let i=hFila+1;i<filas.length;i++){
             const r=filas[i];
-            const nroSeguimientoRaw=String(r[iSeg]||"").trim();
-            const nroSeguimiento=/^\d{11}$/.test(nroSeguimientoRaw)?nroSeguimientoRaw:"";
+            const nroSeguimiento=String(r[iSeg]||"").trim();
             if(!nroSeguimiento) continue;
             const dir=String(r[iDir]||"").trim(); if(!dir) continue;
             const cp=String(r[iCP]||"").replace(/\D/g,"");
@@ -556,8 +519,7 @@ function parsearExcel(file) {
             const cp=String(r[iCP]||"").replace(/\D/g,"");
             const fechaVenta=parseFechaES(r[iFecha]); if(!fechaVenta) continue;
             const partido=cpAPartido(cp)||String(r[iCiudad]||"").trim();
-            const nroSeguimientoRaw=String(r[iSeg]||"").trim();
-            const nroSeguimiento=/^\d{11}$/.test(nroSeguimientoRaw)?nroSeguimientoRaw:"";
+            const nroSeguimiento=String(r[iSeg]||"").trim();
             envios.push({id:orden,direccion:dir,ciudad:String(r[iCiudad]||"").trim(),cp,fechaVenta,
               fecha:"",turno:"",trans:"",partido,tarifaLog:0,estado:"sin_asignar",
               nroSeguimiento,linkML:"https://www.mercadolibre.com.ar/ventas/"+orden+"/detalle",
@@ -996,102 +958,6 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc,envios=
 // ════════════════════════════════════════════════════════════════════
 // MODAL OPCIONES PDF FLEX
 // ════════════════════════════════════════════════════════════════════
-function ModalDuplicadosFlex({duplicados, onConfirm, onCancel}){
-  const [seleccionados,setSeleccionados]=useState(new Set());
-  const toggleTodos=(val)=>setSeleccionados(val?new Set(duplicados.map((_,i)=>i)):new Set());
-  const toggle=(i)=>{
-    const s=new Set(seleccionados);
-    if(s.has(i))s.delete(i);else s.add(i);
-    setSeleccionados(s);
-  };
-  const selArr=duplicados.filter((_,i)=>seleccionados.has(i));
-  return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:"16px"}}>
-      <div style={{background:"#12172a",border:"1px solid #f59e0b",borderRadius:"16px",padding:"28px 28px 24px",width:"100%",maxWidth:"560px",maxHeight:"80vh",display:"flex",flexDirection:"column",boxShadow:"0 8px 40px #0009"}}>
-        <div style={{color:"#fbbf24",fontWeight:800,fontSize:"1rem",marginBottom:"4px"}}>⚠️ Envíos ya existentes en EnviosHub</div>
-        <div style={{color:"#9ca3af",fontSize:"0.75rem",marginBottom:"16px"}}>Los siguientes envíos ya fueron importados antes. Seleccioná los que querés volver a importar (se agregarán a la pantalla de asignación).</div>
-        {/* Botones seleccionar todos / ninguno */}
-        <div style={{display:"flex",gap:"8px",marginBottom:"10px"}}>
-          <button onClick={()=>toggleTodos(true)} style={{background:"#1a2640",border:"1px solid #374151",color:"#d1d5db",padding:"4px 12px",borderRadius:"6px",cursor:"pointer",fontSize:"0.72rem"}}>Seleccionar todos</button>
-          <button onClick={()=>toggleTodos(false)} style={{background:"#1a2640",border:"1px solid #374151",color:"#d1d5db",padding:"4px 12px",borderRadius:"6px",cursor:"pointer",fontSize:"0.72rem"}}>Ninguno</button>
-        </div>
-        {/* Lista de duplicados */}
-        <div style={{overflowY:"auto",flex:1,marginBottom:"16px",display:"flex",flexDirection:"column",gap:"6px"}}>
-          {duplicados.map(({et,existe},i)=>{
-            const sel=seleccionados.has(i);
-            return(
-              <label key={i} style={{display:"flex",alignItems:"flex-start",gap:"10px",cursor:"pointer",padding:"10px 12px",background:sel?"#1c2540":"#0f1420",border:"1px solid "+(sel?"#f59e0b":"#252d40"),borderRadius:"8px",transition:"all 0.12s"}}>
-                <input type="checkbox" checked={sel} onChange={()=>toggle(i)} style={{width:"15px",height:"15px",accentColor:"#f59e0b",marginTop:"2px",flexShrink:0}}/>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{color:"#e5e7eb",fontWeight:700,fontSize:"0.8rem",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{et.destinatario||existe.destinatario||"—"}</div>
-                  <div style={{color:"#6b7280",fontSize:"0.7rem",marginTop:"1px"}}>{et.nroSeguimiento}</div>
-                  {et.ventaId&&<div style={{color:"#6b7280",fontSize:"0.7rem"}}>Venta: {et.ventaId}</div>}
-                  <div style={{color:"#9ca3af",fontSize:"0.7rem",marginTop:"2px"}}>{et.direccion||existe.direccion||""}{et.localidad?" · "+et.localidad:""}</div>
-                </div>
-                <div style={{textAlign:"right",flexShrink:0}}>
-                  {existe.trans&&<div style={{color:"#84cc16",fontSize:"0.7rem",fontWeight:700}}>{existe.trans}</div>}
-                  <div style={{color:"#4b5563",fontSize:"0.65rem",marginTop:"2px"}}>ya existe</div>
-                </div>
-              </label>
-            );
-          })}
-        </div>
-        <div style={{display:"flex",gap:"10px",justifyContent:"flex-end"}}>
-          <button onClick={onCancel} style={{background:"#1a1f2e",border:"1px solid #252d40",color:"#9ca3af",padding:"8px 20px",borderRadius:"8px",cursor:"pointer",fontSize:"0.82rem"}}>Cancelar</button>
-          <button onClick={()=>onConfirm(selArr)} style={{background:"linear-gradient(135deg,#f59e0b,#d97706)",color:"#0f1420",border:"none",padding:"8px 24px",borderRadius:"8px",cursor:"pointer",fontWeight:800,fontSize:"0.82rem"}}>
-            {selArr.length>0?`Importar ${selArr.length} seleccionado${selArr.length>1?"s":""}` : "Continuar sin importar"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ModalEtiquetasSinMatch({sinMatch, onConfirm, onCancel}){
-  const [seleccionados,setSeleccionados]=useState(new Set());
-  const toggleTodos=(val)=>setSeleccionados(val?new Set(sinMatch.map((_,i)=>i)):new Set());
-  const toggle=(i)=>{const s=new Set(seleccionados);s.has(i)?s.delete(i):s.add(i);setSeleccionados(s);};
-  const selArr=sinMatch.filter((_,i)=>seleccionados.has(i));
-  return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:"16px"}}>
-      <div style={{background:"#12172a",border:"1px solid #f97316",borderRadius:"16px",padding:"28px 28px 24px",width:"100%",maxWidth:"560px",maxHeight:"80vh",display:"flex",flexDirection:"column",boxShadow:"0 8px 40px #0009"}}>
-        <div style={{color:"#f97316",fontWeight:800,fontSize:"1rem",marginBottom:"4px"}}>⚠️ Etiquetas sin pedido en EnviosHub</div>
-        <div style={{color:"#9ca3af",fontSize:"0.75rem",marginBottom:"16px"}}>Estas etiquetas no coinciden con ningún envío existente. Verificá que el Excel ya fue cargado. Si son pedidos nuevos, seleccioná los que querés agregar.</div>
-        <div style={{display:"flex",gap:"8px",marginBottom:"10px"}}>
-          <button onClick={()=>toggleTodos(true)} style={{background:"#1a2640",border:"1px solid #374151",color:"#d1d5db",padding:"4px 12px",borderRadius:"6px",cursor:"pointer",fontSize:"0.72rem"}}>Seleccionar todos</button>
-          <button onClick={()=>toggleTodos(false)} style={{background:"#1a2640",border:"1px solid #374151",color:"#d1d5db",padding:"4px 12px",borderRadius:"6px",cursor:"pointer",fontSize:"0.72rem"}}>Ninguno</button>
-        </div>
-        <div style={{overflowY:"auto",flex:1,marginBottom:"16px",display:"flex",flexDirection:"column",gap:"6px"}}>
-          {sinMatch.map((et,i)=>{
-            const sel=seleccionados.has(i);
-            return(
-              <label key={i} style={{display:"flex",alignItems:"flex-start",gap:"10px",cursor:"pointer",padding:"10px 12px",background:sel?"#1c1a10":"#0f1420",border:"1px solid "+(sel?"#f97316":"#252d40"),borderRadius:"8px",transition:"all 0.12s"}}>
-                <input type="checkbox" checked={sel} onChange={()=>toggle(i)} style={{width:"15px",height:"15px",accentColor:"#f97316",marginTop:"2px",flexShrink:0}}/>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{color:"#e5e7eb",fontWeight:700,fontSize:"0.8rem",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{et.destinatario||"Sin destinatario"}</div>
-                  <div style={{color:"#fbbf24",fontSize:"0.7rem",marginTop:"1px"}}>🏷️ {et.nroSeguimiento}</div>
-                  {et.ventaId&&<div style={{color:"#6b7280",fontSize:"0.7rem"}}>Venta: {et.ventaId}</div>}
-                  <div style={{color:"#9ca3af",fontSize:"0.7rem",marginTop:"2px"}}>{et.direccion||""}{et.localidad?" · "+et.localidad:""}</div>
-                </div>
-                <div style={{textAlign:"right",flexShrink:0}}>
-                  {et.tipoEntrega&&<div style={{color:"#38bdf8",fontSize:"0.68rem",fontWeight:700}}>{et.tipoEntrega}</div>}
-                  <div style={{color:"#dc2626",fontSize:"0.65rem",marginTop:"2px"}}>sin match</div>
-                </div>
-              </label>
-            );
-          })}
-        </div>
-        <div style={{display:"flex",gap:"10px",justifyContent:"flex-end"}}>
-          <button onClick={onCancel} style={{background:"#1a1f2e",border:"1px solid #252d40",color:"#9ca3af",padding:"8px 20px",borderRadius:"8px",cursor:"pointer",fontSize:"0.82rem"}}>Cancelar todo</button>
-          <button onClick={()=>onConfirm(selArr)} style={{background:selArr.length>0?"linear-gradient(135deg,#f97316,#dc2626)":"#1a2640",color:selArr.length>0?"#fff":"#9ca3af",border:"1px solid "+(selArr.length>0?"transparent":"#374151"),padding:"8px 24px",borderRadius:"8px",cursor:"pointer",fontWeight:800,fontSize:"0.82rem"}}>
-            {selArr.length>0?`Agregar ${selArr.length} como nuevo${selArr.length>1?"s":""}` : "Continuar sin agregar"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ModalOpcionesPDF({onConfirm, onCancel}){
   const [cargarEnvios, setCargarEnvios] = useState(true);
   const [procesarArmado, setProcesarArmado] = useState(true);
@@ -1181,11 +1047,7 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
   const transAsignado=e.trans&&e.trans!==envio.trans;
   // Si el envío ya fue despachado y se cambia fecha/turno/logística → marcar reprogramado
   const esReprogramado=envio.despachado&&(e.fecha!==envio.fecha||e.turno!==envio.turno||e.trans!==envio.trans);
-  const nroSegCambiado=e.nroSeguimiento&&e.nroSeguimiento!==(envio.nroSeguimiento||"");
-  const nroSegDuplicado=nroSegCambiado&&envios.some(o=>o.id!==envio.id&&o.nroSeguimiento===e.nroSeguimiento);
-  const handleSave=()=>{
-    if(nroSegDuplicado){alert("⚠️ Ese nro. de seguimiento ya está asignado a otro envío. Cada nro. es único.");return;}
-    setGuardando(true);onSave({...e,importeOverride:costoOverride||null,
+  const handleSave=()=>{setGuardando(true);onSave({...e,importeOverride:costoOverride||null,
     ...(esReprogramado?{reprogramado:true}:{}),
     ...(audit?{ultimaEdicionPor:audit}:{}),
     ...(transAsignado&&audit?{asignadoPor:audit}:{}),
@@ -1229,19 +1091,24 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
       ) : (
         <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.75rem",background:"#0d1119",border:"1px solid #1e2535"}}>
           <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"8px"}}>Cliente</div>
-          <div style={{marginBottom:"0.5rem"}}>
-            <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nombre</div>
-            <input value={e.clienteNombre||e.destinatario||""} onChange={ev=>set("clienteNombre",ev.target.value)} style={{...S.input,width:"100%",fontSize:"0.8rem"}} placeholder="Nombre del destinatario"/>
+          <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:"0.5rem",marginBottom:e.nroSeguimiento?"0.5rem":"0"}}>
+            <div>
+              <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nombre</div>
+              <input value={e.clienteNombre||""} onChange={ev=>set("clienteNombre",ev.target.value)} style={{...S.input,width:"100%",fontSize:"0.8rem"}} placeholder="Nombre del cliente"/>
+            </div>
+            <div>
+              <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Teléfono</div>
+              <input value={e.telefono||""} onChange={ev=>set("telefono",ev.target.value)} style={{...S.input,width:"100%",fontSize:"0.8rem"}} placeholder="11 xxxx-xxxx"/>
+            </div>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.5rem",marginTop:"0.5rem"}}>
             <div>
-              <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Venta ML</div>
-              <div style={{...S.input,width:"100%",fontSize:"0.8rem",color:"#f59e0b",fontWeight:600,display:"flex",alignItems:"center"}}>{envio.id||"—"}</div>
+              <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. pedido</div>
+              <input value={e.nroOrdenTN||""} onChange={ev=>set("nroOrdenTN",ev.target.value)} style={{...S.input,width:"100%",fontSize:"0.8rem"}} placeholder="Nro de pedido"/>
             </div>
             <div>
               <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. seguimiento</div>
-              <input value={e.nroSeguimiento||""} onChange={ev=>set("nroSeguimiento",ev.target.value)} style={{...S.input,width:"100%",fontSize:"0.8rem",borderColor:nroSegDuplicado?"#f97316":undefined}} placeholder="Nro de tracking"/>
-              {nroSegDuplicado&&<div style={{color:"#f97316",fontSize:"0.65rem",marginTop:"2px"}}>⚠ Ya asignado a otro envío</div>}
+              <input value={e.nroSeguimiento||""} onChange={ev=>set("nroSeguimiento",ev.target.value)} style={{...S.input,width:"100%",fontSize:"0.8rem"}} placeholder="Nro de tracking"/>
             </div>
           </div>
         </div>
@@ -1509,7 +1376,6 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
   const [filOrigen,setFilOrigen]=useState("TODOS");
   const [filTipoEntrega,setFilTipoEntrega]=useState("TODOS");
   const [soloReprog,setSoloReprog]=useState(false);
-  const [soloSinEtiqueta,setSoloSinEtiqueta]=useState(false);
   const [busqueda,setBusqueda]=useState("");
   const [editId,setEditId]=useState(null);
   const [seleccionados,setSeleccionados]=useState(new Set());
@@ -1559,7 +1425,6 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
       else if(e.tipoEntrega!==filTipoEntrega)return false;
     }
     if(soloReprog&&!e.reprogramado)return false;
-    if(soloSinEtiqueta&&(e.origen!=="ML"||/^4\d{10}$/.test(e.nroSeguimiento||"")))return false;
     if(busqueda){const srch=norm(busqueda);return norm(e.direccion).includes(srch)||norm(e.id).includes(srch)||norm(e.partido).includes(srch)||norm(e.nroSeguimiento||"").includes(srch)||norm(e.clienteNombre).includes(srch)||(String(e.nroOrdenTN||"")).includes(srch);}
     return true;
   });
@@ -1688,7 +1553,6 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
             </div>
           </>}
           <button onClick={()=>setSoloReprog(!soloReprog)} style={{...S.btnSm(soloReprog,"#fbbf24"),marginLeft:mostrarResumenFlex?"0":"auto"}}>⟳ Reprog.</button>
-          {mostrarResumenFlex&&<button onClick={()=>setSoloSinEtiqueta(!soloSinEtiqueta)} style={S.btnSm(soloSinEtiqueta,"#f97316")}>⚠ Sin etiqueta</button>}
           <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="🔍 Buscar..." style={{...S.input,width:"190px",marginLeft:mostrarResumenFlex?"auto":"0"}}/>
           {enviosHistTab===null
             ?<button onClick={cargarHistoricoTab} disabled={loadingHistTab} title="Carga toda la historia (antes de 60 días)" style={{...S.btnSm(false),background:"#1e1b4b",borderColor:"#4338ca",color:"#a5b4fc",fontSize:"0.65rem",whiteSpace:"nowrap"}}>{loadingHistTab?"⏳":"🔍 +Histórico"}</button>
@@ -1904,23 +1768,12 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                         <span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.82rem",flexShrink:0}}>#{e.nroOrdenTN}</span>
                         {nombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nombre}</span>}
                       </div>);
-                    // FLEX: línea 1 → 🛒 id (amarillo) + nombre; línea 2 → 🏷️ nroSeguimiento
-                    if(esFlex){
-                      const nroOk=/^4\d{10}$/.test(e.nroSeguimiento||"");
-                      const nroColor=nroOk?"#4ade80":"#f97316";
-                      const nroLabel=e.nroSeguimiento||(e.id?"Sin etiqueta":"—");
-                      return(
-                        <div style={{marginBottom:"1px",overflow:"hidden"}}>
-                          <div style={{display:"flex",gap:"6px",alignItems:"baseline",overflow:"hidden"}}>
-                            <span style={{color:"#fbbf24",fontWeight:700,fontSize:"0.82rem",flexShrink:0}}>🛒 {e.id}</span>
-                            {nombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nombre}</span>}
-                          </div>
-                          <div style={{display:"flex",gap:"6px",alignItems:"center",marginTop:"2px",overflow:"hidden"}}>
-                            <span style={{color:nroColor,fontWeight:600,fontSize:"0.78rem",flexShrink:0}}>🏷️ {nroLabel}</span>
-                            {(e.direccion||e.localidad)&&<span style={{color:"#6b7280",fontSize:"0.74rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📍 {e.direccion?e.direccion.split("/")[0].split(",")[0].trim()+(e.localidad?" · "+e.localidad:""):e.localidad}</span>}
-                          </div>
-                        </div>);
-                    }
+                    // FLEX: muestra nroSeguimiento prominente
+                    if(esFlex)return(
+                      <div style={{display:"flex",gap:"8px",alignItems:"baseline",marginBottom:"1px",overflow:"hidden"}}>
+                        <span style={{color:"#4ade80",fontWeight:700,fontSize:"0.82rem",flexShrink:0}}>{e.nroSeguimiento||e.id}</span>
+                        {nombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nombre}</span>}
+                      </div>);
                     // PostVenta: muestra ID en violeta
                     if(esPV)return(
                       <div style={{display:"flex",gap:"8px",alignItems:"baseline",marginBottom:"1px",overflow:"hidden"}}>
@@ -1939,8 +1792,6 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                   <div style={{color:"#9ca3af",fontSize:"0.74rem",marginTop:"2px",display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center"}}>
                     {/* nroSeguimiento: solo para no-FLEX (FLEX ya lo muestra arriba en verde) */}
                     {e.nroSeguimiento&&e.origen!=="ML"&&<span style={{background:"#0f1420",padding:"0 5px",borderRadius:"4px",border:"1px solid #252d40",color:"#94a3b8"}}>📦 {e.nroSeguimiento}</span>}
-                    {/* Alerta FLEX sin etiqueta PDF: nroSeguimiento ausente o no tiene formato 11 dígitos empezando en 4 */}
-                    {e.origen==="ML"&&!/^4\d{10}$/.test(e.nroSeguimiento||"")&&<span title="Falta procesar las etiquetas PDF para este envío" style={{background:"#2d1a00",color:"#f97316",border:"1px solid #7c3400",borderRadius:"4px",padding:"0 5px",fontSize:"0.68rem",fontWeight:700}}>⚠ Sin etiqueta</span>}
                     {e.tipoEntrega&&<span style={{background:e.tipoEntrega==="COMERCIAL"?"#0c1a40":"#0a1a0a",color:e.tipoEntrega==="COMERCIAL"?"#38bdf8":"#86efac",border:"1px solid "+(e.tipoEntrega==="COMERCIAL"?"#1e4060":"#1a3a1a"),borderRadius:"4px",padding:"0 5px",fontSize:"0.68rem",fontWeight:700}}>{e.tipoEntrega}</span>}
                     {e.destinatario&&e.origen!=="ML"&&<span style={{color:"#cbd5e1",fontWeight:500,fontSize:"0.74rem"}}>· {e.destinatario}</span>}
                     <span style={{color:"#cbd5e1",fontWeight:500,fontSize:"14px"}}>· {e.localidad?e.localidad+" · ":""}{e.partido}{e.cp?" · "+e.cp:""}</span>
@@ -3263,13 +3114,6 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
     return (enviosExistentes||[]).some(e=>e.id===id||String(e.nroOrdenTN||"")===id);
   },[f.id,enviosExistentes]);
 
-  // Validación de nroSeguimiento único — no puede existir el mismo tracking en otro envío
-  const nroSeguimientoDuplicado=useMemo(()=>{
-    const nro=f.nroSeguimiento.trim();
-    if(!nro)return false;
-    return (enviosExistentes||[]).some(e=>e.nroSeguimiento===nro&&e.id!==f.id.trim());
-  },[f.nroSeguimiento,f.id,enviosExistentes]);
-
   const handleTrans=l=>{const t=f.trans===l?"":l;setF(p=>({...p,trans:t,estado:t?"asignado":"sin_asignar"}));};
 
   const guardar=async()=>{
@@ -3277,7 +3121,6 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
     if(!id){setErr(esML?"El nro de venta es obligatorio.":"El nro de pedido es obligatorio.");return;}
     if(idDuplicado){setErr(esML?"Ya existe un envio con ese nro de venta.":"Ya existe un envio con ese nro de pedido ("+id+").");return;}
     if(esML&&!f.nroSeguimiento.trim()){setErr("El nro de seguimiento es obligatorio para pedidos ML.");return;}
-    if(nroSeguimientoDuplicado){setErr("Ya existe un envio con ese nro de seguimiento ("+f.nroSeguimiento.trim()+"). Cada envío debe tener un tracking único.");return;}
     if(!f.clienteNombre.trim()){setErr("El nombre del cliente es obligatorio.");return;}
     if(!f.direccion.trim()){setErr("La dirección es obligatoria.");return;}
     if(!f.fecha){setErr("La fecha es obligatoria.");return;}
@@ -3332,8 +3175,8 @@ function TabManual({setEnvios,onSuccess,lc,enviosExistentes,sesion=null}){
               <input value={f.id} onChange={e=>set("id",e.target.value)} style={{...S.input,width:"100%",borderColor:idDuplicado?"#7f1d1d":"#252d40"}} placeholder="ej. 2000012345"/>
             </div>
             <div>
-              <Lbl>Nro de seguimiento * <span style={{color:nroSeguimientoDuplicado?"#f87171":"#374151",fontSize:"0.6rem",fontWeight:400,textTransform:"none"}}>{nroSeguimientoDuplicado?"— ya existe en otro envío":""}</span></Lbl>
-              <input value={f.nroSeguimiento} onChange={e=>set("nroSeguimiento",e.target.value)} style={{...S.input,width:"100%",borderColor:nroSeguimientoDuplicado?"#7f1d1d":"#252d40"}} placeholder="ej. 46669555629"/>
+              <Lbl>Nro de seguimiento *</Lbl>
+              <input value={f.nroSeguimiento} onChange={e=>set("nroSeguimiento",e.target.value)} style={{...S.input,width:"100%"}} placeholder="ej. 46669555629"/>
             </div>
           </div>
         )}
@@ -5695,7 +5538,8 @@ function TabLocalidades({cpExtra,setCpExtra}) {
 function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCancelar,lc,sesion=null}){
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   // Pre-inicializar asig con fecha y turno del datepicker
-  const initAsig=()=>{const a={};borrador.forEach(e=>{a[e.id]={trans:"",fecha:e.fecha||"",turno:e.turno||""};});return a;};
+  // Preservar trans existente: si el envio ya tiene logística asignada, respetarla en el panel
+  const initAsig=()=>{const a={};borrador.forEach(e=>{a[e.id]={trans:e.trans||"",fecha:e.fecha||"",turno:e.turno||""};});return a;};
   const [asig,setAsig]=useState(initAsig);
   const getA=id=>asig[id]||{trans:"",fecha:"",turno:""};
   const setA=(id,k,v)=>setAsig(p=>({...p,[id]:{...getA(id),[k]:v}}));
@@ -11462,8 +11306,6 @@ export default function App(){
   const [pendingMLFile,setPendingMLFile]=useState(null); // PDF flex guardado para enviar a ML Armado tras confirmar asignación
   const [modalPDF,setModalPDF]=useState(null); // archivo pendiente mientras modal abierto
   const [modalPDFColecta,setModalPDFColecta]=useState(null); // archivo Colecta pendiente mientras modal abierto
-  const [modalDuplicadosFlex,setModalDuplicadosFlex]=useState(null); // {duplicados:[{et,existe}], nuevos:[], file, procesarArmado, etiquetas, loteTs}
-  const [modalSinMatch,setModalSinMatch]=useState(null); // {sinMatch:[et,...], nuevosAprobados:[], file, procesarArmado, loteTs, hoy}
   const [colectaProgMsg,setColectaProgMsg]=useState(""); // texto de progreso a mostrar en el botón "Colecta" mientras se espera ML Armado
   const [envios,setEnviosLocal]=useState([]);
   const [colectas,setColectas]=useState([]); // colectas ML pendientes de armado (estado=pendiente)
@@ -11735,11 +11577,14 @@ export default function App(){
 
   const confirmarAsignacion=async(asignados)=>{
     const ts=new Date().toISOString();
-    for(const e of asignados){
-      if(!e.loteImportacion)e.loteImportacion=ts;
-      await guardarEnvio(e);
-    }
-    setPantalla("dashboard");setTab("envios");mostrarToast(asignados.length+" envios guardados");
+    const asignadosConLote=asignados.map(e=>e.loteImportacion?e:{...e,loteImportacion:ts});
+    // Encolar escrituras Firestore
+    asignadosConLote.forEach(e=>guardarEnvio(e));
+    // Actualizar estado local INMEDIATAMENTE para evitar que datos viejos (sin trans)
+    // sobreescriban la asignación en el saveQueue durante la ventana de 600ms del debounce
+    const asigMap=new Map(asignadosConLote.map(e=>[e.id,e]));
+    setEnviosLocal(prev=>prev.map(e=>asigMap.has(e.id)?asigMap.get(e.id):e));
+    setPantalla("dashboard");setTab("envios");mostrarToast(asignadosConLote.length+" envios guardados");
     // Enviar a ML Armado ahora que los envíos están guardados con logística completa
     if(pendingMLFile){
       const f=pendingMLFile;
@@ -11903,79 +11748,66 @@ export default function App(){
                 const hoy=fechaHoy();
                 const loteTs=new Date().toISOString();
                 const nuevos=[];
-                const duplicados=[];
-                const sinMatch=[];
                 if(cargarEnvios&&etiquetas.length){
+                  // DEBUG TEMPORAL - búsqueda específica
+                  console.log("[dedup] total envios en state:",envios.length);
                   for(const et of etiquetas){
+                    // DEBUG TEMPORAL
+                    console.log("[dedup] et.nroSeg=",et.nroSeguimiento,"et.ventaId=",et.ventaId,"et.alphaId=",et.alphaId);
                     // Dedup: comparar por nroSeguimiento, ventaId o alphaId (id 26-char extraído de armado).
-                    // m3 (ventaId→id directo) tiene PRIORIDAD: si la etiqueta tiene ventaId que coincide exactamente
-                    // con el id de un envío, ese es el match correcto aunque otro doc ya tenga el mismo nroSeguimiento.
-                    const existeM3=et.ventaId?envios.find(e=>e.id===et.ventaId):null;
-                    const existe=existeM3||envios.find(e=>{
-                      // m1: solo confirmar si el envío YA tiene este nroSeguimiento asignado (no reasignar a otro)
+                    // alphaId es el puente cuando el entry fue creado por viejo código PDF con id=26char
+                    // y el Excel todavía no fue cargado para ese pedido.
+                    const existe=envios.find(e=>{
                       const m1=e.nroSeguimiento===et.nroSeguimiento;
                       const m2=e.id===et.nroSeguimiento;
+                      const m3=et.ventaId&&e.id===et.ventaId;
                       const m4=et.ventaId&&e.nroSeguimiento===et.ventaId;
                       const m5=et.alphaId&&e.id===et.alphaId;
                       const m6=et.alphaId&&e.nroSeguimiento===et.alphaId;
-                      // m7: fallback para sub-artículos que no están en Firestore individualmente → match por pack padre
-                      const m7=et.parentPackId&&e.id===et.parentPackId;
-                      // m8/m9: pedidos PACK donde la etiqueta tiene packId pero el envío fue guardado con el nroVenta
-                      // packToVenta resuelve packId → ventaNumber del armado (ej: 2000015XXX → 2000019090623248)
-                      const m8=et.ventaIdFromPack&&e.nroSeguimiento===et.ventaIdFromPack;
-                      const m9=et.ventaIdFromPack&&e.id===et.ventaIdFromPack;
-                      return m1||m2||m4||m5||m6||m7||m8||m9;
+                      if(m1||m2||m3||m4||m5||m6)console.log("[dedup] MATCH:",e.id,e.nroSeguimiento,"flags",m1,m2,m3,m4,m5,m6);
+                      return m1||m2||m3||m4||m5||m6;
                     });
-                    if(!existe)console.warn("[dedup-nomatch]",et.nroSeguimiento,"|venta:",et.ventaId,"|ventaFromPack:",et.ventaIdFromPack,"|parent:",et.parentPackId,"|alpha:",et.alphaId);
+                    if(!existe)console.log("[dedup] NO MATCH nroSeg=",et.nroSeguimiento,"ventaId=",et.ventaId,"alphaId=",et.alphaId);
                     if(existe){
-                      // Actualizar campos siempre (silencioso)
                       const ref=doc(db,"envios",existe.id);
                       const upd={};
                       if(et.destinatario)upd.destinatario=et.destinatario;
                       if(et.referencia)upd.referencia=et.referencia;
                       if(et.tipoEntrega)upd.tipoEntrega=et.tipoEntrega;
-                      // Campos de ubicación: solo si el envío no los tiene (son datos del destinatario, no cambian)
-                      if(et.direccion&&!existe.direccion)upd.direccion=et.direccion;
                       if(et.localidad&&!existe.localidad)upd.localidad=et.localidad;
-                      if(et.cp&&!existe.cp)upd.cp=et.cp;
                       if(et.fecha&&!existe.fecha)upd.fecha=et.fecha;
-                      // nroSeguimiento: solo si aún no tiene uno válido (nunca se repite, no sobreescribir)
-                      // Además: si el match fue solo por m1 (el envío ya tenía este nro), no hace falta reasignar.
-                      // Si el match fue por m3/m2/m4+ (match por id de venta), sí asignar aunque el envío no lo tenga.
-                      const matchFuePorId=!!existeM3||(existe.id===et.nroSeguimiento)||(et.ventaId&&existe.nroSeguimiento===et.ventaId)||(et.alphaId&&(existe.id===et.alphaId||existe.nroSeguimiento===et.alphaId))||(et.ventaIdFromPack&&(existe.nroSeguimiento===et.ventaIdFromPack||existe.id===et.ventaIdFromPack));
-                      if(et.nroSeguimiento&&/^\d{10,15}$/.test(et.nroSeguimiento)&&!existe.nroSeguimiento&&matchFuePorId)upd.nroSeguimiento=et.nroSeguimiento;
-                      else if(et.nroSeguimiento&&!/^\d{10,15}$/.test(et.nroSeguimiento))console.warn("[dedup-nro-skip]",existe.id,"nroSeguimiento extraído:",et.nroSeguimiento,"(no pasa filtro 10-15 dígitos)");
-                      if(Object.keys(upd).length){
-                        await setDoc(ref,upd,{merge:true}).catch(err=>console.error("[dedup-setDoc-error]",existe.id,err.message));
-                        setEnvios(prev=>prev.map(e=>e.id===existe.id?{...e,...upd}:e));
-                      } else {
-                        console.log("[dedup-noupd]",existe.id,"ya tiene seg:",existe.nroSeguimiento);
-                      }
-                      // Si el match fue via pack padre (m7) y hay ventaId propio distinto, actualizar también el sub-doc
-                      // SOLO tipoEntrega — nunca nroSeguimiento, para evitar que dos labels del mismo pack
-                      // sobreescriban el tracking del otro sub-item (nroSeguimiento es único por envío)
-                      if(et.ventaId&&et.ventaId!==existe.id&&et.tipoEntrega){
-                        const subRef=doc(db,"envios",et.ventaId);
-                        await updateDoc(subRef,{tipoEntrega:et.tipoEntrega}).catch(()=>{/* sub-doc no existe en Firestore, ignorar */});
-                      }
-                      // Match encontrado: actualización silenciosa, no mostrar modal
+                      // Si el entry importado del Excel tiene el 26-char, reemplazarlo con el barcode real de 11 dígitos
+                      if(et.nroSeguimiento&&/^\d{10,15}$/.test(et.nroSeguimiento)&&existe.nroSeguimiento!==et.nroSeguimiento)upd.nroSeguimiento=et.nroSeguimiento;
+                      if(Object.keys(upd).length)await setDoc(ref,upd,{merge:true});
                     } else {
-                      // Sin match → acumular para revisión manual (no agregar automáticamente)
-                      sinMatch.push(et);
+                      nuevos.push({
+                        id:et.nroSeguimiento,
+                        nroSeguimiento:et.nroSeguimiento,
+                        linkML:"https://www.mercadolibre.com.ar/ventas/"+et.nroSeguimiento+"/detalle",
+                        origen:"ML",
+                        direccion:et.direccion||"",
+                        localidad:et.localidad||"",
+                        partido:cpAPartido(et.cp)||"",
+                        cp:et.cp||"",
+                        ciudad:"",
+                        fecha:et.fecha||hoy,
+                        fechaVenta:hoy,
+                        turno:"",
+                        trans:"",
+                        bultos:0,
+                        cobranza:null,
+                        cambio:null,
+                        retiro:null,
+                        observaciones:"",
+                        tarifaLog:0,
+                        destinatario:et.destinatario||"",
+                        referencia:et.referencia||"",
+                        tipoEntrega:et.tipoEntrega||"",
+                        preparado:false,
+                        loteImportacion:loteTs,
+                      });
                     }
                   }
-                }
-                // Si hay duplicados, mostrar modal para que el usuario decida
-                if(duplicados.length>0){
-                  setLoading(false);
-                  setModalDuplicadosFlex({duplicados,nuevos,sinMatch,file:f,procesarArmado,etiquetas,loteTs,hoy});
-                  return;
-                }
-                // Si hay etiquetas sin match, mostrar modal de revisión antes de continuar
-                if(sinMatch.length>0){
-                  setLoading(false);
-                  setModalSinMatch({sinMatch,nuevosAprobados:nuevos,file:f,procesarArmado,loteTs,hoy});
-                  return;
                 }
                 // Toast resumen
                 const partes=[];
@@ -12023,118 +11855,6 @@ export default function App(){
                 }
               }catch(err){mostrarToast("Error: "+err.message);}
               setLoading(false);
-            }}
-          />}
-          {/* Modal duplicados Flex */}
-          {modalDuplicadosFlex&&<ModalDuplicadosFlex
-            duplicados={modalDuplicadosFlex.duplicados}
-            onCancel={()=>setModalDuplicadosFlex(null)}
-            onConfirm={async(seleccionados)=>{
-              const {nuevos,sinMatch:smDup=[],file:f,procesarArmado,etiquetas,loteTs,hoy}=modalDuplicadosFlex;
-              setModalDuplicadosFlex(null);
-              setLoading(true);
-              try{
-                // Construir objetos envío para los duplicados seleccionados
-                // Si hay etiquetas sin match pendientes de revisión, mostrar ese modal después
-                if(smDup.length>0){
-                  setModalSinMatch({sinMatch:smDup,nuevosAprobados:nuevos,file:f,procesarArmado,loteTs,hoy});
-                  setLoading(false);return;
-                }
-                const todosNuevos=[...nuevos];
-                for(const {et} of seleccionados){
-                  todosNuevos.push({
-                    id:et.nroSeguimiento,
-                    nroSeguimiento:et.nroSeguimiento,
-                    linkML:"https://www.mercadolibre.com.ar/ventas/"+et.nroSeguimiento+"/detalle",
-                    origen:"ML",
-                    direccion:et.direccion||"",
-                    localidad:et.localidad||"",
-                    partido:cpAPartido(et.cp)||"",
-                    cp:et.cp||"",
-                    ciudad:"",
-                    fecha:et.fecha||hoy,
-                    fechaVenta:hoy,
-                    turno:"",
-                    trans:"",
-                    bultos:0,
-                    cobranza:null,
-                    cambio:null,
-                    retiro:null,
-                    observaciones:"",
-                    tarifaLog:0,
-                    destinatario:et.destinatario||"",
-                    referencia:et.referencia||"",
-                    tipoEntrega:et.tipoEntrega||"",
-                    preparado:false,
-                    loteImportacion:loteTs,
-                  });
-                }
-                const partes=[];
-                if(todosNuevos.length)partes.push(todosNuevos.length+" envio(s) a asignar");
-                else partes.push("Ningún envío nuevo seleccionado");
-                if(partes.length)mostrarToast(partes.join(" · "));
-                if(todosNuevos.length){
-                  setBorrador(todosNuevos);
-                  setFileName(f.name);
-                  if(procesarArmado)setPendingMLFile(f);
-                  setPantalla("asignacion");
-                } else if(procesarArmado){
-                  try{
-                    mostrarToast("Enviando a ML Armado...");
-                    const logMap={};
-                    envios.forEach(e=>{if(e.nroSeguimiento&&e.trans)logMap[e.nroSeguimiento]=e.trans;});
-                    for(const et of etiquetas){
-                      const existeEt=envios.find(e=>{
-                        const m1=e.nroSeguimiento===et.nroSeguimiento;
-                        const m2=e.id===et.nroSeguimiento;
-                        const m3=et.ventaId&&e.id===et.ventaId;
-                        const m4=et.ventaId&&e.nroSeguimiento===et.ventaId;
-                        const m5=et.alphaId&&e.id===et.alphaId;
-                        const m6=et.alphaId&&e.nroSeguimiento===et.alphaId;
-                        return m1||m2||m3||m4||m5||m6;
-                      });
-                      if(existeEt&&existeEt.trans){
-                        if(et.nroSeguimiento)logMap[et.nroSeguimiento]=existeEt.trans;
-                        if(et.alphaId)logMap[et.alphaId]=existeEt.trans;
-                        if(et.ventaId)logMap[et.ventaId]=existeEt.trans;
-                      }
-                    }
-                    await procesarConMLArmado(f,"Flex",null,logMap);
-                    mostrarToast("PDF procesado por ML Armado");
-                  }catch(mlErr){
-                    mostrarToast("ML Armado no disponible — intentá de nuevo en unos segundos");
-                  }
-                }
-              }catch(err){mostrarToast("Error: "+err.message);}
-              setLoading(false);
-            }}
-          />}
-          {modalSinMatch&&<ModalEtiquetasSinMatch
-            sinMatch={modalSinMatch.sinMatch}
-            onCancel={()=>setModalSinMatch(null)}
-            onConfirm={(seleccionados)=>{
-              const {nuevosAprobados,file:f,procesarArmado,loteTs,hoy}=modalSinMatch;
-              setModalSinMatch(null);
-              const etToEnvio=(et)=>({
-                id:et.nroSeguimiento,nroSeguimiento:et.nroSeguimiento,
-                linkML:"https://www.mercadolibre.com.ar/ventas/"+et.nroSeguimiento+"/detalle",
-                origen:"ML",direccion:et.direccion||"",localidad:et.localidad||"",
-                partido:cpAPartido(et.cp)||"",cp:et.cp||"",ciudad:"",
-                fecha:et.fecha||hoy,fechaVenta:hoy,turno:"",trans:"",bultos:0,
-                cobranza:null,cambio:null,retiro:null,observaciones:"",tarifaLog:0,
-                destinatario:et.destinatario||"",referencia:et.referencia||"",
-                tipoEntrega:et.tipoEntrega||"",preparado:false,loteImportacion:loteTs,
-              });
-              const todosNuevos=[...nuevosAprobados,...seleccionados.map(etToEnvio)];
-              if(todosNuevos.length){
-                mostrarToast(todosNuevos.length+" envio(s) a asignar");
-                setBorrador(todosNuevos);setFileName(f.name);
-                if(procesarArmado)setPendingMLFile(f);
-                setPantalla("asignacion");
-              } else {
-                mostrarToast("Ningún envío nuevo seleccionado");
-                if(procesarArmado)setPendingMLFile(f);
-              }
             }}
           />}
           {/* Modal opciones PDF Colecta */}
