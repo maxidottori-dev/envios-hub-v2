@@ -5750,7 +5750,14 @@ function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCanc
     if(!grupos[key].zonas[zona])grupos[key].zonas[zona]={nombre:zona,color:ZONA_ML_COLOR[zona]||"#6b7280",envios:[]};
     grupos[key].zonas[zona].envios.push(e);
   });
-  const grupoKeys=Object.keys(grupos).sort();
+  // Pendientes (sin fecha) primero, luego cronológico
+  const grupoKeys=Object.keys(grupos).sort((a,b)=>{
+    const af=grupos[a].fecha;const bf=grupos[b].fecha;
+    if(!af&&!bf)return a.localeCompare(b);
+    if(!af)return -1; // sin fecha va arriba
+    if(!bf)return 1;
+    return a.localeCompare(b);
+  });
   const totalAsig=borradorActivo.filter(e=>getA(e.id).trans).length;
   // Bloquea confirmar si algún pedido quedó con logística asignada pero sin turno
   const incompletosTN=borradorActivo.filter(e=>{const a=getA(e.id);return a.trans&&!a.turno;});
@@ -5800,10 +5807,16 @@ function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCanc
               {/* Header: fecha + turno */}
               <div style={{padding:"0.6rem 1rem",background:"#12172a",borderBottom:"1px solid #1e2535"}}>
                 <div style={{display:"flex",alignItems:"center",gap:"0.5rem",marginBottom:"0.5rem",flexWrap:"wrap"}}>
+                  {!grupo.fecha&&<span style={{background:"#1c0a00",color:"#f59e0b",padding:"2px 10px",borderRadius:"5px",fontWeight:700,fontSize:"0.8rem",border:"1px solid #92400e"}}>⏳ Pendiente</span>}
                   {grupo.fecha&&<span style={{background:"#0c1a2e",color:"#60a5fa",padding:"2px 10px",borderRadius:"5px",fontWeight:700,fontSize:"0.8rem"}}>{fmtCorta(grupo.fecha)}</span>}
                   {grupo.turno&&<span style={{background:turnoC.bg,color:turnoC.c,padding:"2px 10px",borderRadius:"5px",fontWeight:700,fontSize:"0.8rem",border:"1px solid "+turnoC.c}}>{grupo.turno}</span>}
                   <span style={{color:"#4b5563",fontSize:"0.72rem"}}>{allEnvios.length} pedidos</span>
                   <span style={{color:asigCount===allEnvios.length?"#10b981":"#4b5563",fontSize:"0.7rem",marginLeft:"auto"}}>{asigCount}/{allEnvios.length}</span>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:"0.5rem",flexWrap:"wrap",marginBottom:"0.4rem"}}>
+                  <span style={{color:"#6b7280",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Fecha:</span>
+                  <input type="date" value={grupo.fecha||""} onChange={ev=>setGrupo(ids,"fecha",ev.target.value)} style={{background:"#0c1420",border:"1px solid #253055",borderRadius:"5px",color:"#c0d0f0",padding:"1px 6px",fontSize:"0.7rem",height:"22px",width:"130px"}}/>
+                  {grupo.fecha&&<button onClick={()=>setGrupo(ids,"fecha","")} style={{...S.btnSm(false),color:"#6b7280",padding:"1px 6px",fontSize:"0.65rem"}}>⏳ dejar pendiente</button>}
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:"0.5rem",flexWrap:"wrap"}}>
                   <span style={{color:"#6b7280",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Turno:</span>
@@ -10949,6 +10962,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   if(!logSel&&logPreSel){
     const lciPre=lc[logPreSel]||{};
     const pedPre=envios.filter(e=>{const f=e.fecha||e.fechaVenta||"";return f===fecha&&e.trans===logPreSel&&getEstado(e)==="asignado"&&e.estado!=="cancelado";});
+    const pedPendientes=envios.filter(e=>{const f=e.fecha||e.fechaVenta||"";return f!==fecha&&e.trans===logPreSel&&getEstado(e)==="asignado"&&e.estado!=="cancelado"&&!e.despachado;});
     const toggleTurno=(t)=>setTurnoSel(prev=>prev.includes(t)?prev.filter(x=>x!==t):[...prev,t]);
     return(
       <div style={{maxWidth:"600px",margin:"0 auto",padding:"1rem 0"}}>
@@ -10991,6 +11005,28 @@ function TabSalida({envios,setEnvios,lc,sesion}){
               fontWeight:700,fontSize:"0.95rem",cursor:turnoSel.length>0?"pointer":"not-allowed",transition:"all 0.15s"}}>
             {turnoSel.length===0?"Seleccioná al menos un turno":`Iniciar sesión · ${turnoSel.join(" + ")}`}
           </button>
+          {/* Pedidos pendientes de otras fechas */}
+          {pedPendientes.length>0&&(
+            <div style={{marginTop:"1rem",background:"#1c0a00",border:"1px solid #7f1d1d",borderRadius:"10px",padding:"0.75rem 1rem"}}>
+              <div style={{color:"#fca5a5",fontWeight:700,fontSize:"0.8rem",marginBottom:"0.5rem"}}>
+                ⚠ {pedPendientes.length} pedido{pedPendientes.length!==1?"s":""} pendiente{pedPendientes.length!==1?"s":""} de otras fechas
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
+                {pedPendientes.slice(0,8).map(e=>{
+                  const f=e.fecha||e.fechaVenta||"";
+                  const fechaStr=f?fmtCorta(f):"sin fecha";
+                  return(
+                    <div key={e.id} style={{display:"flex",gap:"8px",alignItems:"center",fontSize:"0.72rem",color:"#9ca3af"}}>
+                      <span style={{background:"#450a0a",color:"#f87171",borderRadius:"4px",padding:"0px 6px",fontWeight:700,flexShrink:0}}>{fechaStr}</span>
+                      <span style={{color:"#7dd3fc",fontWeight:600}}>{e.nroOrdenTN?"#"+e.nroOrdenTN:""}</span>
+                      <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.clienteNombre||e.direccion||""}</span>
+                    </div>
+                  );
+                })}
+                {pedPendientes.length>8&&<div style={{color:"#6b7280",fontSize:"0.68rem"}}>...y {pedPendientes.length-8} más</div>}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
