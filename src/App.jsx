@@ -5740,13 +5740,15 @@ function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCanc
   });
   const canceladosEnVivo=borrador.length-borradorActivo.length;
 
-  // Agrupar por fecha + turno (usa asig, que refleja datos frescos de Firestore)
+  // Agrupar por fecha + turno, luego sub-agrupar por zona ML dentro de cada grupo
   const grupos={};
   borradorActivo.forEach(e=>{
     const a=getA(e.id);
     const key=(a.fecha||"Sin fecha")+"|"+(a.turno||"Sin turno");
-    if(!grupos[key])grupos[key]={fecha:a.fecha||"",turno:a.turno||"",envios:[]};
-    grupos[key].envios.push(e);
+    if(!grupos[key])grupos[key]={fecha:a.fecha||"",turno:a.turno||"",zonas:{}};
+    const zona=getZonaML(e.partido)||"Otra";
+    if(!grupos[key].zonas[zona])grupos[key].zonas[zona]={nombre:zona,color:ZONA_ML_COLOR[zona]||"#6b7280",envios:[]};
+    grupos[key].zonas[zona].envios.push(e);
   });
   const grupoKeys=Object.keys(grupos).sort();
   const totalAsig=borradorActivo.filter(e=>getA(e.id).trans).length;
@@ -5769,7 +5771,7 @@ function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCanc
       <style>{`*{box-sizing:border-box;}`}</style>
       <div style={{position:"sticky",top:0,zIndex:100,background:"#0f1420",borderBottom:"1px solid #1a1f2e",padding:"0.75rem 1rem",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
         <div style={{width:"28px",height:"28px",background:"#0d1c2e",border:"1px solid #38bdf8",borderRadius:"7px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.85rem"}}>TN</div>
-        <div><div style={{fontWeight:800,fontSize:"0.95rem"}}>Asignar pedidos Tienda Nube</div><div style={{color:"#4b5563",fontSize:"0.62rem"}}>{borrador.length} pedidos sin asignar · agrupados por fecha y turno</div></div>
+        <div><div style={{fontWeight:800,fontSize:"0.95rem"}}>Asignar pedidos Tienda Nube</div><div style={{color:"#4b5563",fontSize:"0.62rem"}}>{borrador.length} pedidos sin asignar · agrupados por fecha/turno y zona</div></div>
         <div style={{marginLeft:"auto",display:"flex",gap:"0.5rem",alignItems:"center"}}>
           <span style={{color:totalAsig===borradorActivo.length?"#10b981":"#f59e0b",fontSize:"0.82rem",fontWeight:700}}>{totalAsig}/{borradorActivo.length}</span>
           <button onClick={onCancelar} style={S.btn(false)}>Cancelar</button>
@@ -5785,53 +5787,74 @@ function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCanc
         )}
         {grupoKeys.map(key=>{
           const grupo=grupos[key];
-          const ids=grupo.envios.map(e=>e.id);
-          const idsPagados=grupo.envios.filter(e=>puedeAsignar(e)).map(e=>e.id);
-          const gT=getGrupo(ids,"trans");
+          const zonaOrder=[...ZONAS_ML_LIST,"Otra"];
+          const zonaKeys=zonaOrder.filter(z=>grupo.zonas[z]);
+          const allEnvios=zonaKeys.flatMap(z=>grupo.zonas[z].envios);
+          const ids=allEnvios.map(e=>e.id);
+          const idsPagados=allEnvios.filter(e=>puedeAsignar(e)).map(e=>e.id);
           const gTu=getGrupo(ids,"turno");
           const turnoC=TURNO_C[grupo.turno]||{c:"#6b7280",bg:"#1a1f2e"};
           const asigCount=ids.filter(id=>getA(id).trans).length;
           return(
             <div key={key} style={{...S.card,marginBottom:"0.75rem",overflow:"hidden"}}>
+              {/* Header: fecha + turno */}
               <div style={{padding:"0.6rem 1rem",background:"#12172a",borderBottom:"1px solid #1e2535"}}>
                 <div style={{display:"flex",alignItems:"center",gap:"0.5rem",marginBottom:"0.5rem",flexWrap:"wrap"}}>
                   {grupo.fecha&&<span style={{background:"#0c1a2e",color:"#60a5fa",padding:"2px 10px",borderRadius:"5px",fontWeight:700,fontSize:"0.8rem"}}>{fmtCorta(grupo.fecha)}</span>}
                   {grupo.turno&&<span style={{background:turnoC.bg,color:turnoC.c,padding:"2px 10px",borderRadius:"5px",fontWeight:700,fontSize:"0.8rem",border:"1px solid "+turnoC.c}}>{grupo.turno}</span>}
-                  <span style={{color:"#4b5563",fontSize:"0.72rem"}}>{grupo.envios.length} pedidos</span>
-                  <span style={{color:asigCount===grupo.envios.length?"#10b981":"#4b5563",fontSize:"0.7rem",marginLeft:"auto"}}>{asigCount}/{grupo.envios.length}</span>
-                </div>
-                <div style={{display:"flex",alignItems:"center",gap:"0.5rem",flexWrap:"wrap",marginBottom:"0.4rem"}}>
-                  <span style={{color:"#6b7280",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Logistica:</span>
-                  {logActivas.map(l =><button key={l} onClick={()=>setGrupo(idsPagados,"trans",gT===l?"":l)} style={S.btnSm(gT===l,lc[l]?.color||"#6366f1")} disabled={idsPagados.length===0}>{l}</button>)}
-                  {gT&&<button onClick={()=>setGrupo(idsPagados,"trans","")} style={{...S.btnSm(false),color:"#6b7280"}}>x</button>}
+                  <span style={{color:"#4b5563",fontSize:"0.72rem"}}>{allEnvios.length} pedidos</span>
+                  <span style={{color:asigCount===allEnvios.length?"#10b981":"#4b5563",fontSize:"0.7rem",marginLeft:"auto"}}>{asigCount}/{allEnvios.length}</span>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:"0.5rem",flexWrap:"wrap"}}>
                   <span style={{color:"#6b7280",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Turno:</span>
-                  {TURNOS.map(t =><button key={t} onClick={()=>setGrupo(idsPagados,"turno",gTu===t?"":t)} style={S.btnSm(gTu===t,"#8b5cf6")} disabled={idsPagados.length===0}>{t}</button>)}
+                  {TURNOS.map(t=><button key={t} onClick={()=>setGrupo(idsPagados,"turno",gTu===t?"":t)} style={S.btnSm(gTu===t,"#8b5cf6")} disabled={idsPagados.length===0}>{t}</button>)}
                   {gTu&&<button onClick={()=>setGrupo(idsPagados,"turno","")} style={{...S.btnSm(false),color:"#6b7280"}}>x</button>}
                 </div>
               </div>
-              {grupo.envios.map((e,i)=>{
-                const a=getA(e.id);
-                const zml=getZonaML(e.partido);
-                const incompletoTN=a.trans&&!a.turno;
+              {/* Sub-grupos por zona */}
+              {zonaKeys.map((zonaKey,zi)=>{
+                const zonaData=grupo.zonas[zonaKey];
+                const zIds=zonaData.envios.map(e=>e.id);
+                const zIdsPagados=zonaData.envios.filter(e=>puedeAsignar(e)).map(e=>e.id);
+                const gT=getGrupo(zIds,"trans");
+                const zAsigCount=zIds.filter(id=>getA(id).trans).length;
                 return(
-                  <div key={e.id} style={{padding:"0.45rem 1rem",borderBottom:i<grupo.envios.length-1?"1px solid #1a1f2e":"none",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap",opacity:!puedeAsignar(e)?0.5:1,background:incompletoTN?"#1c0a00":undefined,borderLeft:incompletoTN?"3px solid #f59e0b":"3px solid transparent"}}>
-                    <div style={{flex:1,minWidth:"180px"}}>
-                      <div style={{display:"flex",gap:"6px",alignItems:"baseline"}}>
-                        <span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.75rem"}}>#{e.nroOrdenTN}</span>
-                        {e.clienteNombre&&<span style={{color:"#e5e7eb",fontSize:"0.78rem",fontWeight:600}}>{e.clienteNombre}</span>}
-                        {!puedeAsignar(e)&&<span style={{color:"#fb923c",fontSize:"0.65rem",fontWeight:700}}>⚠ Pago pendiente</span>}
-                      </div>
-                      <div style={{color:"#9ca3af",fontSize:"0.72rem"}}>{e.direccion}</div>
-                      <div style={{color:"#4b5563",fontSize:"0.68rem"}}>{e.localidad?e.localidad+" · ":""}{e.partido}{zml?" · "+zml:""}</div>
-                      {e.notasCliente&&<div style={{color:"#6b7280",fontSize:"0.68rem",marginTop:"2px",fontStyle:"italic"}}>{e.notasCliente}</div>}
+                  <div key={zonaKey}>
+                    {/* Sub-header zona: logística masiva por zona */}
+                    <div style={{padding:"0.35rem 1rem",background:"#0d1322",borderBottom:"1px solid #1e2535",borderTop:zi>0?"1px solid #1e2535":undefined,display:"flex",alignItems:"center",gap:"0.4rem",flexWrap:"wrap"}}>
+                      <span style={{width:"7px",height:"7px",borderRadius:"50%",background:zonaData.color,display:"inline-block",flexShrink:0}}/>
+                      <span style={{color:zonaData.color,fontWeight:700,fontSize:"0.7rem",minWidth:"34px"}}>{zonaKey}</span>
+                      <span style={{color:"#374151",fontSize:"0.63rem"}}>({zonaData.envios.length})</span>
+                      <span style={{color:"#1e2535",margin:"0 2px"}}>|</span>
+                      {logActivas.map(l=><button key={l} onClick={()=>setGrupo(zIdsPagados,"trans",gT===l?"":l)} style={S.btnSm(gT===l,lc[l]?.color||"#6366f1")} disabled={zIdsPagados.length===0}>{l}</button>)}
+                      {gT&&<button onClick={()=>setGrupo(zIdsPagados,"trans","")} style={{...S.btnSm(false),color:"#6b7280"}}>x</button>}
+                      <span style={{color:zAsigCount===zonaData.envios.length?"#10b981":"#374151",fontSize:"0.65rem",marginLeft:"auto"}}>{zAsigCount}/{zonaData.envios.length}</span>
                     </div>
-                    <div style={{display:"flex",gap:"3px",flexWrap:"wrap",alignItems:"center"}}>
-                      {logActivas.map(l =><button key={l} onClick={()=>setA(e.id,"trans",a.trans===l?"":l)} style={S.btnSm(a.trans===l,lc[l].color)} disabled={!puedeAsignar(e)}>{l}</button>)}
-                      <span style={{color:"#252d40",padding:"0 2px"}}>|</span>
-                      {TURNOS.map(t =><button key={t} onClick={()=>setA(e.id,"turno",a.turno===t?"":t)} style={S.btnSm(a.turno===t,"#8b5cf6")} disabled={!puedeAsignar(e)}>{t}</button>)}
-                    </div>
+                    {/* Filas de envíos de esta zona */}
+                    {zonaData.envios.map((e,i)=>{
+                      const a=getA(e.id);
+                      const zml=getZonaML(e.partido);
+                      const incompletoTN=a.trans&&!a.turno;
+                      return(
+                        <div key={e.id} style={{padding:"0.45rem 1rem",borderBottom:i<zonaData.envios.length-1?"1px solid #1a1f2e":"none",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap",opacity:!puedeAsignar(e)?0.5:1,background:incompletoTN?"#1c0a00":undefined,borderLeft:incompletoTN?"3px solid #f59e0b":"3px solid transparent"}}>
+                          <div style={{flex:1,minWidth:"180px"}}>
+                            <div style={{display:"flex",gap:"6px",alignItems:"baseline"}}>
+                              <span style={{color:"#7dd3fc",fontWeight:700,fontSize:"0.75rem"}}>#{e.nroOrdenTN}</span>
+                              {e.clienteNombre&&<span style={{color:"#e5e7eb",fontSize:"0.78rem",fontWeight:600}}>{e.clienteNombre}</span>}
+                              {!puedeAsignar(e)&&<span style={{color:"#fb923c",fontSize:"0.65rem",fontWeight:700}}>⚠ Pago pendiente</span>}
+                            </div>
+                            <div style={{color:"#9ca3af",fontSize:"0.72rem"}}>{e.direccion}</div>
+                            <div style={{color:"#4b5563",fontSize:"0.68rem"}}>{e.localidad?e.localidad+" · ":""}{e.partido}{zml?" · "+zml:""}</div>
+                            {e.notasCliente&&<div style={{color:"#6b7280",fontSize:"0.68rem",marginTop:"2px",fontStyle:"italic"}}>{e.notasCliente}</div>}
+                          </div>
+                          <div style={{display:"flex",gap:"3px",flexWrap:"wrap",alignItems:"center"}}>
+                            {logActivas.map(l=><button key={l} onClick={()=>setA(e.id,"trans",a.trans===l?"":l)} style={S.btnSm(a.trans===l,lc[l].color)} disabled={!puedeAsignar(e)}>{l}</button>)}
+                            <span style={{color:"#252d40",padding:"0 2px"}}>|</span>
+                            {TURNOS.map(t=><button key={t} onClick={()=>setA(e.id,"turno",a.turno===t?"":t)} style={S.btnSm(a.turno===t,"#8b5cf6")} disabled={!puedeAsignar(e)}>{t}</button>)}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })}
