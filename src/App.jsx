@@ -5860,12 +5860,17 @@ function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCanc
                             {e.notasCliente&&<div style={{color:"#6b7280",fontSize:"0.68rem",marginTop:"2px",fontStyle:"italic"}}>{e.notasCliente}</div>}
                           </div>
                           <div style={{display:"flex",gap:"3px",flexWrap:"wrap",alignItems:"center"}}>
-                            {logActivas.map(l=><button key={l} onClick={()=>setA(e.id,"trans",a.trans===l?"":l)} style={S.btnSm(a.trans===l,lc[l].color)} disabled={!puedeAsignar(e)}>{l}</button>)}
-                            <span style={{color:"#252d40",padding:"0 2px"}}>|</span>
+                            {/* Fecha individual — siempre visible para poder mover este pedido a otra fecha */}
+                            <input type="date" value={a.fecha||""} onChange={ev=>setA(e.id,"fecha",ev.target.value)}
+                              style={{background:"#0c1420",border:"1px solid #253055",borderRadius:"5px",color:a.fecha?"#93c5fd":"#374151",padding:"1px 4px",fontSize:"0.68rem",height:"22px",width:"115px"}}
+                              title="Fecha de entrega de este pedido"/>
+                            {/* Turno */}
                             {TURNOS.map(t=><button key={t} onClick={()=>setA(e.id,"turno",a.turno===t?"":t)} style={S.btnSm(a.turno===t,"#8b5cf6")} disabled={!puedeAsignar(e)}>{t}</button>)}
-                            {/* Limpiar turno — disponible incluso para impagos */}
-                            {a.turno&&<button onClick={()=>setA(e.id,"turno","")} style={{...S.btnSm(false),color:"#6b7280",padding:"1px 5px",fontSize:"0.63rem"}} title="Quitar turno">✕ turno</button>}
-                            {/* Dejar pendiente: quita fecha, turno y trans del pedido */}
+                            {a.turno&&<button onClick={()=>setA(e.id,"turno","")} style={{...S.btnSm(false),color:"#6b7280",padding:"1px 5px",fontSize:"0.63rem"}} title="Quitar turno">✕</button>}
+                            <span style={{color:"#252d40",padding:"0 2px"}}>|</span>
+                            {/* Logística */}
+                            {logActivas.map(l=><button key={l} onClick={()=>setA(e.id,"trans",a.trans===l?"":l)} style={S.btnSm(a.trans===l,lc[l].color)} disabled={!puedeAsignar(e)}>{l}</button>)}
+                            {/* Dejar pendiente: limpia todo */}
                             {(a.fecha||a.turno||a.trans)&&<button onClick={()=>setAsig(p=>({...p,[e.id]:{trans:"",fecha:"",turno:""}}))} style={{...S.btnSm(false),color:"#f59e0b",padding:"1px 5px",fontSize:"0.63rem",borderColor:"#92400e"}} title="Mover a pendientes">⏳</button>}
                           </div>
                         </div>
