@@ -5816,7 +5816,6 @@ function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCanc
                 <div style={{display:"flex",alignItems:"center",gap:"0.5rem",flexWrap:"wrap",marginBottom:"0.4rem"}}>
                   <span style={{color:"#6b7280",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Fecha:</span>
                   <input type="date" value={grupo.fecha||""} onChange={ev=>setGrupo(ids,"fecha",ev.target.value)} style={{background:"#0c1420",border:"1px solid #253055",borderRadius:"5px",color:"#c0d0f0",padding:"1px 6px",fontSize:"0.7rem",height:"22px",width:"130px"}}/>
-                  {grupo.fecha&&<button onClick={()=>setGrupo(ids,"fecha","")} style={{...S.btnSm(false),color:"#6b7280",padding:"1px 6px",fontSize:"0.65rem"}}>⏳ dejar pendiente</button>}
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:"0.5rem",flexWrap:"wrap"}}>
                   <span style={{color:"#6b7280",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Turno:</span>
@@ -5864,6 +5863,10 @@ function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCanc
                             {logActivas.map(l=><button key={l} onClick={()=>setA(e.id,"trans",a.trans===l?"":l)} style={S.btnSm(a.trans===l,lc[l].color)} disabled={!puedeAsignar(e)}>{l}</button>)}
                             <span style={{color:"#252d40",padding:"0 2px"}}>|</span>
                             {TURNOS.map(t=><button key={t} onClick={()=>setA(e.id,"turno",a.turno===t?"":t)} style={S.btnSm(a.turno===t,"#8b5cf6")} disabled={!puedeAsignar(e)}>{t}</button>)}
+                            {/* Limpiar turno — disponible incluso para impagos */}
+                            {a.turno&&<button onClick={()=>setA(e.id,"turno","")} style={{...S.btnSm(false),color:"#6b7280",padding:"1px 5px",fontSize:"0.63rem"}} title="Quitar turno">✕ turno</button>}
+                            {/* Dejar pendiente: quita fecha, turno y trans del pedido */}
+                            {(a.fecha||a.turno||a.trans)&&<button onClick={()=>setAsig(p=>({...p,[e.id]:{trans:"",fecha:"",turno:""}}))} style={{...S.btnSm(false),color:"#f59e0b",padding:"1px 5px",fontSize:"0.63rem",borderColor:"#92400e"}} title="Mover a pendientes">⏳</button>}
                           </div>
                         </div>
                       );
@@ -10984,14 +10987,21 @@ function TabSalida({envios,setEnvios,lc,sesion}){
               const tc=TURNO_C[t]||{c:"#8b5cf6",bg:"#1a1f2e"};
               const sel=turnoSel.includes(t);
               const pedT=pedPre.filter(e=>!e.turno||e.turno===t);
+              const pendT=pedT.filter(e=>!e.despachado).length;
+              const despT=pedT.length-pendT;
               return(
                 <button key={t} onClick={()=>toggleTurno(t)}
-                  style={{flex:"1 1 120px",display:"flex",flexDirection:"column",alignItems:"center",gap:"8px",padding:"1.2rem 1rem",borderRadius:"12px",
+                  style={{flex:"1 1 120px",display:"flex",flexDirection:"column",alignItems:"center",gap:"6px",padding:"1.2rem 1rem",borderRadius:"12px",
                     background:sel?tc.bg+"88":tc.bg+"22",color:tc.c,
                     border:`2px solid ${sel?tc.c:tc.c+"44"}`,cursor:"pointer",fontWeight:800,fontSize:"1.1rem",
                     boxShadow:sel?`0 0 0 2px ${tc.c}44`:"none",transition:"all 0.15s"}}>
                   {sel?"✓ ":""}{t}
                   <span style={{color:muted,fontSize:"0.7rem",fontWeight:400}}>{pedT.length} pedidos</span>
+                  {pedT.length>0&&(
+                    <span style={{fontSize:"0.65rem",fontWeight:600,color:pendT===0?"#10b981":"#f59e0b"}}>
+                      {pendT===0?"✓ todos despachados":`${pendT} sin despachar`}
+                    </span>
+                  )}
                 </button>
               );
             })}
