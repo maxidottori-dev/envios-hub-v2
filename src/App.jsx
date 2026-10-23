@@ -5694,17 +5694,22 @@ function TabLocalidades({cpExtra,setCpExtra}) {
 // ════════════════════════════════════════════════════════════════════
 function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCancelar,lc,sesion=null}){
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
-  // Pre-inicializar asig con fecha y turno del datepicker
-  // Preservar trans existente: si el envio ya tiene logística asignada, respetarla en el panel
-  const initAsig=()=>{const a={};borrador.forEach(e=>{a[e.id]={trans:e.trans||"",fecha:e.fecha||"",turno:e.turno||""};});return a;};
+  // Pre-inicializar asig con los datos actuales de cada pedido
+  const initAsig=()=>{const a={};borrador.forEach(e=>{a[e.id]={trans:e.trans||"",fecha:e.fecha||"",turno:e.turno||"",notaPendiente:e.notaPendiente||""};});return a;};
   const [asig,setAsig]=useState(initAsig);
-  const getA=id=>asig[id]||{trans:"",fecha:"",turno:""};
-  const setA=(id,k,v)=>setAsig(p=>({...p,[id]:{...getA(id),[k]:v}}));
-  const setGrupo=(ids,k,v)=>setAsig(p=>{const n={...p};ids.forEach(id=>{n[id]={...getA(id),[k]:v}});return n;});
+  const getA=id=>asig[id]||{trans:"",fecha:"",turno:"",notaPendiente:""};
+
+  // touched: set de IDs que el usuario modificó explícitamente en este panel.
+  // Separa "el usuario limpió trans" de "otra pestaña asignó el pedido".
+  const [touched,setTouched]=useState(new Set());
+  const addTouched=(ids)=>setTouched(prev=>{const n=new Set(prev);(Array.isArray(ids)?ids:[ids]).forEach(id=>n.add(id));return n;});
+
+  const setA=(id,k,v)=>{addTouched(id);setAsig(p=>({...p,[id]:{...getA(id),[k]:v}}));};
+  const setGrupo=(ids,k,v)=>{addTouched(ids);setAsig(p=>{const n={...p};ids.forEach(id=>{n[id]={...getA(id),[k]:v}});return n;});};
   const getGrupo=(ids,k)=>{const vals=[...new Set(ids.map(id=>getA(id)[k]||""))];return vals.length===1?vals[0]:"";};
 
-  // Cuando Firestore empuja datos nuevos (sync-turnos-pendientes actualizó fecha/turno),
-  // mergear al asig sin pisar elecciones de trans que el usuario ya hizo.
+  // Sync de Firestore: solo actualiza pedidos que el usuario NO tocó.
+  // Evita que el sync restaure valores que el usuario borró explícitamente.
   useEffect(()=>{
     if(!enviosFresh.length)return;
     const map=Object.fromEntries(enviosFresh.map(e=>[e.id,e]));
@@ -5712,9 +5717,10 @@ function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCanc
       let changed=false;
       const next={...prev};
       borrador.forEach(e=>{
+        if(touched.has(e.id))return; // el usuario ya eligió — no pisar
         const fresh=map[e.id];
         if(!fresh)return;
-        const cur=next[e.id]||{trans:"",fecha:"",turno:""};
+        const cur=next[e.id]||{trans:"",fecha:"",turno:"",notaPendiente:""};
         const newFecha=cur.fecha||fresh.fecha||"";
         const newTurno=cur.turno||fresh.turno||"";
         if(newFecha!==cur.fecha||newTurno!==cur.turno){
@@ -5728,14 +5734,15 @@ function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCanc
 
   // Filtrar en tiempo real pedidos que ya no son elegibles:
   // - cancelados en Firestore
-  // - asignados desde otra pestaña (fresh.trans existe pero este panel aún no les puso logística)
+  // - asignados desde OTRA pestaña (fresh.trans existe, local no, y el usuario no tocó este pedido)
   const freshMap=Object.fromEntries(enviosFresh.map(e=>[e.id,e]));
   const borradorActivo=borrador.filter(e=>{
     const fresh=freshMap[e.id];
-    if(!fresh)return true; // todavía no llegó el snapshot, mantener
+    if(!fresh)return true;
     if(fresh.estado==="cancelado")return false;
     const localTrans=getA(e.id).trans;
-    if(fresh.trans&&!localTrans)return false; // ya asignado desde otra pestaña
+    // Solo filtrar si el usuario NO tocó el pedido — si lo tocó, él decidió dejar trans vacío
+    if(fresh.trans&&!localTrans&&!touched.has(e.id))return false;
     return true;
   });
   const canceladosEnVivo=borrador.length-borradorActivo.length;
@@ -5860,7 +5867,7 @@ function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCanc
                             {e.notasCliente&&<div style={{color:"#6b7280",fontSize:"0.68rem",marginTop:"2px",fontStyle:"italic"}}>{e.notasCliente}</div>}
                           </div>
                           <div style={{display:"flex",gap:"3px",flexWrap:"wrap",alignItems:"center"}}>
-                            {/* Fecha individual — siempre visible para poder mover este pedido a otra fecha */}
+                            {/* Fecha individual */}
                             <input type="date" value={a.fecha||""} onChange={ev=>setA(e.id,"fecha",ev.target.value)}
                               style={{background:"#0c1420",border:"1px solid #253055",borderRadius:"5px",color:a.fecha?"#93c5fd":"#374151",padding:"1px 4px",fontSize:"0.68rem",height:"22px",width:"115px"}}
                               title="Fecha de entrega de este pedido"/>
@@ -5870,9 +5877,18 @@ function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCanc
                             <span style={{color:"#252d40",padding:"0 2px"}}>|</span>
                             {/* Logística */}
                             {logActivas.map(l=><button key={l} onClick={()=>setA(e.id,"trans",a.trans===l?"":l)} style={S.btnSm(a.trans===l,lc[l].color)} disabled={!puedeAsignar(e)}>{l}</button>)}
-                            {/* Dejar pendiente: limpia todo */}
-                            {(a.fecha||a.turno||a.trans)&&<button onClick={()=>setAsig(p=>({...p,[e.id]:{trans:"",fecha:"",turno:""}}))} style={{...S.btnSm(false),color:"#f59e0b",padding:"1px 5px",fontSize:"0.63rem",borderColor:"#92400e"}} title="Mover a pendientes">⏳</button>}
+                            {/* Dejar pendiente: limpia fecha/turno/trans y marca como touched */}
+                            {(a.fecha||a.turno||a.trans)&&<button onClick={()=>{addTouched(e.id);setAsig(p=>({...p,[e.id]:{...getA(e.id),trans:"",fecha:"",turno:""}}));}} style={{...S.btnSm(false),color:"#f59e0b",padding:"1px 5px",fontSize:"0.63rem",borderColor:"#92400e"}} title="Mover a pendientes">⏳</button>}
                           </div>
+                          {/* Nota de pendiente — solo visible cuando el pedido está sin asignar */}
+                          {(!a.trans&&!a.fecha&&!a.turno)&&(
+                            <input
+                              value={a.notaPendiente||""}
+                              onChange={ev=>setA(e.id,"notaPendiente",ev.target.value)}
+                              placeholder="Nota del pendiente (ej: esperando pago, cliente pidió reprogramar...)"
+                              style={{width:"100%",marginTop:"4px",background:"#0c1420",border:"1px solid #3d2600",borderRadius:"5px",color:"#fbbf24",padding:"3px 8px",fontSize:"0.68rem",outline:"none"}}
+                            />
+                          )}
                         </div>
                       );
                     })}
