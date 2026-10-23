@@ -11843,7 +11843,11 @@ export default function App(){
     const asignadosConLote=asignados.map(e=>e.loteImportacion?e:{...e,loteImportacion:ts});
     // Encolar escrituras Firestore
     asignadosConLote.forEach(e=>guardarEnvio(e));
-    // Actualizar estado local INMEDIATAMENTE para evitar race condition de 600ms
+    // Cancelar el debounce de 600ms y guardar INMEDIATAMENTE en Firestore
+    // (evita pérdida de datos si el usuario recarga antes de que expire el timer)
+    if(saveTimerRef.current){clearTimeout(saveTimerRef.current);saveTimerRef.current=null;}
+    await flushSaves();
+    // Actualizar estado local
     const asigMap=new Map(asignadosConLote.map(e=>[e.id,e]));
     setEnviosLocal(prev=>prev.map(e=>asigMap.has(e.id)?asigMap.get(e.id):e));
     setPantalla("dashboard");setTab("envios");mostrarToast(asignadosConLote.length+" envios guardados");
