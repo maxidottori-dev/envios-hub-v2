@@ -11841,12 +11841,22 @@ export default function App(){
   const confirmarAsignacion=async(asignados)=>{
     const ts=new Date().toISOString();
     const asignadosConLote=asignados.map(e=>e.loteImportacion?e:{...e,loteImportacion:ts});
-    // Encolar escrituras Firestore
-    asignadosConLote.forEach(e=>guardarEnvio(e));
-    // Cancelar el debounce de 600ms y guardar INMEDIATAMENTE en Firestore
-    // (evita pérdida de datos si el usuario recarga antes de que expire el timer)
+    // Escritura DIRECTA a Firestore (sin pasar por la cola de debounce)
+    // para garantizar que los datos lleguen antes de navegar al dashboard
+    console.log("[AsigTN] guardando",asignadosConLote.length,"envíos →",asignadosConLote.map(e=>({id:e.id,fecha:e.fecha,turno:e.turno,trans:e.trans,estado:e.estado})));
+    try{
+      const batch=writeBatch(db);
+      asignadosConLote.forEach(e=>batch.set(doc(db,"envios",e.id),e));
+      await batch.commit();
+      console.log("[AsigTN] batch.commit() OK");
+    }catch(err){
+      console.error("[AsigTN] Error en batch.commit():",err);
+      mostrarToast("⚠ Error al guardar: "+err.message);
+      return; // No navegar si el save falló
+    }
+    // Sincronizar la cola local con lo que acabamos de guardar
     if(saveTimerRef.current){clearTimeout(saveTimerRef.current);saveTimerRef.current=null;}
-    await flushSaves();
+    asignadosConLote.forEach(e=>saveQueue.current.set(e.id,e));
     // Actualizar estado local
     const asigMap=new Map(asignadosConLote.map(e=>[e.id,e]));
     setEnviosLocal(prev=>prev.map(e=>asigMap.has(e.id)?asigMap.get(e.id):e));
