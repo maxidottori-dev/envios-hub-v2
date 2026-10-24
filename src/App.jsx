@@ -5771,7 +5771,7 @@ function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCanc
   const puedeConfirmarTN=incompletosTN.length===0;
   const [confirmando,setConfirmando]=useState(false);
   const auditTN=mkAudit(sesion);
-  const confirmar=()=>{if(confirmando||!puedeConfirmarTN)return;setConfirmando(true);onConfirmar(borradorActivo.map(e=>({...e,...getA(e.id),estado:getA(e.id).trans?"asignado":"sin_asignar",...(getA(e.id).trans&&auditTN?{asignadoPor:auditTN}:{})})));};
+  const confirmar=()=>{if(confirmando||!puedeConfirmarTN)return;setConfirmando(true);onConfirmar(borradorActivo.map(e=>{const a=getA(e.id);const esPendienteManual=!a.trans&&!a.fecha&&!a.turno;return{...e,...a,estado:a.trans?"asignado":"sin_asignar",...(a.trans&&auditTN?{asignadoPor:auditTN}:{}),sinFechaManual:!!esPendienteManual};}));};
   const btnConfirmarTN=(padding="")=>(
     <button onClick={confirmar} disabled={confirmando||!puedeConfirmarTN} style={{...S.btn(true),background:confirmando?"#0a1520":"#0d1c2e",border:"1px solid #38bdf8",color:confirmando?"#4b5563":"#38bdf8",...(padding?{padding}:{}),display:"flex",alignItems:"center",gap:"6px",opacity:(confirmando||!puedeConfirmarTN)?0.7:1}}>
       {confirmando&&<span style={{width:"10px",height:"10px",border:"2px solid #38bdf8",borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin 0.7s linear infinite"}}/>}

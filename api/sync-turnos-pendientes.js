@@ -26,10 +26,11 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Firestore query failed", detail: e.message });
   }
 
-  // Filtrar en memoria: sin turno
+  // Filtrar en memoria: sin turno y sin el flag de pendiente manual
+  // (sinFechaManual=true indica que el usuario explícitamente lo dejó sin fecha/turno)
   const candidatos = snap.docs
     .map(d => ({ docId: d.id, ...d.data() }))
-    .filter(e => !e.turno);
+    .filter(e => !e.turno && !e.sinFechaManual);
 
   if (candidatos.length === 0) return res.status(200).json({ ok: true, actualizados: 0, revisados: 0 });
 
