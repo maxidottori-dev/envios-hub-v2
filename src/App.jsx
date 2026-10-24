@@ -5809,10 +5809,11 @@ function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCanc
           const gTu=getGrupo(ids,"turno");
           const turnoC=TURNO_C[grupo.turno]||{c:"#6b7280",bg:"#1a1f2e"};
           const asigCount=ids.filter(id=>getA(id).trans).length;
+          const esPendiente=!grupo.fecha;
           return(
-            <div key={key} style={{...S.card,marginBottom:"0.75rem",overflow:"hidden"}}>
+            <div key={key} style={{...S.card,marginBottom:"0.75rem",overflow:"hidden",...(esPendiente?{background:"#1c0a00",border:"1px solid #92400e"}:{})}}>
               {/* Header: fecha + turno */}
-              <div style={{padding:"0.6rem 1rem",background:"#12172a",borderBottom:"1px solid #1e2535"}}>
+              <div style={{padding:"0.6rem 1rem",background:esPendiente?"#1c0a00":"#12172a",borderBottom:"1px solid "+(esPendiente?"#92400e":"#1e2535")}}>
                 <div style={{display:"flex",alignItems:"center",gap:"0.5rem",marginBottom:"0.5rem",flexWrap:"wrap"}}>
                   {!grupo.fecha&&<span style={{background:"#1c0a00",color:"#f59e0b",padding:"2px 10px",borderRadius:"5px",fontWeight:700,fontSize:"0.8rem",border:"1px solid #92400e"}}>⏳ Pendiente</span>}
                   {grupo.fecha&&<span style={{background:"#0c1a2e",color:"#60a5fa",padding:"2px 10px",borderRadius:"5px",fontWeight:700,fontSize:"0.8rem"}}>{fmtCorta(grupo.fecha)}</span>}
