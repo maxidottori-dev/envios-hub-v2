@@ -4909,7 +4909,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
     if(filtro==="vencidos"&&c.dias<c.limite)return false;
     if(filtro==="saldados"&&c.saldo>0)return false;
     if(filtro==="fc_pend"&&!(facturaClientes[c.key]&&c.envios.some(e=>e.trans&&!e.nroFactura&&e.estado!=="cancelado")))return false;
-    if(busqueda){const s=norm(busqueda);const ok=norm(c.nombre).includes(s)||c.envios.some(e=>norm(e.direccion).includes(s)||(e.nroOrdenTN||"").includes(s)||(e.nroSeguimiento||"").includes(s));if(!ok)return false;}
+    if(busqueda){const s=norm(busqueda);const ok=norm(c.nombre).includes(s)||c.envios.some(e=>norm(e.direccion).includes(s)||(e.nroOrdenTN||"").includes(s)||(e.nroSeguimiento||"").includes(s)||(e.nroVentaML||"").toString().includes(s)||(e.id||"").includes(s));if(!ok)return false;}
     return true;
   }).sort((a,b)=>{
     const {col,dir}=sortCC;
