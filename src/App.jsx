@@ -11638,7 +11638,14 @@ export default function App(){
       .then(r=>r.json())
       .then(d=>console.log("recover-cobranzas-efectivo:",d))
       .catch(err=>console.warn("recover-cobranzas-efectivo error:",err));
-    return()=>unsub();
+    // Sync periódico de pagos cada 5 minutos (backup al webhook de TN)
+    const syncInterval=setInterval(()=>{
+      fetch("/api/sync-pagos-pendientes",{method:"POST"})
+        .then(r=>r.json())
+        .then(d=>{if(d.actualizados>0)console.log("sync-pagos-pendientes [periodic]:",d);})
+        .catch(()=>{});
+    },5*60*1000);
+    return()=>{unsub();clearInterval(syncInterval);};
   },[]);
   useEffect(()=>{
     const unsub=onSnapshot(
