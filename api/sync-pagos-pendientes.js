@@ -67,6 +67,13 @@ export default async function handler(req, res) {
       const update = { pagoSyncTs: ts };
       let cambio = false;
 
+      // Cancelado en TN → marcar cancelado en Firestore
+      if (order.status === "cancelled" && e.estado !== "cancelado") {
+        update.estado = "cancelado";
+        cambio = true;
+        console.log("SYNC_PAGOS CANCELADO", tnId);
+      }
+
       if (esEfectivo(order)) {
         // Efectivo: marcar cobrado si TN confirma payment_status=paid
         if (order.payment_status === "paid" && !e.cobranzaRecibida) {

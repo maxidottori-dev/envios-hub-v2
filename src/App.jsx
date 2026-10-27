@@ -4835,7 +4835,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
     setSyncPagos("cargando");
     setSyncDetalleOpen(false);
     try{
-      const resp=await fetch("/api/sync-pagos-tn",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})});
+      const resp=await fetch("/api/sync-pagos-pendientes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})});
       const d=await resp.json();
       setSyncPagos(d);
     }catch(e){
