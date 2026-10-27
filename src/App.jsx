@@ -4779,6 +4779,34 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
   const [borrandoPago,setBorrandoPago]=useState(null);
   const [pagoExpandido,setPagoExpandido]=useState(null); // id del pago con detalle visible
   const [mostrarTodosEnvios,setMostrarTodosEnvios]=useState(false);
+  const [renombrando,setRenombrando]=useState(null); // null | {key, nombre, nuevoNombre}
+  const [renombrandoLoading,setRenombrandoLoading]=useState(false);
+
+  const ejecutarRenombre=async()=>{
+    if(!renombrando||!renombrando.nuevoNombre.trim())return;
+    setRenombrandoLoading(true);
+    try{
+      const nuevoNombre=renombrando.nuevoNombre.trim();
+      // Buscar todos los envíos del cliente en el historial cargado
+      const afectados=(enviosLocalesCC||envios).filter(e=>getClienteKey(e)===renombrando.key);
+      // Actualizar en Firestore en lotes de 500
+      const CHUNK=500;
+      for(let i=0;i<afectados.length;i+=CHUNK){
+        const batch=writeBatch(db);
+        afectados.slice(i,i+CHUNK).forEach(e=>batch.update(doc(db,"envios",e.id),{clienteNombre:nuevoNombre}));
+        await batch.commit();
+      }
+      // Actualizar copia local
+      if(enviosLocalesCC){
+        setEnviosLocalesCC(prev=>prev.map(e=>getClienteKey(e)===renombrando.key?{...e,clienteNombre:nuevoNombre}:e));
+      }
+      mostrarToast(`✓ ${afectados.length} pedidos renombrados a "${nuevoNombre}"`);
+      setRenombrando(null);
+    }catch(err){
+      mostrarToast("⚠ Error al renombrar: "+err.message);
+    }
+    setRenombrandoLoading(false);
+  };
 
   const [enviosLocalesCC,setEnviosLocalesCC]=useState(null);
   const [loadingHistCC,setLoadingHistCC]=useState(false);
@@ -4949,8 +4977,19 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
         <div style={{...S.card,padding:"1rem 1.25rem",marginBottom:"1rem"}}>
           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:"0.5rem",marginBottom:"0.75rem"}}>
             <div>
-              <div style={{fontWeight:800,fontSize:"1rem",color:"#e5e7eb"}}>{c.nombre}</div>
-              <div style={{fontSize:"0.72rem",color:"#6b7280",marginTop:"2px"}}>
+              <div style={{display:"flex",alignItems:"center",gap:"0.5rem",flexWrap:"wrap"}}>
+                <div style={{fontWeight:800,fontSize:"1rem",color:"#e5e7eb"}}>{c.nombre}</div>
+                <button onClick={()=>setRenombrando({key:c.key,nombre:c.nombre,nuevoNombre:c.nombre})} style={{...S.btnSm(false,"#6366f1"),fontSize:"0.68rem",padding:"2px 8px"}}>✏ Renombrar</button>
+              </div>
+              {renombrando?.key===c.key&&(
+                <div style={{marginTop:"0.5rem",display:"flex",alignItems:"center",gap:"0.5rem",flexWrap:"wrap"}}>
+                  <input value={renombrando.nuevoNombre} onChange={ev=>setRenombrando(p=>({...p,nuevoNombre:ev.target.value}))} style={{...S.input,width:"260px",padding:"4px 8px",fontSize:"0.8rem"}} placeholder="Nuevo nombre del cliente" autoFocus/>
+                  <button onClick={ejecutarRenombre} disabled={renombrandoLoading||!renombrando.nuevoNombre.trim()||renombrando.nuevoNombre.trim()===c.nombre} style={{...S.btnSm(true,"#10b981"),fontSize:"0.72rem"}}>{renombrandoLoading?"⏳ Guardando...":"✓ Confirmar"}</button>
+                  <button onClick={()=>setRenombrando(null)} style={{...S.btnSm(false,"#ef4444"),fontSize:"0.72rem"}}>✕</button>
+                  <span style={{fontSize:"0.68rem",color:"#f59e0b"}}>⚠ Cambia el nombre en todos los pedidos de este cliente</span>
+                </div>
+              )}
+              <div style={{fontSize:"0.72rem",color:"#6b7280",marginTop:"4px"}}>
                 {c.logisticas.length>0&&<span>Logisticas: {c.logisticas.join(", ")} · </span>}
                 Limite alerta: <input type="number" min="1" max="90" value={c.limite} onChange={ev=>setLimiteCliente(c.key,ev.target.value)} style={{...S.input,width:"48px",padding:"1px 6px",fontSize:"0.72rem",height:"20px",display:"inline-block"}}/> días
               </div>
