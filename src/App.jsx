@@ -4810,7 +4810,13 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
 
   const [enviosLocalesCC,setEnviosLocalesCC]=useState(null);
   const [loadingHistCC,setLoadingHistCC]=useState(false);
-  const enviosEfectivos=enviosLocalesCC!==null?enviosLocalesCC:envios;
+  // Merge: envios (real-time, últimos 60 días) tiene prioridad sobre enviosLocalesCC (historial estático)
+  // Así el sync de pagos actualiza la UI correctamente sin perder el historial completo
+  const enviosEfectivos=useMemo(()=>{
+    if(!enviosLocalesCC)return envios;
+    const liveMap=new Map(envios.map(e=>[e.id,e]));
+    return enviosLocalesCC.map(e=>liveMap.get(e.id)||e);
+  },[envios,enviosLocalesCC]);
   const cargarHistorialCC=async()=>{
     setLoadingHistCC(true);
     try{const snap=await getDocs(collection(db,"envios"));setEnviosLocalesCC(snap.docs.map(d=>({...d.data(),id:d.id})));}
