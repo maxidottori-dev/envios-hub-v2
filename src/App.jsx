@@ -4791,6 +4791,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
   };
 
   useEffect(()=>{setMostrarTodosEnvios(false);},[vistaCliente]);
+  useEffect(()=>{cargarHistorialCC();},[]);
 
   const eliminarPago=async(id)=>{
     if(!window.confirm("¿Eliminar este pago? No se puede deshacer."))return;
@@ -5135,11 +5136,8 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
 
   return(
     <div>
-      {enviosLocalesCC===null&&<div style={{display:"flex",alignItems:"center",gap:"0.5rem",marginBottom:"0.5rem",padding:"0.4rem 0.7rem",background:"#1e1b4b",borderRadius:"6px",border:"1px solid #4338ca"}}>
-        <span style={{fontSize:"0.72rem",color:"#a5b4fc"}}>Solo se muestran cuentas corrientes de los últimos 60 días.</span>
-        <button onClick={cargarHistorialCC} disabled={loadingHistCC} style={{...S.btnSm(false),background:"#312e81",borderColor:"#6366f1",color:"#c7d2fe",fontSize:"0.68rem",whiteSpace:"nowrap"}}>{loadingHistCC?"⏳ Cargando...":"🔍 Cargar historial completo"}</button>
-      </div>}
-      {enviosLocalesCC!==null&&<div style={{fontSize:"0.68rem",color:"#6b7280",marginBottom:"0.4rem"}}>✓ Historial completo cargado ({enviosLocalesCC.length} envíos)</div>}
+      {loadingHistCC&&<div style={{fontSize:"0.68rem",color:"#6b7280",marginBottom:"0.4rem"}}>⏳ Cargando historial...</div>}
+      {!loadingHistCC&&enviosLocalesCC!==null&&<div style={{fontSize:"0.68rem",color:"#6b7280",marginBottom:"0.4rem"}}>✓ Historial completo cargado ({enviosLocalesCC.length} envíos)</div>}
       {/* Botón sync TN + resultado */}
       <div style={{display:"flex",alignItems:"center",gap:"0.75rem",marginBottom:"0.8rem",flexWrap:"wrap"}}>
         {syncPagos==="confirm"?(
