@@ -374,6 +374,8 @@ const ZONAS_ML_LIST = ["CABA","NOE","SUR","PL","LOMAS","GBA2"];
 const ZONA_ML_COLOR = {CABA:"#84cc16",NOE:"#f59e0b",SUR:"#ef4444",PL:"#10b981",LOMAS:"#ec4899",GBA2:"#8b5cf6"};
 const ZONA_ML_BG    = {CABA:"#0d1c04",NOE:"#1c1400",SUR:"#1c0404",PL:"#021a0e",LOMAS:"#1c0514",GBA2:"#130d2a"};
 function getZonaML(p) { return ZONA_ML[p] || ""; }
+// Devuelve la zona ML usando partido primero, y si no encuentra, intenta con el partido derivado del CP
+function getZonaMLExt(partido, cp) { return getZonaML(partido) || getZonaML(cpAPartido(cp)) || ""; }
 
 function fechaLocal()  { const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().split("T")[0]; }
 function fechaHoy()    { return fechaLocal(); }
@@ -399,7 +401,7 @@ function generarHTMLDespacho({logistica,fecha,envios:lista,pdfOrient="landscape"
     const dir=[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · ");
     const dirCorta=(e.direccion||"").split("/")[0].split("-")[0].split(",")[0].trim();
     const nroRef=esFlex?(e.nroSeguimiento||e.id||""):("#"+(e.nroOrdenTN||""));
-    const zml=esFlex?(getZonaML(e.partido)||""):(e.partido||"");
+    const zml=esFlex?(getZonaMLExt(e.partido,e.cp)||""):(e.partido||"");
     const refExtra=(e.referencia&&!e.direccion.toLowerCase().includes((e.referencia||"").toLowerCase().slice(0,20)))?" — "+e.referencia:"";
     const cobrar=e.cobranza?"$"+Number(e.cobranza).toLocaleString("es-AR"):"—";
     const loteCell=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"—";
@@ -785,7 +787,7 @@ function PantallaAsignacion({borrador,fileName,onConfirmar,onCancelar,lc,envios=
   const setGrupo=(ids,k,v)=>setAsig(p=>{const n={...p};ids.forEach(id=>{n[id]={...getA(id),[k]:v}});return n;});
   const getGrupo=(ids,k)=>{const vals=[...new Set(ids.map(id=>getA(id)[k]||""))];return vals.length===1?vals[0]:"";};
   const grupos={};
-  borrador.forEach(e=>{const key=modo==="zona"?(getZonaML(e.partido)||"Otra"):(e.partido||"Sin partido");if(!grupos[key])grupos[key]=[];grupos[key].push(e);});
+  borrador.forEach(e=>{const key=modo==="zona"?(getZonaMLExt(e.partido,e.cp)||"Otra"):(e.partido||"Sin partido");if(!grupos[key])grupos[key]=[];grupos[key].push(e);});
   const grupoKeys=modo==="zona"?[...ZONAS_ML_LIST,"Otra"].filter(k =>grupos[k]):Object.keys(grupos).sort();
   const totalAsig=borrador.filter(e=>getA(e.id).trans).length;
   // Envíos con solo uno de los dos campos — no se puede confirmar hasta resolverlos
@@ -1548,7 +1550,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
     const est=getEstado(e);
     if(filEstado==="no_cancelado"&&est==="cancelado")return false;
     else if(filEstado!=="TODOS"&&filEstado!=="no_cancelado"&&est!==filEstado)return false;
-    if(filZona!=="TODAS"&&getZonaML(e.partido)!==filZona)return false;
+    if(filZona!=="TODAS"&&getZonaMLExt(e.partido,e.cp)!==filZona)return false;
     if(filTurno==="SIN_TURNO"){if(e.turno)return false;}else if(filTurno!=="TODOS"&&e.turno!==filTurno)return false;
     if(filOrigen!=="TODOS"){
       const origenVal=e.origen==="Tienda Nube"?"TN":e.origen==="ML"?"FLEX":e.pvCasoId?"PV":"Manual";
@@ -1700,7 +1702,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
               "#":i+1,Origen:e.origen,Estado:getEstado(e),
               NroOrdenTN:e.nroOrdenTN||"",Cliente:e.clienteNombre||"",
               Direccion:e.direccion,Localidad:e.localidad||"",Partido:e.partido,CP:e.cp||"",
-              Logistica:lc[e.trans]?.nombreFormal||e.trans||"",Zona:getZonaML(e.partido)||"",Turno:e.turno||"",
+              Logistica:lc[e.trans]?.nombreFormal||e.trans||"",Zona:getZonaMLExt(e.partido,e.cp)||"",Turno:e.turno||"",
               Fecha:e.fecha||"",FechaVenta:e.fechaVenta||"",Bultos:e.bultos||1,
               Importe:calcImp(e,tmap2,lc,zc),Cobranza:e.cobranza||"",
               Cambio:e.cambio||"",Retiro:e.retiro||"",Nota:e.nota||"",
@@ -1853,7 +1855,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
         {filtradosOrdenados.length===0&&<div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📭</div><p>Sin envios</p></div>}
         {filtradosOrdenados.map((e,i)=>{
           const zi=getZonaLogistica(zc,e.trans,e.partido);
-          const zml=getZonaML(e.partido);
+          const zml=getZonaMLExt(e.partido,e.cp);
           const isEdit=editId===e.id;
           const isSel=seleccionados.has(e.id);
           const imp=e.importeOverride>0?e.importeOverride:getImp(e);
@@ -2007,7 +2009,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
     if(fecha&&f!==fecha)return false;
     if(trans!=="TODOS"&&e.trans!==trans)return false;
     if(turno!=="TODOS"&&e.turno!==turno)return false;
-    if(filZona!=="TODAS"&&getZonaML(e.partido)!==filZona)return false;
+    if(filZona!=="TODAS"&&getZonaMLExt(e.partido,e.cp)!==filZona)return false;
     if(filOrigen==="FLEX"&&e.origen!=="ML")return false;
     if(filOrigen==="NO_FLEX"&&e.origen==="ML")return false;
     if(busqueda){const s=norm(busqueda);if(!(norm(e.direccion).includes(s)||norm(e.partido).includes(s)||norm(e.clienteNombre).includes(s)||(e.nroOrdenTN||"").includes(s)||(e.nroSeguimiento||"").includes(s)))return false;}
@@ -2135,7 +2137,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
       const dir=[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · ");
       const dirCorta=(e.direccion||"").split("/")[0].split("-")[0].split(",")[0].trim();
       const nroRef=esFlex?(e.nroSeguimiento||e.id.slice(-10)):("#"+(e.nroOrdenTN||e.id.slice(-8)));
-      const zml=esFlex?(getZonaML(e.partido)||""):(e.partido||"");
+      const zml=esFlex?(getZonaMLExt(e.partido,e.cp)||""):(e.partido||"");
       const refExtra=(e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20)))?" — "+e.referencia:"";
       const cobrar=e.cobranza?"$"+Number(e.cobranza).toLocaleString("es-AR"):"—";
       const loteCell=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"—";
@@ -2241,7 +2243,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
                 Referencia:e.referencia||"",
                 NroEnvio:esFlex?(e.nroSeguimiento||""):"",
                 NroOrden:esFlex?"":"#"+(e.nroOrdenTN||""),
-                Zona:getZonaML(e.partido)||"",
+                Zona:getZonaMLExt(e.partido,e.cp)||"",
                 Turno:e.turno||"",
                 Fecha:e.fecha||"",
                 Bultos:e.bultos||1,
@@ -2325,7 +2327,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
               <th style={{...thSt,textAlign:"center",width:"28px"}}>Chk</th>
             </tr></thead>
             <tbody>{lista.map((e,i)=>{
-              const zml=getZonaML(e.partido)||"-";
+              const zml=getZonaMLExt(e.partido,e.cp)||"-";
               const esFlex=e.origen==="ML";
               const nroRef=esFlex?(e.nroSeguimiento||"..."+e.id.slice(-8)):"#"+(e.nroOrdenTN||e.id.slice(-8));
               const dir=[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · ");
@@ -5796,7 +5798,7 @@ function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCanc
     const a=getA(e.id);
     const key=(a.fecha||"Sin fecha")+"|"+(a.turno||"Sin turno");
     if(!grupos[key])grupos[key]={fecha:a.fecha||"",turno:a.turno||"",zonas:{}};
-    const zona=getZonaML(e.partido)||"Otra";
+    const zona=getZonaMLExt(e.partido,e.cp)||"Otra";
     if(!grupos[key].zonas[zona])grupos[key].zonas[zona]={nombre:zona,color:ZONA_ML_COLOR[zona]||"#6b7280",envios:[]};
     grupos[key].zonas[zona].envios.push(e);
   });
@@ -5896,7 +5898,7 @@ function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCanc
                     {/* Filas de envíos de esta zona */}
                     {zonaData.envios.map((e,i)=>{
                       const a=getA(e.id);
-                      const zml=getZonaML(e.partido);
+                      const zml=getZonaMLExt(e.partido,e.cp);
                       const incompletoTN=a.trans&&!a.turno;
                       return(
                         <div key={e.id} style={{padding:"0.45rem 1rem",borderBottom:i<zonaData.envios.length-1?"1px solid #1a1f2e":"none",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap",opacity:!puedeAsignar(e)?0.5:1,background:incompletoTN?"#1c0a00":undefined,borderLeft:incompletoTN?"3px solid #f59e0b":"3px solid transparent"}}>
@@ -6365,7 +6367,7 @@ function VistaLogistica({envios,sesion,lc}){
               const esFlex=e.origen==="ML";
               const lote=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"";
               const nroRef=esFlex?(e.nroSeguimiento||""):("#"+(e.nroOrdenTN||""));
-              const zona=getZonaML(e.partido)||"";
+              const zona=getZonaMLExt(e.partido,e.cp)||"";
               return{"#":i+1,
                 Lote:lote,
                 Tipo:e.tipoEntrega==="COMERCIAL"?"COM":e.tipoEntrega==="RESIDENCIAL"?"RES":"",
@@ -6423,7 +6425,7 @@ function VistaLogistica({envios,sesion,lc}){
         <div style={{display:"grid",gap:"4px"}}>
           {filtrados.length===0&&<div style={{textAlign:"center",padding:"3rem",color:"#4b5563"}}><div style={{fontSize:"2rem"}}>📭</div><p>Sin envios en este periodo</p></div>}
           {filtrados.map(e=>{
-            const zml=getZonaML(e.partido);
+            const zml=getZonaMLExt(e.partido,e.cp);
             const estKey=getEstado(e);
             const estC=ESTADO_C[estKey]||ESTADO_C.sin_asignar;
             const esTN=e.origen==="Tienda Nube";
@@ -9379,7 +9381,7 @@ function DespachoPage({token}){
         const dir=[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · ");
         const refExtra=(e.referencia&&!(e.direccion||"").toLowerCase().includes((e.referencia||"").toLowerCase().slice(0,20)))?" — "+e.referencia:"";
         const nroRef=esFlex?(e.nroSeguimiento||""):("#"+(e.nroOrdenTN||""));
-        const zml=esFlex?(getZonaML(e.partido)||""):(e.partido||"");
+        const zml=esFlex?(getZonaMLExt(e.partido,e.cp)||""):(e.partido||"");
         const loteCell=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"—";
         const bultosCell=e.preparado?(e.bultos||1):"N/P";
         const telCell=!esFlex&&e.telefono?" · Tel: "+e.telefono:"";
