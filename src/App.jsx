@@ -1246,6 +1246,10 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
               {nroSegDuplicado&&<div style={{color:"#f97316",fontSize:"0.65rem",marginTop:"2px"}}>⚠ Ya asignado a otro envío</div>}
             </div>
           </div>
+          <div style={{marginTop:"0.5rem"}}>
+            <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Teléfono</div>
+            <input value={e.telefono||""} onChange={ev=>set("telefono",ev.target.value)} style={{...S.input,width:"100%",fontSize:"0.8rem"}} placeholder="Nro de teléfono"/>
+          </div>
         </div>
       )}
 
