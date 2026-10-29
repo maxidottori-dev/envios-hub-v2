@@ -1877,7 +1877,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                     {origenBadge(e)}
                     <Bdg label={estC.label} bg={estC.bg} t={estC.t}/>
                     {e.trans&&<Bdg label={e.trans} bg={lc[e.trans]?.bg||"#1a1f2e"} t={lc[e.trans]?.color||"#6b7280"}/>}
-                    {zml&&<Bdg label={zml} bg={ZONA_ML_BG[zml]||"#1a1f2e"} t={ZONA_ML_COLOR[zml]||"#6b7280"}/>}
+                    {zml&&zml!==(zi?.nombre||"")&&<Bdg label={zml} bg={ZONA_ML_BG[zml]||"#1a1f2e"} t={ZONA_ML_COLOR[zml]||"#6b7280"}/>}
                     {zi&&<Bdg label={zi.nombre} bg={zi.color+"22"} t={zi.color}/>}
                     {e.turno&&<Bdg label={e.turno} bg={TURNO_C[e.turno]?.bg||"#130d2a"} t={TURNO_C[e.turno]?.c||"#a78bfa"}/>}
                     {e.fecha&&<Bdg label={fmtCorta(e.fecha)} bg="#12172a" t="#6b7280"/>}
