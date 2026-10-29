@@ -54,7 +54,10 @@ export default async function handler(req, res) {
 
   await Promise.all(todos.map(async (docSnap) => {
     const e = { docId: docSnap.id, ...docSnap.data() };
-    const tnId = e.nroOrdenTN || e.id;
+    // Usar el ID interno de TN (docId/e.id = ID largo como 2103747096)
+    // NO usar nroOrdenTN (= número de orden como "39214") porque la API de TN
+    // espera el ID interno en /orders/:id, no el número visible al usuario.
+    const tnId = e.docId || e.id;
     if (!tnId || isNaN(Number(tnId))) return;
     try {
       const resp = await fetch(
