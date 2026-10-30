@@ -4876,7 +4876,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
   // Calcular deuda de cada envio
   const getDeudaEnvio=(e)=>{
     if(e.estado==="cancelado")return null;
-    if(e.pagoEstado==="cuenta_corriente"&&e.importeOrden>0&&!e.cobranzaRecibida){const monto=e.cobranza>0?e.cobranza:e.importeOrden;return{monto,tipo:"TN CC",logistica:e.trans||""};}
+    if(e.pagoEstado==="cuenta_corriente"&&!e.cobranzaRecibida){const monto=e.cobranza>0?e.cobranza:(e.importeCC>0?e.importeCC:e.importeOrden);if(monto>0)return{monto,tipo:"TN CC",logistica:e.trans||""};}
     if(e.cobranza>0&&e.pagoEstado==="pagado"&&!e.cobranzaRecibida)return{monto:e.cobranza,tipo:"Efectivo",logistica:e.trans||""};
     if(e.esCC&&e.importeCC>0&&!(e.pagoEstado==="pagado"&&e.importeCC===e.importeOrden))return{monto:e.importeCC,tipo:"Manual CC",logistica:e.trans||""};
     return null;
@@ -4950,7 +4950,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
     if(filtro==="vencidos"&&c.dias<c.limite)return false;
     if(filtro==="saldados"&&c.saldo>0)return false;
     if(filtro==="fc_pend"&&!(facturaClientes[c.key]&&c.envios.some(e=>e.trans&&!e.nroFactura&&e.estado!=="cancelado")))return false;
-    if(busqueda){const s=norm(busqueda);const ok=norm(c.nombre).includes(s)||c.envios.some(e=>norm(e.direccion).includes(s)||(e.nroOrdenTN||"").includes(s)||(e.nroSeguimiento||"").includes(s)||(e.nroVentaML||"").toString().includes(s)||(e.id||"").includes(s));if(!ok)return false;}
+    if(busqueda){const palabras=norm(busqueda).split(/\s+/).filter(Boolean);const haystack=norm([c.nombre,...c.envios.flatMap(e=>[e.direccion,e.localidad,e.partido,e.cp,String(e.nroOrdenTN||""),e.nroSeguimiento,String(e.nroVentaML||""),e.id,e.clienteNombre].filter(Boolean))].join(" "));const ok=palabras.every(p=>haystack.includes(p));if(!ok)return false;}
     return true;
   }).sort((a,b)=>{
     const {col,dir}=sortCC;
