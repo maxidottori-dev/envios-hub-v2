@@ -1566,7 +1566,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
     }
     if(soloReprog&&!e.reprogramado)return false;
     if(soloSinEtiqueta&&(e.origen!=="ML"||/^4\d{10}$/.test(e.nroSeguimiento||"")))return false;
-    if(busqueda){const srch=norm(busqueda);return norm(e.direccion).includes(srch)||norm(e.id).includes(srch)||norm(e.partido).includes(srch)||norm(e.nroSeguimiento||"").includes(srch)||norm(e.clienteNombre).includes(srch)||(String(e.nroOrdenTN||"")).includes(srch);}
+    if(busqueda){const haystack=norm([e.direccion,e.localidad,e.partido,e.cp,e.id,e.clienteNombre,e.nroSeguimiento,e.nroOrdenTN].filter(Boolean).join(" "));const palabras=norm(busqueda).split(/\s+/).filter(Boolean);return palabras.every(p=>haystack.includes(p));}
     return true;
   });
   const activos=filtrados.filter(e=>getEstado(e)!=="cancelado");
