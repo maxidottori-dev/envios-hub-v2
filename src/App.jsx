@@ -4878,7 +4878,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
     if(e.estado==="cancelado")return null;
     if(e.pagoEstado==="cuenta_corriente"&&!e.cobranzaRecibida){const monto=e.importeCC>0?e.importeCC:(e.cobranza>0?e.cobranza:e.importeOrden);if(monto>0)return{monto,tipo:"TN CC",logistica:e.trans||""};}
     if(e.cobranza>0&&e.pagoEstado==="pagado"&&!e.cobranzaRecibida)return{monto:e.cobranza,tipo:"Efectivo",logistica:e.trans||""};
-    if(e.esCC&&e.importeCC>0&&!(e.pagoEstado==="pagado"&&e.importeCC===e.importeOrden))return{monto:e.importeCC,tipo:"Manual CC",logistica:e.trans||""};
+    if(e.esCC&&e.importeCC>0&&!e.cobranzaRecibida)return{monto:e.importeCC,tipo:"Manual CC",logistica:e.trans||""};
     return null;
   };
 
@@ -5434,7 +5434,23 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
           </thead>
           <tbody>
             {clientesFiltrados.length===0&&(
-              <tr><td colSpan={7} style={{padding:"2rem",textAlign:"center",color:"#4b5563"}}>Sin resultados</td></tr>
+              <tr><td colSpan={7} style={{padding:"1.5rem",textAlign:"center",color:"#4b5563"}}>
+                <div>Sin resultados</div>
+                {busqueda&&clientes.length>0&&(
+                  <details style={{marginTop:"0.8rem",textAlign:"left",maxWidth:"600px",margin:"0.8rem auto 0"}}>
+                    <summary style={{cursor:"pointer",color:"#6b7280",fontSize:"0.72rem",userSelect:"none"}}>🔍 Debug: ver pedidos indexados por cliente ({clientes.length} clientes)</summary>
+                    <div style={{marginTop:"0.5rem",fontSize:"0.68rem",color:"#9ca3af",fontFamily:"monospace",background:"#0d1119",padding:"0.7rem",borderRadius:"6px",maxHeight:"200px",overflowY:"auto"}}>
+                      {clientes.map(c=>(
+                        <div key={c.key} style={{marginBottom:"0.4rem"}}>
+                          <span style={{color:"#e5e7eb",fontWeight:700}}>{c.nombre}</span>
+                          {" · saldo: $"}{Math.round(c.saldo).toLocaleString("es-AR")}
+                          {" · pedidos: "}{c.envios.map(e=>`${e.nroOrdenTN?"#"+e.nroOrdenTN:"ID:"+e.id.slice(-6)}`).join(", ")}
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </td></tr>
             )}
             {clientesFiltrados.map((c,i)=>{
               const vencido=c.saldo>0&&c.dias>=c.limite;
