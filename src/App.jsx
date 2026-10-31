@@ -4876,7 +4876,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
   // Calcular deuda de cada envio
   const getDeudaEnvio=(e)=>{
     if(e.estado==="cancelado")return null;
-    if(e.pagoEstado==="cuenta_corriente"&&!e.cobranzaRecibida){const monto=e.cobranza>0?e.cobranza:(e.importeCC>0?e.importeCC:e.importeOrden);if(monto>0)return{monto,tipo:"TN CC",logistica:e.trans||""};}
+    if(e.pagoEstado==="cuenta_corriente"&&!e.cobranzaRecibida){const monto=e.importeCC>0?e.importeCC:(e.cobranza>0?e.cobranza:e.importeOrden);if(monto>0)return{monto,tipo:"TN CC",logistica:e.trans||""};}
     if(e.cobranza>0&&e.pagoEstado==="pagado"&&!e.cobranzaRecibida)return{monto:e.cobranza,tipo:"Efectivo",logistica:e.trans||""};
     if(e.esCC&&e.importeCC>0&&!(e.pagoEstado==="pagado"&&e.importeCC===e.importeOrden))return{monto:e.importeCC,tipo:"Manual CC",logistica:e.trans||""};
     return null;
