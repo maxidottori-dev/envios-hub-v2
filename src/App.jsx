@@ -6601,6 +6601,11 @@ function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armado
       esFlex:envio.origen==="ML",
       esEdicion:false,
     }).catch(err=>console.error("Error guardando armado:",err));
+    updateDoc(doc(db,"envios",envio.id),{
+      preparado:true,bultos,
+      armadorId:armador.id,armadorNombre:armador.nombre,
+      armadoTs:ts,
+    }).catch(err=>console.error("Error persistiendo preparado:",err));
   },[setEnvios,armador,controladorSel]);
 
   // Armado de colectas ML (circuito separado de envíos) — sin panel, directo con el armador fijo de la vista.
