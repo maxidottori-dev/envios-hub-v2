@@ -11281,6 +11281,15 @@ function TabSalida({envios,setEnvios,lc,sesion}){
           nota:notasPendientes[e.id]||null,
         })),
       });
+      // Persistir despachado en Firestore (best effort — no bloquea el cierre)
+      Promise.all(despachados_cierre.map(e=>
+        updateDoc(doc(db,"envios",e.id),{
+          despachado:true,
+          despachoTs:ts,
+          despachoLogistica:logSel,
+          despachoPor,
+        }).catch(err=>console.error("Error persistiendo despachado:",e.id,err))
+      )).then(()=>console.log("despacho persistido:",despachados_cierre.length,"envíos"));
       // Notificar TN: marcar como enviado (best effort — no bloquea el cierre)
       const conTN=despachados_cierre.filter(e=>e.origen==="Tienda Nube"&&(e.idTN||e.id));
       if(conTN.length>0){
