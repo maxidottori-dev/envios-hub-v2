@@ -2157,7 +2157,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
           <td style="padding:3px 4px;text-align:center;width:35px;">${tipoCell}</td>
           <td style="padding:3px 4px;text-align:center;width:25px;font-weight:${e.preparado&&(e.bultos||1)>1?700:400};color:${!e.preparado?"#d97706":"inherit"};">${e.preparado?(e.bultos||1):"N/P"}</td>
           <td style="padding:3px 4px;text-align:center;width:18px;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td>
-          <td style="padding:3px 4px;font-weight:600;">${reprogBadge}${dirCorta}${!esFlex&&e.telefono?`<span style="display:block;font-weight:400;color:#555;font-size:${fs-2}px;">📞 ${e.telefono}</span>`:""}</td>
+          <td style="padding:3px 4px;font-weight:600;">${reprogBadge}${dirCorta}${!esFlex&&e.telefono?`<span style="display:block;font-weight:400;color:#555;font-size:${fs-2}px;">📞 ${e.telefono}</span>`:""}${!esFlex&&e.notasCliente?`<span style="display:block;font-weight:400;color:#6b7280;font-size:${fs-2}px;font-style:italic;">📋 ${e.notasCliente}</span>`:""}</td>
           <td style="padding:3px 4px;color:#555;">${(e.localidad&&!/referencia/i.test(e.localidad))?e.localidad:""}</td>
           <td style="padding:3px 4px;color:#555;">${e.partido||""}</td>
           <td style="padding:3px 4px;white-space:nowrap;font-size:${fs-1}px;">${zml}</td>
@@ -2174,7 +2174,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
           ${e.tipoEntrega?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;font-size:${fs-2}px;font-weight:700;color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":"#15803d"};background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":"#dcfce7"};">${e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</td>`:`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;color:#aaa;">—</td>`}
           ${td(28,"text-align:center;font-weight:"+(e.preparado&&(e.bultos||1)>1?700:400)+";color:"+(e.preparado?"inherit":"#d97706")+";",e.preparado?(e.bultos||1):"N/P")}
           <td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:18px;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td>
-          ${td("","font-weight:500;",reprogBadge+dir+refExtra+(!esFlex&&e.telefono?`<span style="display:block;font-weight:400;color:#555;font-size:${fs-2}px;">📞 ${e.telefono}</span>`:""))}
+          ${td("","font-weight:500;",reprogBadge+dir+refExtra+(!esFlex&&e.telefono?`<span style="display:block;font-weight:400;color:#555;font-size:${fs-2}px;">📞 ${e.telefono}</span>`:"")+(!esFlex&&e.notasCliente?`<span style="display:block;font-weight:400;color:#6b7280;font-size:${fs-2}px;font-style:italic;">📋 ${e.notasCliente}</span>`:""))}
           ${td("","white-space:nowrap;font-size:"+(fs-1)+"px;",zml)}
           ${td(32,"text-align:center;",e.turno||"—")}
           ${td(42,"text-align:center;",e.fecha?fmtCorta(e.fecha):"—")}
