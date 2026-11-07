@@ -5808,6 +5808,7 @@ function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCanc
     const localTrans=getA(e.id).trans;
     // Solo filtrar si el usuario NO tocó el pedido — si lo tocó, él decidió dejar trans vacío
     if(fresh.trans&&!localTrans&&!touched.has(e.id))return false;
+    if(fresh.despachado&&!touched.has(e.id))return false;
     return true;
   });
   const canceladosEnVivo=borrador.length-borradorActivo.length;
@@ -11865,7 +11866,7 @@ export default function App(){
     if(!toSave.length&&!toDel.length)return;
     try{
       const batch=writeBatch(db);
-      toSave.forEach(e=>batch.set(doc(db,"envios",e.id),e));
+      toSave.forEach(e=>batch.set(doc(db,"envios",e.id),e,{merge:true}));
       toDel.forEach(id=>batch.delete(doc(db,"envios",id)));
       await batch.commit();
       // Limpiar DESPUÉS del commit: si falla, el próximo flush reintentará
@@ -12073,7 +12074,7 @@ export default function App(){
           return <button key={t.id} onClick={()=>setTab(t.id)} style={style}>{t.l}</button>;
         })}</div>
         <div style={{marginLeft:"auto",display:"flex",gap:"0.35rem",flexWrap:"wrap"}}>
-          {puedeVer(sesion,"accion_asignartN")&&<button onClick={()=>{const cutoff=new Date(Date.now()-45*24*60*60*1000).toISOString().split("T")[0];const tnSinAsignar=envios.filter(e=>e.origen==="Tienda Nube"&&getEstado(e)==="sin_asignar"&&(e.fechaVenta||e.creadoTs?.split("T")[0]||"9999")>=cutoff);if(!tnSinAsignar.length){mostrarToast("No hay pedidos TN sin asignar");return;}setBorrador(tnSinAsignar);setFileName("Pedidos TN sin asignar");setPantalla("asignacion-tn");}} style={{padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#0d1c2e",border:"1px solid #38bdf8",color:"#38bdf8",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>Asignar TN</button>}
+          {puedeVer(sesion,"accion_asignartN")&&<button onClick={()=>{const cutoff=new Date(Date.now()-45*24*60*60*1000).toISOString().split("T")[0];const tnSinAsignar=envios.filter(e=>e.origen==="Tienda Nube"&&getEstado(e)==="sin_asignar"&&!e.despachado&&(e.fechaVenta||e.creadoTs?.split("T")[0]||"9999")>=cutoff);if(!tnSinAsignar.length){mostrarToast("No hay pedidos TN sin asignar");return;}setBorrador(tnSinAsignar);setFileName("Pedidos TN sin asignar");setPantalla("asignacion-tn");}} style={{padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#0d1c2e",border:"1px solid #38bdf8",color:"#38bdf8",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}}>Asignar TN</button>}
           <button onClick={descargarTemplate} style={{padding:"0.33rem 0.75rem",borderRadius:"7px",background:"#0f1420",border:"1px solid #252d40",color:"#9ca3af",fontWeight:700,fontSize:"0.72rem",cursor:"pointer"}} title="Descargar plantilla Excel">⬇ Plantilla</button>
           <label style={{cursor:"pointer"}}>
             <input type="file" accept=".pdf" style={{display:"none"}} onChange={async ev=>{
