@@ -548,7 +548,10 @@ function parsearExcel(file) {
         } else {
           // Formato ML original
           const iOrden=col("# de venta"),iFecha=col("fecha"),iDir=col("domicilio");
-          const iCiudad=col("ciudad"),iCP=col("postal"),iSeg=col("seguimiento");
+          // ML puede exportar la ciudad como "Ciudad" o "Localidad" según la versión del reporte
+          const iCiudadRaw=col("ciudad");const iLocalidad=col("localidad");
+          const iCiudad=iCiudadRaw>=0?iCiudadRaw:iLocalidad;
+          const iCP=col("postal"),iSeg=col("seguimiento");
           if(iDir<0) throw new Error("No se encontro la columna Domicilio.");
           for(let i=hFila+1;i<filas.length;i++){
             const r=filas[i];
@@ -557,10 +560,11 @@ function parsearExcel(file) {
             const dir=String(r[iDir]||"").trim(); if(!dir) continue;
             const cp=String(r[iCP]||"").replace(/\D/g,"");
             const fechaVenta=parseFechaES(r[iFecha]); if(!fechaVenta) continue;
-            const partido=cpAPartido(cp)||String(r[iCiudad]||"").trim();
+            const ciudadVal=String(r[iCiudad]||"").trim();
+            const partido=cpAPartido(cp)||ciudadVal;
             const nroSeguimientoRaw=String(r[iSeg]||"").trim();
             const nroSeguimiento=/^\d{11}$/.test(nroSeguimientoRaw)?nroSeguimientoRaw:"";
-            envios.push({id:orden,direccion:dir,ciudad:String(r[iCiudad]||"").trim(),cp,fechaVenta,
+            envios.push({id:orden,direccion:dir,ciudad:ciudadVal,localidad:ciudadVal,cp,fechaVenta,
               fecha:"",turno:"",trans:"",partido,tarifaLog:0,estado:"sin_asignar",
               nroSeguimiento,linkML:"https://www.mercadolibre.com.ar/ventas/"+orden+"/detalle",
               cobranza:null,cambio:null,retiro:null,observaciones:"",bultos:1,origen:"ML"});
@@ -4966,6 +4970,10 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
     return 0;
   });
 
+  // Dividir en dos secciones: logística (Efectivo/COD) y cuenta corriente (TN CC / Manual CC)
+  const clientesFiltradosLog=clientesFiltrados.filter(c=>c.envios.some(e=>e._deuda?.tipo==="Efectivo"));
+  const clientesFiltradosCC=clientesFiltrados.filter(c=>c.envios.some(e=>e._deuda?.tipo!=="Efectivo"));
+
   // Metricas globales
   const deudaTotal=clientesFiltrados.reduce((s,c)=>s+c.saldo,0);
   const vencidosTotal=clientesFiltrados.filter(c=>c.dias>=c.limite&&c.saldo>0).reduce((s,c)=>s+c.saldo,0);
@@ -5405,36 +5413,109 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
         }} style={{...S.btn(true),background:"#0f1420",border:"1px solid #252d40",padding:"0.3rem 0.8rem",fontSize:"0.72rem"}}>🖨️ Imprimir</button>
       </div>
 
-      {/* Tabla */}
-      <div style={{...S.card,overflow:"hidden"}}>
-        <table style={{width:"100%",borderCollapse:"collapse"}}>
-          <thead>
-            <tr style={{background:"#12172a"}}>
-              {[
-                {label:"Cliente",col:"nombre",align:"left"},
-                {label:"Logísticas",col:null,align:"left"},
-                {label:"Facturas",col:null,align:"left"},
-                {label:"Cobrado a cta.",col:"cobrado",align:"right"},
-                {label:"Saldo",col:"saldo",align:"right"},
-                {label:"Antigüedad",col:"dias",align:"left"},
-                {label:"",col:null,align:"left"},
-              ].map(h=>{
-                const activo=sortCC.col===h.col&&h.col;
-                const flecha=activo?(sortCC.dir==="asc"?"▲":"▼"):"";
-                return(
-                  <th key={h.label} onClick={h.col?()=>setSortCC(p=>p.col===h.col?{col:h.col,dir:p.dir==="asc"?"desc":"asc"}:{col:h.col,dir:"desc"}):undefined}
-                    style={{padding:"8px 10px",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",
-                      color:activo?"#a5b4fc":"#6b7280",textAlign:h.align,borderBottom:"1px solid #1e2535",
-                      cursor:h.col?"pointer":"default",userSelect:"none",whiteSpace:"nowrap"}}>
-                    {h.label}{flecha&&<span style={{marginLeft:"4px",fontSize:"0.6rem"}}>{flecha}</span>}
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody>
+      {/* Tablas separadas por sección */}
+      {(()=>{
+        const renderTablaClientes=(lista)=>(
+          <div style={{...S.card,overflow:"hidden"}}>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead>
+                <tr style={{background:"#12172a"}}>
+                  {[
+                    {label:"Cliente",col:"nombre",align:"left"},
+                    {label:"Logísticas",col:null,align:"left"},
+                    {label:"Facturas",col:null,align:"left"},
+                    {label:"Cobrado a cta.",col:"cobrado",align:"right"},
+                    {label:"Saldo",col:"saldo",align:"right"},
+                    {label:"Antigüedad",col:"dias",align:"left"},
+                    {label:"",col:null,align:"left"},
+                  ].map(h=>{
+                    const activo=sortCC.col===h.col&&h.col;
+                    const flecha=activo?(sortCC.dir==="asc"?"▲":"▼"):"";
+                    return(
+                      <th key={h.label} onClick={h.col?()=>setSortCC(p=>p.col===h.col?{col:h.col,dir:p.dir==="asc"?"desc":"asc"}:{col:h.col,dir:"desc"}):undefined}
+                        style={{padding:"8px 10px",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",
+                          color:activo?"#a5b4fc":"#6b7280",textAlign:h.align,borderBottom:"1px solid #1e2535",
+                          cursor:h.col?"pointer":"default",userSelect:"none",whiteSpace:"nowrap"}}>
+                        {h.label}{flecha&&<span style={{marginLeft:"4px",fontSize:"0.6rem"}}>{flecha}</span>}
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {lista.length===0&&(
+                  <tr><td colSpan={7} style={{padding:"1.5rem",textAlign:"center",color:"#4b5563"}}>Sin resultados</td></tr>
+                )}
+                {lista.map((c,i)=>{
+                  const vencido=c.saldo>0&&c.dias>=c.limite;
+                  const cercano=c.saldo>0&&c.dias>=(c.limite*0.7)&&c.dias<c.limite;
+                  return(
+                    <tr key={c.key} style={{background:vencido?"#1c0a0a":i%2===0?"transparent":"#0d1119",borderBottom:"1px solid #1a1f2e"}}>
+                      <td style={{padding:"10px 10px"}}>
+                        <div style={{fontWeight:600,fontSize:"0.82rem",color:"#e5e7eb"}}>{c.nombre}</div>
+                        <div style={{fontSize:"0.68rem",color:"#4b5563",marginTop:"1px"}}>{c.pendienteCount} pedido{c.pendienteCount!==1?"s":""} pendiente{c.pendienteCount!==1?"s":""}</div>
+                      </td>
+                      <td style={{padding:"10px 10px"}}>
+                        <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
+                          {c.logisticas.map(l=><span key={l} style={{fontSize:"0.65rem",padding:"1px 6px",background:lc[l]?.color+"22",color:lc[l]?.color,borderRadius:"4px",fontWeight:700}}>{l}</span>)}
+                        </div>
+                      </td>
+                      <td style={{padding:"10px 10px"}}>
+                        {(()=>{
+                          const facts=[...new Set(c.envios.filter(e=>e.nroFactura&&calcPagEnvio&&saldoTolerante(e._deuda?.monto,calcPagEnvio(e.id))>0).map(e=>e.nroFactura))];
+                          return facts.length>0
+                            ?<div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{facts.map(f=><span key={f} style={{fontSize:"0.68rem",padding:"1px 7px",background:"#130d2a",color:"#c4b5fd",borderRadius:"4px",border:"1px solid #4c1d95",fontWeight:600,fontFamily:"monospace"}}>{f}</span>)}</div>
+                            :<span style={{color:"#374151",fontSize:"0.72rem"}}>—</span>;
+                        })()}
+                      </td>
+                      <td style={{padding:"10px 10px",textAlign:"right",color:c.cobradoConSaldo>0?"#10b981":"#4b5563"}}>{c.cobradoConSaldo>0?fmt(c.cobradoConSaldo):"—"}</td>
+                      <td style={{padding:"10px 10px",textAlign:"right",fontWeight:800,color:c.saldo===0?"#10b981":vencido?"#ef4444":"#f59e0b"}}>{fmt(c.saldo)}</td>
+                      <td style={{padding:"10px 10px"}}>
+                        <span style={{fontSize:"0.72rem",padding:"2px 8px",borderRadius:"20px",fontWeight:700,
+                          background:vencido?"#7f1d1d":cercano?"#78350f":"#1a1f2e",
+                          color:vencido?"#fca5a5":cercano?"#fbbf24":"#6b7280"}}>
+                          {c.saldo===0?"—":c.dias+" días"}
+                        </span>
+                      </td>
+                      <td style={{padding:"10px 10px"}}>
+                        <div style={{display:"flex",gap:"4px"}}>
+                          <button onClick={()=>setVistaCliente(c.key)} style={{...S.btnSm(false,"#6366f1"),fontSize:"0.68rem"}}>Ver</button>
+                          {c.saldo>0&&<button onClick={()=>setModalPago({clienteKey:c.key,clienteNombre:c.nombre,saldoPendiente:c.saldo})} style={{...S.btnSm(false,"#10b981"),fontSize:"0.68rem"}}>Cobrar</button>}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        );
+        return(
+          <>
+            {/* Sección A cobrar con logística (Efectivo/COD) */}
+            {clientesFiltradosLog.length>0&&(
+              <div style={{marginBottom:"1.25rem"}}>
+                <div style={{display:"flex",alignItems:"center",gap:"0.6rem",marginBottom:"0.5rem"}}>
+                  <span style={{fontSize:"0.72rem",fontWeight:700,color:"#f59e0b",textTransform:"uppercase",letterSpacing:"0.08em"}}>💵 A cobrar con logística</span>
+                  <span style={{fontSize:"0.7rem",color:"#6b7280"}}>{clientesFiltradosLog.length} cliente{clientesFiltradosLog.length!==1?"s":""}</span>
+                  <span style={{marginLeft:"auto",fontSize:"0.78rem",fontWeight:800,color:"#f59e0b"}}>{fmt(clientesFiltradosLog.reduce((s,c)=>s+c.saldo,0))}</span>
+                </div>
+                {renderTablaClientes(clientesFiltradosLog)}
+              </div>
+            )}
+            {/* Sección Cuenta corriente (TN CC / Manual CC) */}
+            {clientesFiltradosCC.length>0&&(
+              <div>
+                <div style={{display:"flex",alignItems:"center",gap:"0.6rem",marginBottom:"0.5rem"}}>
+                  <span style={{fontSize:"0.72rem",fontWeight:700,color:"#818cf8",textTransform:"uppercase",letterSpacing:"0.08em"}}>📋 Cuenta corriente</span>
+                  <span style={{fontSize:"0.7rem",color:"#6b7280"}}>{clientesFiltradosCC.length} cliente{clientesFiltradosCC.length!==1?"s":""}</span>
+                  <span style={{marginLeft:"auto",fontSize:"0.78rem",fontWeight:800,color:"#818cf8"}}>{fmt(clientesFiltradosCC.reduce((s,c)=>s+c.saldo,0))}</span>
+                </div>
+                {renderTablaClientes(clientesFiltradosCC)}
+              </div>
+            )}
             {clientesFiltrados.length===0&&(
-              <tr><td colSpan={7} style={{padding:"1.5rem",textAlign:"center",color:"#4b5563"}}>
+              <div style={{...S.card,padding:"1.5rem",textAlign:"center",color:"#4b5563"}}>
                 <div>Sin resultados</div>
                 {busqueda&&clientes.length>0&&(
                   <details style={{marginTop:"0.8rem",textAlign:"left",maxWidth:"600px",margin:"0.8rem auto 0"}}>
@@ -5450,51 +5531,11 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
                     </div>
                   </details>
                 )}
-              </td></tr>
+              </div>
             )}
-            {clientesFiltrados.map((c,i)=>{
-              const vencido=c.saldo>0&&c.dias>=c.limite;
-              const cercano=c.saldo>0&&c.dias>=(c.limite*0.7)&&c.dias<c.limite;
-              return(
-                <tr key={c.key} style={{background:vencido?"#1c0a0a":i%2===0?"transparent":"#0d1119",borderBottom:"1px solid #1a1f2e"}}>
-                  <td style={{padding:"10px 10px"}}>
-                    <div style={{fontWeight:600,fontSize:"0.82rem",color:"#e5e7eb"}}>{c.nombre}</div>
-                    <div style={{fontSize:"0.68rem",color:"#4b5563",marginTop:"1px"}}>{c.pendienteCount} pedido{c.pendienteCount!==1?"s":""} pendiente{c.pendienteCount!==1?"s":""}</div>
-                  </td>
-                  <td style={{padding:"10px 10px"}}>
-                    <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>
-                      {c.logisticas.map(l=><span key={l} style={{fontSize:"0.65rem",padding:"1px 6px",background:lc[l]?.color+"22",color:lc[l]?.color,borderRadius:"4px",fontWeight:700}}>{l}</span>)}
-                    </div>
-                  </td>
-                  <td style={{padding:"10px 10px"}}>
-                    {(()=>{
-                      const facts=[...new Set(c.envios.filter(e=>e.nroFactura&&calcPagEnvio&&saldoTolerante(e._deuda?.monto,calcPagEnvio(e.id))>0).map(e=>e.nroFactura))];
-                      return facts.length>0
-                        ?<div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{facts.map(f=><span key={f} style={{fontSize:"0.68rem",padding:"1px 7px",background:"#130d2a",color:"#c4b5fd",borderRadius:"4px",border:"1px solid #4c1d95",fontWeight:600,fontFamily:"monospace"}}>{f}</span>)}</div>
-                        :<span style={{color:"#374151",fontSize:"0.72rem"}}>—</span>;
-                    })()}
-                  </td>
-                  <td style={{padding:"10px 10px",textAlign:"right",color:c.cobradoConSaldo>0?"#10b981":"#4b5563"}}>{c.cobradoConSaldo>0?fmt(c.cobradoConSaldo):"—"}</td>
-                  <td style={{padding:"10px 10px",textAlign:"right",fontWeight:800,color:c.saldo===0?"#10b981":vencido?"#ef4444":"#f59e0b"}}>{fmt(c.saldo)}</td>
-                  <td style={{padding:"10px 10px"}}>
-                    <span style={{fontSize:"0.72rem",padding:"2px 8px",borderRadius:"20px",fontWeight:700,
-                      background:vencido?"#7f1d1d":cercano?"#78350f":"#1a1f2e",
-                      color:vencido?"#fca5a5":cercano?"#fbbf24":"#6b7280"}}>
-                      {c.saldo===0?"—":c.dias+" días"}
-                    </span>
-                  </td>
-                  <td style={{padding:"10px 10px"}}>
-                    <div style={{display:"flex",gap:"4px"}}>
-                      <button onClick={()=>setVistaCliente(c.key)} style={{...S.btnSm(false,"#6366f1"),fontSize:"0.68rem"}}>Ver</button>
-                      {c.saldo>0&&<button onClick={()=>setModalPago({clienteKey:c.key,clienteNombre:c.nombre,saldoPendiente:c.saldo})} style={{...S.btnSm(false,"#10b981"),fontSize:"0.68rem"}}>Cobrar</button>}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+          </>
+        );
+      })()}
 
       {/* Modal registro de pago */}
       {modalPago&&<ModalRegistrarPago {...modalPago} onClose={()=>setModalPago(null)} envios={envios.filter(e=>{const deuda=getDeudaEnvio(e);return deuda&&getClienteKey(e)===modalPago.clienteKey;})} pagos={pagos.filter(p=>p.clienteKey===modalPago.clienteKey)} getDeudaEnvio={getDeudaEnvio} sesion={sesion}/>}
