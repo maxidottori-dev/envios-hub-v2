@@ -7701,7 +7701,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
       setArmadorActivo(null);setSesionContador(0);
       setResultado({ok:false,msg:"Armador desactivado por inactividad."});
       setTimeout(()=>setResultado(null),4000);
-      if(inputRef.current)inputRef.current.focus();
+      if(inputRef.current)inputRef.current.blur();
     },10000);
   },[]);
 
@@ -7782,7 +7782,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
       setScanPendiente(null);setModoEdicion(false);
       setResultado({ok:false,msg:"Tiempo agotado. Escaneá de nuevo."});
       setTimeout(()=>setResultado(null),5000);
-      if(inputRef.current)inputRef.current.focus();
+      if(inputRef.current)inputRef.current.blur();
     },30000);
   },[]);
 
@@ -8006,7 +8006,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
         setMatchesPendientes([]);
         setResultado({ok:false,msg:"Tiempo agotado. Escaneá de nuevo."});
         setTimeout(()=>setResultado(null),5000);
-        if(inputRef.current)inputRef.current.focus();
+        if(inputRef.current)inputRef.current.blur();
       },30000);
       return;
     }
@@ -8043,7 +8043,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
       setMatchesPendientes([]);
       setResultado({ok:false,msg:"Tiempo agotado. Escaneá de nuevo."});
       setTimeout(()=>setResultado(null),5000);
-      if(inputRef.current)inputRef.current.focus();
+      if(inputRef.current)inputRef.current.blur();
     },30000);
   },[envios,colectas,colectasArmadasHoy,otrosPedidos,armadorActivo,ejecutarArmado,ejecutarArmadoColecta,ejecutarArmadoOtro,abrirPanelArmador,resetArmadorTimer,showOverlay]);
 
@@ -10331,6 +10331,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   const inputRef=useRef(null);
   const videoRef=useRef(null);
   const canvasRef=useRef(null);
+  const scanLockRef=useRef(0); // ms del último scan exitoso — bloquea re-escaneos accidentales por 1500ms
 
   // Backup de sesión activa en Firestore (debounced 3s) para resiliencia ante crash de localStorage
   useEffect(()=>{
@@ -10457,6 +10458,8 @@ function TabSalida({envios,setEnvios,lc,sesion}){
     if(!srch)return;
     setQrInput("");
     if(!logSel||!turnoSel.length){beepError();return;}
+    // Bloqueo anti-re-escaneo: ignorar nuevos scans 1500ms después del último exitoso
+    if(Date.now()-scanLockRef.current<1500)return;
 
     const nums=srch.replace(/\D/g,"");
     // Buscar en TODOS los envíos del día no cancelados (incluye sin_asignar) para dar errores específicos
@@ -10475,7 +10478,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
       beepError();
       setResultado({ok:false,msg:"Pedido no encontrado: "+srch});
       setTimeout(()=>setResultado(null),4000);
-      if(inputRef.current)inputRef.current.focus();
+      if(inputRef.current)inputRef.current.blur();
       return;
     }
 
@@ -10489,7 +10492,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         trans:"",
         color:"#f59e0b",
       });
-      if(inputRef.current)inputRef.current.focus();
+      if(inputRef.current)inputRef.current.blur();
       return;
     }
 
@@ -10504,7 +10507,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         trans:best.trans,
         color:lcData.color||"#ef4444",
       });
-      if(inputRef.current)inputRef.current.focus();
+      if(inputRef.current)inputRef.current.blur();
       return;
     }
 
@@ -10521,7 +10524,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         turno:best.turno,
         color:turnoC.c||"#ef4444",
       });
-      if(inputRef.current)inputRef.current.focus();
+      if(inputRef.current)inputRef.current.blur();
       return;
     }
 
@@ -10530,7 +10533,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
       beepNoPrepared();
       setResultado({ok:false,msg:"⚠ Sin preparar: "+( best.nroOrdenTN?"#"+best.nroOrdenTN:best.direccion)});
       setTimeout(()=>setResultado(null),5000);
-      if(inputRef.current)inputRef.current.focus();
+      if(inputRef.current)inputRef.current.blur();
       return;
     }
 
@@ -10539,7 +10542,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
       beepYaDespachado();
       setResultado({ok:false,msg:"Ya despachado en esta sesión: "+(best.nroOrdenTN?"#"+best.nroOrdenTN:best.direccion)});
       setTimeout(()=>setResultado(null),4000);
-      if(inputRef.current)inputRef.current.focus();
+      if(inputRef.current)inputRef.current.blur();
       return;
     }
 
@@ -10552,6 +10555,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
     }
 
     // ✅ Agregar a la sesión (el despacho se confirma al cerrar)
+    scanLockRef.current=Date.now(); // lock anti-re-escaneo por 1500ms
     setSesionIds(prev=>[best.id,...prev]);
     beepOK();
     setQrInput("");
@@ -11486,6 +11490,11 @@ function TabSalida({envios,setEnvios,lc,sesion}){
           <div style={{marginTop:"0.75rem",padding:"0.65rem 0.9rem",borderRadius:"8px",fontWeight:600,fontSize:"0.85rem",
             background:resultado.ok?"#041f14":"#1c0505",border:`1px solid ${resultado.ok?ok:err}`,color:resultado.ok?"#34d399":"#fca5a5"}}>
             {resultado.msg}
+            {resultado.ok===true&&(resultado.envio?.localidad||resultado.envio?.ciudad||resultado.envio?.partido)&&(
+              <div style={{fontSize:"0.75rem",fontWeight:400,marginTop:"2px",opacity:0.8}}>
+                {resultado.envio.localidad||resultado.envio.ciudad||resultado.envio.partido}
+              </div>
+            )}
           </div>
         )}
       </div>
