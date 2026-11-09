@@ -4888,17 +4888,24 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
     return null;
   };
 
-  // Agrupar envios con deuda por cliente
+  // Agrupar envios con deuda por cliente — tres mapas: combinado (para métricas), logística y CC
   const clientesMap={};
+  const clientesMapLog={}; // Efectivo/COD
+  const clientesMapCC={};  // TN CC / Manual CC
+  const addToMap=(map,e,deuda)=>{
+    const key=getClienteKey(e);
+    if(!map[key])map[key]={key,nombre:getClienteNombre(e),envios:[],deudaTotal:0,logisticas:new Set(),fechaMin:e.fecha||""};
+    map[key].envios.push({...e,_deuda:deuda});
+    map[key].deudaTotal+=deuda.monto;
+    if(deuda.logistica)map[key].logisticas.add(deuda.logistica);
+    if(e.fecha&&e.fecha<map[key].fechaMin)map[key].fechaMin=e.fecha;
+  };
   enviosEfectivos.forEach(e=>{
     const deuda=getDeudaEnvio(e);
     if(!deuda)return;
-    const key=getClienteKey(e);
-    if(!clientesMap[key])clientesMap[key]={key,nombre:getClienteNombre(e),envios:[],deudaTotal:0,logisticas:new Set(),fechaMin:e.fecha||""};
-    clientesMap[key].envios.push({...e,_deuda:deuda});
-    clientesMap[key].deudaTotal+=deuda.monto;
-    if(deuda.logistica)clientesMap[key].logisticas.add(deuda.logistica);
-    if(e.fecha&&e.fecha<clientesMap[key].fechaMin)clientesMap[key].fechaMin=e.fecha;
+    addToMap(clientesMap,e,deuda);
+    if(deuda.tipo==="Efectivo")addToMap(clientesMapLog,e,deuda);
+    else addToMap(clientesMapCC,e,deuda);
   });
 
   // Calcular pagos por cliente
@@ -4923,12 +4930,9 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
     return s;
   },0);
 
-  // Lista de clientes con saldo
-  const clientes=Object.values(clientesMap).map(c=>{
-    const cobradoTotal=pagosPorCliente[c.key]||0; // total histórico de pagos del cliente
-    const dias=diasDeuda(c.fechaMin);
-    const limite=limites[c.key]||15;
-    // Saldo real = suma de saldos individuales por pedido (no deudaTotal - pagos totales)
+  // Helper para construir lista de clientes con saldo desde cualquier mapa
+  const buildClientes=(map)=>Object.values(map).map(c=>{
+    const cobradoTotal=pagosPorCliente[c.key]||0;
     let saldo=0,cobradoConSaldo=0,pendienteCount=0,fechaMinPendiente="";
     c.envios.forEach(e=>{
       const pagEnvio=calcPagEnvio(e.id);
@@ -4941,17 +4945,31 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
         if(fe&&(!fechaMinPendiente||fe<fechaMinPendiente))fechaMinPendiente=fe;
       }
     });
-    // COBRADO que se muestra = lo que efectivamente redujo deuda en pedidos activos
     const cobrado=c.deudaTotal-saldo;
     const diasReal=diasDeuda(fechaMinPendiente||c.fechaMin);
-    return{...c,cobrado,cobradoConSaldo,cobradoTotal,pendienteCount,saldo,dias:diasReal,limite,logisticas:[...c.logisticas]};
+    return{...c,cobrado,cobradoConSaldo,cobradoTotal,pendienteCount,saldo,dias:diasReal,limite:limites[c.key]||15,logisticas:[...c.logisticas]};
   });
+
+  // Lista de clientes con saldo (combinada para métricas, separada para las tablas)
+  const clientes=buildClientes(clientesMap);
+  const clientesLog=buildClientes(clientesMapLog);
+  const clientesCC=buildClientes(clientesMapCC);
 
   const fmt=(n)=>"$"+Math.round(n).toLocaleString("es-AR");
   const hoy=new Date();hoy.setHours(0,0,0,0);
 
-  // Filtros + sort
+  // Lista combinada para métricas del top (sin duplicar sort)
   const clientesFiltrados=clientes.filter(c=>{
+    if(filtro==="deuda"&&c.saldo===0)return false;
+    if(filtro==="vencidos"&&c.dias<c.limite)return false;
+    if(filtro==="saldados"&&c.saldo>0)return false;
+    if(filtro==="fc_pend"&&!(facturaClientes[c.key]&&c.envios.some(e=>e.trans&&!e.nroFactura&&e.estado!=="cancelado")))return false;
+    if(busqueda){const palabras=norm(busqueda).split(/\s+/).filter(Boolean);const haystack=norm([c.nombre,...c.envios.flatMap(e=>[e.direccion,e.localidad,e.partido,e.cp,String(e.nroOrdenTN||""),e.nroSeguimiento,String(e.nroVentaML||""),e.id,e.clienteNombre].filter(Boolean))].join(" "));const ok=palabras.every(p=>haystack.includes(p));if(!ok)return false;}
+    return true;
+  });
+
+  // Filtrar y ordenar cada sección por separado (así un cliente con historial mixto no aparece duplicado)
+  const aplicarFiltroSort=(lista)=>lista.filter(c=>{
     if(filtro==="deuda"&&c.saldo===0)return false;
     if(filtro==="vencidos"&&c.dias<c.limite)return false;
     if(filtro==="saldados"&&c.saldo>0)return false;
@@ -4971,10 +4989,8 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
     if(va>vb)return dir==="asc"?1:-1;
     return 0;
   });
-
-  // Dividir en dos secciones: logística (Efectivo/COD) y cuenta corriente (TN CC / Manual CC)
-  const clientesFiltradosLog=clientesFiltrados.filter(c=>c.envios.some(e=>e._deuda?.tipo==="Efectivo"));
-  const clientesFiltradosCC=clientesFiltrados.filter(c=>c.envios.some(e=>e._deuda?.tipo!=="Efectivo"));
+  const clientesFiltradosLog=aplicarFiltroSort(clientesLog);
+  const clientesFiltradosCC=aplicarFiltroSort(clientesCC);
 
   // Metricas globales
   const deudaTotal=clientesFiltrados.reduce((s,c)=>s+c.saldo,0);
