@@ -5492,26 +5492,26 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
         );
         return(
           <>
-            {/* Sección A cobrar con logística (Efectivo/COD) */}
-            {clientesFiltradosLog.length>0&&(
-              <div style={{marginBottom:"1.25rem"}}>
-                <div style={{display:"flex",alignItems:"center",gap:"0.6rem",marginBottom:"0.5rem"}}>
-                  <span style={{fontSize:"0.72rem",fontWeight:700,color:"#f59e0b",textTransform:"uppercase",letterSpacing:"0.08em"}}>💵 A cobrar con logística</span>
-                  <span style={{fontSize:"0.7rem",color:"#6b7280"}}>{clientesFiltradosLog.length} cliente{clientesFiltradosLog.length!==1?"s":""}</span>
-                  <span style={{marginLeft:"auto",fontSize:"0.78rem",fontWeight:800,color:"#f59e0b"}}>{fmt(clientesFiltradosLog.reduce((s,c)=>s+c.saldo,0))}</span>
-                </div>
-                {renderTablaClientes(clientesFiltradosLog)}
-              </div>
-            )}
             {/* Sección Cuenta corriente (TN CC / Manual CC) */}
             {clientesFiltradosCC.length>0&&(
-              <div>
+              <div style={{marginBottom:"1.25rem"}}>
                 <div style={{display:"flex",alignItems:"center",gap:"0.6rem",marginBottom:"0.5rem"}}>
                   <span style={{fontSize:"0.72rem",fontWeight:700,color:"#818cf8",textTransform:"uppercase",letterSpacing:"0.08em"}}>📋 Cuenta corriente</span>
                   <span style={{fontSize:"0.7rem",color:"#6b7280"}}>{clientesFiltradosCC.length} cliente{clientesFiltradosCC.length!==1?"s":""}</span>
                   <span style={{marginLeft:"auto",fontSize:"0.78rem",fontWeight:800,color:"#818cf8"}}>{fmt(clientesFiltradosCC.reduce((s,c)=>s+c.saldo,0))}</span>
                 </div>
                 {renderTablaClientes(clientesFiltradosCC)}
+              </div>
+            )}
+            {/* Sección A cobrar con logística (Efectivo/COD) */}
+            {clientesFiltradosLog.length>0&&(
+              <div>
+                <div style={{display:"flex",alignItems:"center",gap:"0.6rem",marginBottom:"0.5rem"}}>
+                  <span style={{fontSize:"0.72rem",fontWeight:700,color:"#f59e0b",textTransform:"uppercase",letterSpacing:"0.08em"}}>💵 A cobrar con logística</span>
+                  <span style={{fontSize:"0.7rem",color:"#6b7280"}}>{clientesFiltradosLog.length} cliente{clientesFiltradosLog.length!==1?"s":""}</span>
+                  <span style={{marginLeft:"auto",fontSize:"0.78rem",fontWeight:800,color:"#f59e0b"}}>{fmt(clientesFiltradosLog.reduce((s,c)=>s+c.saldo,0))}</span>
+                </div>
+                {renderTablaClientes(clientesFiltradosLog)}
               </div>
             )}
             {clientesFiltrados.length===0&&(
