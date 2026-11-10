@@ -11046,7 +11046,6 @@ function TabSalida({envios,setEnvios,lc,sesion}){
                 setTurnoSel(Array.isArray(t)?t:t?[t]:[]);
                 setSesionIds(ids);
                 setFecha(sesionGuardadaOffer.fecha);
-                if(ids.length>0){setEnvios(pv=>pv.map(e=>ids.includes(e.id)?{...e,despachado:true}:e));}
                 setSesionGuardadaOffer(null);
               }} style={{width:"100%",padding:"0.65rem",borderRadius:"8px",background:"#166534",border:"none",color:"#fff",fontWeight:700,fontSize:"0.85rem",cursor:"pointer",marginBottom:"6px"}}>
                 ▶ Continuar sesión
