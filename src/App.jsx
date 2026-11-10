@@ -10133,6 +10133,7 @@ function TabOtrosPedidos({otrosPedidos=[],sesion,esAdmin=false,configExpedicion=
         fechaVenta:p.fechaVenta,fecha:convFecha,turno:convTurno,
         trans:"",pagoEstado:p.pagoEstado,
         estado:armadorFinal?"preparado":"sin_asignar",
+        preparado:!!armadorFinal, // boolean que usa TabSalida para marcar preparado
         tarifaLog:0,bultos:convBultos||1,cambio:null,retiro:null,
         observaciones:`Convertido de ${TIPO_LABEL[p.tipoOtro]||p.tipoOtro} #${p.nroOrdenTN}`,
         metodEnvio:p.metodEnvio,fulfillmentId:p.fulfillmentId||null,
