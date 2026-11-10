@@ -11327,12 +11327,33 @@ function TabSalida({envios,setEnvios,lc,sesion}){
       // Limpiar sesión activa del localStorage y Firestore
       localStorage.removeItem("salida_sesion_activa");
       deleteDoc(doc(db,"sesionesSalidaActiva","activa_"+(sesion?.id||"anon"))).catch(()=>{});
-      await addDoc(collection(db,"sesionesSalida"),{
+      // ── Paso 1: persistir despachado en cada envío (best effort — independiente)
+      Promise.all(despachados_cierre.map(e=>
+        updateDoc(doc(db,"envios",e.id),{
+          despachado:true,
+          despachoTs:ts,
+          despachoLogistica:logSel,
+          despachoPor,
+        }).catch(err=>console.error("Error persistiendo despachado:",e.id,err))
+      )).then(()=>console.log("despacho persistido:",despachados_cierre.length,"envíos"));
+      // ── Paso 2: notificar TN (best effort — independiente del addDoc)
+      const conTN=despachados_cierre.filter(e=>e.origen==="Tienda Nube"&&(e.idTN||e.id));
+      if(conTN.length>0){
+        Promise.all(conTN.map(e=>{
+          const orderTNId=e.idTN||e.id;
+          return fetch("/api/marcar-enviado-tn",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({orderTNId})})
+            .then(r=>r.json().catch(()=>({})))
+            .then(d=>console.log("TN dispatch result",orderTNId,d))
+            .catch(err=>console.warn("TN dispatch warn",orderTNId,err));
+        })).then(()=>console.log("TN dispatch completado:",conTN.length,"pedidos"));
+      }
+      // ── Paso 3: guardar sesión en Firestore (best effort — no bloquea; firma puede ser grande)
+      // La firma puede exceder el límite de 1MB de Firestore → guardamos sin firma si falla
+      const sesionData={
         fecha,logistica:logSel,turno:turnoSel,operador,firmante:firmanteNombre||null,
         creadoEn:new Date().toISOString(),
         totalPedidos:despachados_cierre.length,totalFlex,totalNoFlex,totalBultos,
         totalPendientes:lotePend.length,
-        firmaDataUrl:conPDF&&firmaData?firmaData:null,
         enviosIds:despachados_cierre.map(e=>e.id),
         enviosDetalle:despachados_cierre.map(e=>({
           id:e.id,direccion:e.direccion,ciudad:e.ciudad||e.localidad||"",bultos:e.bultos||1,
@@ -11345,27 +11366,16 @@ function TabSalida({envios,setEnvios,lc,sesion}){
           nroOrdenTN:e.nroOrdenTN||null,
           nota:notasPendientes[e.id]||null,
         })),
+      };
+      addDoc(collection(db,"sesionesSalida"),{
+        ...sesionData,
+        firmaDataUrl:conPDF&&firmaData?firmaData:null,
+      }).catch(err=>{
+        console.warn("Error guardando sesión (posiblemente firma muy grande), reintentando sin firma:",err.message);
+        // Si falló (ej. firma supera 1MB de Firestore), guardar sin firma
+        addDoc(collection(db,"sesionesSalida"),{...sesionData,firmaDataUrl:null})
+          .catch(err2=>console.error("Error guardando sesión sin firma:",err2));
       });
-      // Persistir despachado en Firestore (best effort — no bloquea el cierre)
-      Promise.all(despachados_cierre.map(e=>
-        updateDoc(doc(db,"envios",e.id),{
-          despachado:true,
-          despachoTs:ts,
-          despachoLogistica:logSel,
-          despachoPor,
-        }).catch(err=>console.error("Error persistiendo despachado:",e.id,err))
-      )).then(()=>console.log("despacho persistido:",despachados_cierre.length,"envíos"));
-      // Notificar TN: marcar como enviado (best effort — no bloquea el cierre)
-      const conTN=despachados_cierre.filter(e=>e.origen==="Tienda Nube"&&(e.idTN||e.id));
-      if(conTN.length>0){
-        Promise.all(conTN.map(e=>{
-          const orderTNId=e.idTN||e.id;
-          return fetch("/api/marcar-enviado-tn",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({orderTNId})})
-            .then(r=>r.json().catch(()=>({})))
-            .then(d=>console.log("TN dispatch result",orderTNId,d))
-            .catch(err=>console.warn("TN dispatch warn",orderTNId,err));
-        })).then(()=>console.log("TN dispatch completado:",conTN.length,"pedidos"));
-      }
     }catch(err){console.error("Error cierre sesión:",err);}
     finally{setGuardandoCierre(false);}
     liberarLogistica();
