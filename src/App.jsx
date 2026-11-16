@@ -11323,18 +11323,21 @@ function TabSalida({envios,setEnvios,lc,sesion}){
       }
       // Guardar firmante por logística para autocompletar en próximas sesiones
       if(firmanteNombre)localStorage.setItem(`salida_firmante_${logSel}`,firmanteNombre);
-      // Limpiar sesión activa del localStorage y Firestore
-      localStorage.removeItem("salida_sesion_activa");
-      deleteDoc(doc(db,"sesionesSalidaActiva","activa_"+(sesion?.id||"anon"))).catch(()=>{});
-      // ── Paso 1: persistir despachado en cada envío (best effort — independiente)
-      Promise.all(despachados_cierre.map(e=>
+      // ── Paso 1: persistir despachado en Firestore ANTES de generar el PDF.
+      // Si se hace después, el usuario puede cerrar la pestaña al ver la descarga
+      // y los updateDoc quedan incompletos (race condition que deja envíos "pendientes").
+      await Promise.all(despachados_cierre.map(e=>
         updateDoc(doc(db,"envios",e.id),{
           despachado:true,
           despachoTs:ts,
           despachoLogistica:logSel,
           despachoPor,
         }).catch(err=>console.error("Error persistiendo despachado:",e.id,err))
-      )).then(()=>console.log("despacho persistido:",despachados_cierre.length,"envíos"));
+      ));
+      console.log("despacho persistido:",despachados_cierre.length,"envíos");
+      // Limpiar sesión activa del localStorage y Firestore
+      localStorage.removeItem("salida_sesion_activa");
+      deleteDoc(doc(db,"sesionesSalidaActiva","activa_"+(sesion?.id||"anon"))).catch(()=>{});
       // ── Paso 2: notificar TN (best effort — independiente del addDoc)
       const conTN=despachados_cierre.filter(e=>e.origen==="Tienda Nube"&&(e.idTN||e.id));
       if(conTN.length>0){
@@ -11759,13 +11762,15 @@ export default function App(){
       .then(r=>r.json())
       .then(d=>console.log("recover-cobranzas-efectivo:",d))
       .catch(err=>console.warn("recover-cobranzas-efectivo error:",err));
-    // Sync periódico de pagos cada 2 minutos (backup al webhook de TN)
+    // Sync periódico de pagos cada 15 minutos (backup al webhook de TN).
+    // Solo corre si la pestaña está a la vista, para no gastar CPU de Vercel con pestañas olvidadas.
     const syncInterval=setInterval(()=>{
+      if(document.visibilityState!=="visible")return;
       fetch("/api/sync-pagos-pendientes",{method:"POST"})
         .then(r=>r.json())
         .then(d=>{if(d.actualizados>0)console.log("sync-pagos-pendientes [periodic]:",d);})
         .catch(()=>{});
-    },2*60*1000);
+    },15*60*1000);
     return()=>{unsub();clearInterval(syncInterval);};
   },[]);
   useEffect(()=>{

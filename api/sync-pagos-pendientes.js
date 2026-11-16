@@ -39,11 +39,22 @@ export default async function handler(req, res) {
     snapEfectivo = { docs: [] };
   }
 
-  // Combinar sin duplicados
+  // Solo revisar pedidos de los últimos 30 días (los más viejos ya no cambian)
+  const limite = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  const esReciente = (data) => !data.fechaVenta || data.fechaVenta >= limite;
+
+  // Combinar sin duplicados, salteando los ya cobrados, cancelados y los viejos
+  // (así no consultamos a TN por pedidos que ya están resueltos)
   const vistos = new Set();
   const todos = [];
   for (const d of [...snapPendientes.docs, ...snapEfectivo.docs]) {
-    if (!vistos.has(d.id)) { vistos.add(d.id); todos.push(d); }
+    if (vistos.has(d.id)) continue;
+    vistos.add(d.id);
+    const data = d.data();
+    if (data.cobranzaRecibida === true) continue;
+    if (data.estado === "cancelado") continue;
+    if (!esReciente(data)) continue;
+    todos.push(d);
   }
 
   if (todos.length === 0) return res.status(200).json({ ok: true, actualizados: 0, revisados: 0 });
