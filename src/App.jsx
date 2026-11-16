@@ -551,7 +551,9 @@ function parsearExcel(file) {
           // ML puede exportar la ciudad como "Ciudad" o "Localidad" según la versión del reporte
           const iCiudadRaw=col("ciudad");const iLocalidad=col("localidad");
           const iCiudad=iCiudadRaw>=0?iCiudadRaw:iLocalidad;
-          const iCP=col("postal"),iSeg=col("seguimiento");
+          const iCP=col("postal");
+          // ML renombró la columna: buscar "Identificador de envío" primero, fallback a "seguimiento"
+          const iSeg=col("identificador de env")>=0?col("identificador de env"):col("seguimiento");
           if(iDir<0) throw new Error("No se encontro la columna Domicilio.");
           for(let i=hFila+1;i<filas.length;i++){
             const r=filas[i];
@@ -1520,6 +1522,8 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
   const [filTipoEntrega,setFilTipoEntrega]=useState("TODOS");
   const [soloReprog,setSoloReprog]=useState(false);
   const [soloSinEtiqueta,setSoloSinEtiqueta]=useState(false);
+  const [soloSinPreparar,setSoloSinPreparar]=useState(false);
+  const [soloSinDespachar,setSoloSinDespachar]=useState(false);
   const [busqueda,setBusqueda]=useState("");
   const [editId,setEditId]=useState(null);
   const [seleccionados,setSeleccionados]=useState(new Set());
@@ -1570,6 +1574,8 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
     }
     if(soloReprog&&!e.reprogramado)return false;
     if(soloSinEtiqueta&&(e.origen!=="ML"||/^4\d{10}$/.test(e.nroSeguimiento||"")))return false;
+    if(soloSinPreparar&&(e.preparado||e.despachado||!e.trans||e.estado==="cancelado"))return false;
+    if(soloSinDespachar&&(!e.preparado||e.despachado||e.estado==="cancelado"))return false;
     if(busqueda){const haystack=norm([e.direccion,e.localidad,e.partido,e.cp,e.id,e.clienteNombre,e.nroSeguimiento,e.nroOrdenTN].filter(Boolean).join(" "));const palabras=norm(busqueda).split(/\s+/).filter(Boolean);return palabras.every(p=>haystack.includes(p));}
     return true;
   });
@@ -1699,6 +1705,8 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
           </>}
           <button onClick={()=>setSoloReprog(!soloReprog)} style={{...S.btnSm(soloReprog,"#fbbf24"),marginLeft:mostrarResumenFlex?"0":"auto"}}>⟳ Reprog.</button>
           {mostrarResumenFlex&&<button onClick={()=>setSoloSinEtiqueta(!soloSinEtiqueta)} style={S.btnSm(soloSinEtiqueta,"#f97316")}>⚠ Sin etiqueta</button>}
+          <button onClick={()=>{setSoloSinPreparar(v=>!v);setSoloSinDespachar(false);}} style={S.btnSm(soloSinPreparar,"#fbbf24")}>📦 Sin preparar</button>
+          <button onClick={()=>{setSoloSinDespachar(v=>!v);setSoloSinPreparar(false);}} style={S.btnSm(soloSinDespachar,"#60a5fa")}>🚚 Sin despachar</button>
           <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="🔍 Buscar..." style={{...S.input,width:"190px",marginLeft:mostrarResumenFlex?"auto":"0"}}/>
           {enviosHistTab===null
             ?<button onClick={cargarHistoricoTab} disabled={loadingHistTab} title="Carga toda la historia (antes de 60 días)" style={{...S.btnSm(false),background:"#1e1b4b",borderColor:"#4338ca",color:"#a5b4fc",fontSize:"0.65rem",whiteSpace:"nowrap"}}>{loadingHistTab?"⏳":"🔍 +Histórico"}</button>
