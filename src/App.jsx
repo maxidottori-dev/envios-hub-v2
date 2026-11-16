@@ -1975,9 +1975,10 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                   </div>
                   {e.preparado
                     ?<span style={{color:"#60a5fa",fontSize:"0.68rem",fontWeight:700}}>{e.bultos||1} bulto{(e.bultos||1)===1?"":"s"}</span>
-                    :<span style={{color:"#374151",fontSize:"0.68rem",fontWeight:600}}>No Preparado</span>
+                    :<span style={{background:"#1c1200",color:"#fbbf24",border:"1px solid #78350f",borderRadius:"4px",padding:"0 5px",fontSize:"0.68rem",fontWeight:700}}>📦 Sin preparar</span>
                   }
                   {e.preparado&&e.armadorNombre&&<span style={{color:"#10b981",fontSize:"0.68rem",fontWeight:700}}>📦 {e.armadorNombre}</span>}
+                  {e.preparado&&!e.despachado&&<span style={{background:"#0c1e36",color:"#60a5fa",border:"1px solid #1e40af",borderRadius:"4px",padding:"0 5px",fontSize:"0.68rem",fontWeight:700}}>🚚 Sin despachar</span>}
                   {e.despachado&&e.despachoTs&&<span style={{color:"#10b981",fontSize:"0.68rem",fontWeight:700}}>🚚 {fmtHora(e.despachoTs)}{e.despachoPor?" · "+e.despachoPor:""}</span>}
                   {imp>0&&puedeVer(sesion,"accion_verimportes")&&<span style={{color:e.importeOverride>0?"#fbbf24":"#10b981",fontWeight:700,fontSize:"0.82rem"}}>{fmt(imp)}{e.importeOverride>0&&<span style={{fontSize:"0.62rem",opacity:.65,marginLeft:"2px"}}>*</span>}</span>}
                   {esTN&&e.importeOrden>0&&puedeVer(sesion,"accion_verimportes")&&<span style={{color:"#6b7280",fontSize:"0.7rem"}}>{fmt(e.importeOrden)}</span>}
