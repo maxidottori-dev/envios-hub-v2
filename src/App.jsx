@@ -11237,6 +11237,21 @@ function TabSalida({envios,setEnvios,lc,sesion}){
       const totalBultos=despachados_cierre.reduce((s,e)=>s+(e.bultos||1),0);
       const operador=sesion?.nombre||sesion?.usuario||sesion?.email||"";
       const firmanteNombre=firmante.trim();
+      // Guardar firmante por logística para autocompletar en próximas sesiones
+      if(firmanteNombre)localStorage.setItem(`salida_firmante_${logSel}`,firmanteNombre);
+      // ── Paso 1: persistir despachado en Firestore ANTES de generar el PDF.
+      // Si se hace después, el usuario puede cerrar la pestaña al ver la descarga
+      // y los updateDoc quedan incompletos (race condition que deja envíos "pendientes").
+      await Promise.all(despachados_cierre.map(e=>
+        updateDoc(doc(db,"envios",e.id),{
+          despachado:true,
+          despachoTs:ts,
+          despachoLogistica:logSel,
+          despachoPor,
+        }).catch(err=>console.error("Error persistiendo despachado:",e.id,err))
+      ));
+      console.log("despacho persistido:",despachados_cierre.length,"envíos");
+      // ── Paso 2: generar PDF (ya con Firestore actualizado — el usuario puede cerrar después)
       if(conPDF){
         const doc=new jsPDF();
         const W=doc.internal.pageSize.getWidth();
@@ -11332,24 +11347,10 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         doc.text(lineaFirma,60,y+9,{align:"center"});
         doc.save(`salida_${logSel}_${Array.isArray(turnoSel)?turnoSel.join("-"):turnoSel}_${fecha}.pdf`);
       }
-      // Guardar firmante por logística para autocompletar en próximas sesiones
-      if(firmanteNombre)localStorage.setItem(`salida_firmante_${logSel}`,firmanteNombre);
-      // ── Paso 1: persistir despachado en Firestore ANTES de generar el PDF.
-      // Si se hace después, el usuario puede cerrar la pestaña al ver la descarga
-      // y los updateDoc quedan incompletos (race condition que deja envíos "pendientes").
-      await Promise.all(despachados_cierre.map(e=>
-        updateDoc(doc(db,"envios",e.id),{
-          despachado:true,
-          despachoTs:ts,
-          despachoLogistica:logSel,
-          despachoPor,
-        }).catch(err=>console.error("Error persistiendo despachado:",e.id,err))
-      ));
-      console.log("despacho persistido:",despachados_cierre.length,"envíos");
       // Limpiar sesión activa del localStorage y Firestore
       localStorage.removeItem("salida_sesion_activa");
       deleteDoc(doc(db,"sesionesSalidaActiva","activa_"+(sesion?.id||"anon"))).catch(()=>{});
-      // ── Paso 2: notificar TN (best effort — independiente del addDoc)
+      // ── Paso 3: notificar TN (best effort — independiente del addDoc)
       const conTN=despachados_cierre.filter(e=>e.origen==="Tienda Nube"&&(e.idTN||e.id));
       if(conTN.length>0){
         Promise.all(conTN.map(e=>{
@@ -11360,7 +11361,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
             .catch(err=>console.warn("TN dispatch warn",orderTNId,err));
         })).then(()=>console.log("TN dispatch completado:",conTN.length,"pedidos"));
       }
-      // ── Paso 3: guardar sesión en Firestore (best effort — no bloquea; firma puede ser grande)
+      // ── Paso 4: guardar sesión en Firestore (best effort — no bloquea; firma puede ser grande)
       // La firma puede exceder el límite de 1MB de Firestore → guardamos sin firma si falla
       const sesionData={
         fecha,logistica:logSel,turno:turnoSel,operador,firmante:firmanteNombre||null,
