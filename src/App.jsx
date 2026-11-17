@@ -212,7 +212,9 @@ const parsearEtiquetasPDF=async(file)=>{
     // Regex robusta: soporta "Envio:" / "Envío:" / "Envio :" / "Envio\n:" (pdfjs puede separar "Envio" y ":" como items distintos)
     const nroMFinal=txt.match(/Env[ií]o\s*:\s*(\d+)(?:\s+(\d+))?/i);
     if(!nroMFinal){continue;}
-    const nroSeguimiento=nroMFinal[2]?(nroMFinal[1]+nroMFinal[2]).trim():nroMFinal[1].trim();
+    // Si group1 ya tiene 10+ dígitos es el número completo (nuevo formato ML: token unificado).
+    // Si tiene menos (ej 7 dígitos = formato viejo), combinar con group2.
+    const nroSeguimiento=nroMFinal[1].length>=10?nroMFinal[1].trim():(nroMFinal[2]?(nroMFinal[1]+nroMFinal[2]).trim():nroMFinal[1].trim());
     // Extraer Pack ID para buscar el ventaId (# de venta del Excel) desde armado
     const packM=txt.match(/Pack\s*ID:\s*(\d+)(?:[\s\n]+(\d+))?/i);
     const packId=packM?(packM[2]&&packM[1].length<13?packM[1]+packM[2]:packM[1]).trim():null;
