@@ -30,7 +30,7 @@ export default async function handler(req, res) {
       });
       if (resp.ok) {
         order = await resp.json();
-        console.log("WEBHOOK_FETCHED", JSON.stringify({ orderId: order.id, shipping: order.shipping_option || "", fulfillStatus: order.fulfillments?.[0]?.status || "" }));
+        console.log("WEBHOOK_FETCHED", JSON.stringify({ orderId: order.id, shipping: order.shipping_option || "", fulfillStatus: order.fulfillments?.[0]?.status || "", packagingStatus: order.packaging_status || order.fulfillment_status || "", orderStatus: order.status || "", paymentStatus: order.payment_status || "" }));
       } else {
         console.log("WEBHOOK_FETCH_FAIL", resp.status);
       }
