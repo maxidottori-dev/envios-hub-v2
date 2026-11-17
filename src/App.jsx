@@ -1246,7 +1246,7 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.5rem",marginTop:"0.5rem"}}>
             <div>
               <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Venta ML</div>
-              <div style={{...S.input,width:"100%",fontSize:"0.8rem",color:"#f59e0b",fontWeight:600,display:"flex",alignItems:"center"}}>{envio.id||"—"}</div>
+              <input value={e.nroVentaML||""} onChange={ev=>set("nroVentaML",ev.target.value)} style={{...S.input,width:"100%",fontSize:"0.8rem",color:"#f59e0b",fontWeight:600}} placeholder={envio.id||"Nro venta ML"}/>
             </div>
             <div>
               <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Nro. seguimiento</div>
@@ -1932,7 +1932,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                       return(
                         <div style={{marginBottom:"1px",overflow:"hidden"}}>
                           <div style={{display:"flex",gap:"6px",alignItems:"baseline",overflow:"hidden"}}>
-                            <span style={{color:"#fbbf24",fontWeight:700,fontSize:"0.82rem",flexShrink:0}}>🛒 {e.id}</span>
+                            <span style={{color:"#fbbf24",fontWeight:700,fontSize:"0.82rem",flexShrink:0}}>🛒 {e.nroVentaML||e.id}</span>
                             {nombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nombre}</span>}
                           </div>
                           <div style={{display:"flex",gap:"6px",alignItems:"center",marginTop:"2px",overflow:"hidden"}}>
@@ -1948,7 +1948,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                         {nombre&&<span style={{color:"#e5e7eb",fontWeight:600,fontSize:"0.82rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nombre}</span>}
                       </div>);
                     // Manual: muestra #nroPedido si tiene, sino e.id — en naranja igual que badge Manual
-                    const nroManual=e.nroOrdenTN?`#${e.nroOrdenTN}`:e.id;
+                    const nroManual=e.nroVentaML||(e.nroOrdenTN?`#${e.nroOrdenTN}`:e.id);
                     return(
                       <div style={{display:"flex",gap:"8px",alignItems:"baseline",marginBottom:"1px",overflow:"hidden"}}>
                         <span style={{color:"#f59e0b",fontWeight:700,fontSize:"0.82rem",flexShrink:0}}>{nroManual}</span>
@@ -4975,7 +4975,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
     if(filtro==="vencidos"&&c.dias<c.limite)return false;
     if(filtro==="saldados"&&c.saldo>0)return false;
     if(filtro==="fc_pend"&&!(facturaClientes[c.key]&&c.envios.some(e=>e.trans&&!e.nroFactura&&e.estado!=="cancelado")))return false;
-    if(busqueda){const palabras=norm(busqueda).split(/\s+/).filter(Boolean);const haystack=norm([c.nombre,...c.envios.flatMap(e=>[e.direccion,e.localidad,e.partido,e.cp,String(e.nroOrdenTN||""),e.nroSeguimiento,String(e.nroVentaML||""),e.id,e.clienteNombre].filter(Boolean))].join(" "));const ok=palabras.every(p=>haystack.includes(p));if(!ok)return false;}
+    if(busqueda){const palabras=norm(busqueda).split(/\s+/).filter(Boolean);const haystack=norm([c.nombre,...c.envios.flatMap(e=>[e.direccion,e.localidad,e.partido,e.cp,String(e.nroOrdenTN||""),e.nroSeguimiento,String(e.nroVentaML||""),e.id,e.clienteNombre,String(e.nroFactura||"")].filter(Boolean))].join(" "));const ok=palabras.every(p=>haystack.includes(p));if(!ok)return false;}
     return true;
   });
 
@@ -4985,7 +4985,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
     if(filtro==="vencidos"&&c.dias<c.limite)return false;
     if(filtro==="saldados"&&c.saldo>0)return false;
     if(filtro==="fc_pend"&&!(facturaClientes[c.key]&&c.envios.some(e=>e.trans&&!e.nroFactura&&e.estado!=="cancelado")))return false;
-    if(busqueda){const palabras=norm(busqueda).split(/\s+/).filter(Boolean);const haystack=norm([c.nombre,...c.envios.flatMap(e=>[e.direccion,e.localidad,e.partido,e.cp,String(e.nroOrdenTN||""),e.nroSeguimiento,String(e.nroVentaML||""),e.id,e.clienteNombre].filter(Boolean))].join(" "));const ok=palabras.every(p=>haystack.includes(p));if(!ok)return false;}
+    if(busqueda){const palabras=norm(busqueda).split(/\s+/).filter(Boolean);const haystack=norm([c.nombre,...c.envios.flatMap(e=>[e.direccion,e.localidad,e.partido,e.cp,String(e.nroOrdenTN||""),e.nroSeguimiento,String(e.nroVentaML||""),e.id,e.clienteNombre,String(e.nroFactura||"")].filter(Boolean))].join(" "));const ok=palabras.every(p=>haystack.includes(p));if(!ok)return false;}
     return true;
   }).sort((a,b)=>{
     const {col,dir}=sortCC;
@@ -11042,7 +11042,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
             <div style={{fontWeight:800,fontSize:"1.1rem",marginBottom:"0.5rem"}}>🚚 Salida</div>
             <div style={{padding:"1rem",background:"#041f14",border:"1px solid #065f46",borderRadius:"12px"}}>
               <div style={{color:"#34d399",fontWeight:700,fontSize:"0.95rem",marginBottom:"4px"}}>
-                📱 Sesión en curso — {sesionGuardadaOffer.sesionIds?.length??0} despachado{(sesionGuardadaOffer.sesionIds?.length??0)!==1?"s":""}
+                📱 Sesión en curso — {sesionGuardadaOffer.sesionIds?.length??0} en sesión
               </div>
               <div style={{color:"#6b7280",fontSize:"0.78rem",marginBottom:"12px"}}>
                 {sesionGuardadaOffer.logSel} · Turno {Array.isArray(sesionGuardadaOffer.turnoSel)?sesionGuardadaOffer.turnoSel.join(" · "):sesionGuardadaOffer.turnoSel} · {sesionGuardadaOffer.fecha}
