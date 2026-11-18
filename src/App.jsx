@@ -11251,7 +11251,20 @@ function TabSalida({envios,setEnvios,lc,sesion}){
         }).catch(err=>console.error("Error persistiendo despachado:",e.id,err))
       ));
       console.log("despacho persistido:",despachados_cierre.length,"envíos");
-      // ── Paso 2: generar PDF (ya con Firestore actualizado — el usuario puede cerrar después)
+      // ── Paso 2: notificar TN ANTES del PDF — igual que Firestore, si el usuario cierra
+      // la tab al ver la descarga las llamadas a TN quedarían sin ejecutar.
+      const conTN=despachados_cierre.filter(e=>e.origen==="Tienda Nube"&&(e.idTN||e.id));
+      if(conTN.length>0){
+        await Promise.all(conTN.map(e=>{
+          const orderTNId=e.idTN||e.id;
+          return fetch("/api/marcar-enviado-tn",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({orderTNId})})
+            .then(r=>r.json().catch(()=>({})))
+            .then(d=>console.log("TN dispatch result",orderTNId,d))
+            .catch(err=>console.warn("TN dispatch warn",orderTNId,err));
+        }));
+        console.log("TN dispatch completado:",conTN.length,"pedidos");
+      }
+      // ── Paso 3: generar PDF (ya con Firestore y TN actualizados — el usuario puede cerrar después)
       if(conPDF){
         const doc=new jsPDF();
         const W=doc.internal.pageSize.getWidth();
@@ -11350,17 +11363,6 @@ function TabSalida({envios,setEnvios,lc,sesion}){
       // Limpiar sesión activa del localStorage y Firestore
       localStorage.removeItem("salida_sesion_activa");
       deleteDoc(doc(db,"sesionesSalidaActiva","activa_"+(sesion?.id||"anon"))).catch(()=>{});
-      // ── Paso 3: notificar TN (best effort — independiente del addDoc)
-      const conTN=despachados_cierre.filter(e=>e.origen==="Tienda Nube"&&(e.idTN||e.id));
-      if(conTN.length>0){
-        Promise.all(conTN.map(e=>{
-          const orderTNId=e.idTN||e.id;
-          return fetch("/api/marcar-enviado-tn",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({orderTNId})})
-            .then(r=>r.json().catch(()=>({})))
-            .then(d=>console.log("TN dispatch result",orderTNId,d))
-            .catch(err=>console.warn("TN dispatch warn",orderTNId,err));
-        })).then(()=>console.log("TN dispatch completado:",conTN.length,"pedidos"));
-      }
       // ── Paso 4: guardar sesión en Firestore (best effort — no bloquea; firma puede ser grande)
       // La firma puede exceder el límite de 1MB de Firestore → guardamos sin firma si falla
       const sesionData={
