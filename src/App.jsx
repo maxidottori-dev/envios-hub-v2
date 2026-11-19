@@ -157,7 +157,8 @@ const parsarFechaFlex=(txt)=>{
   if(!m)return"";
   const dia=String(m[1]).padStart(2,"0");
   const mes=MESES_ES[(m[2]||"").toUpperCase()]||"01";
-  const anio=new Date().getFullYear();
+  const now=new Date();
+  const anio=(now.getMonth()>=10&&parseInt(mes)<=2)?now.getFullYear()+1:now.getFullYear();
   return`${anio}-${mes}-${dia}`;
 };
 const parsearEtiquetasPDF=async(file)=>{
@@ -271,7 +272,8 @@ const parsarFechaColecta=(txt)=>{
   if(!m)return"";
   const dia=String(m[1]).padStart(2,"0");
   const mes=MESES_ES[(m[2]||"").toUpperCase()]||"01";
-  const anio=new Date().getFullYear();
+  const now=new Date();
+  const anio=(now.getMonth()>=10&&parseInt(mes)<=2)?now.getFullYear()+1:now.getFullYear();
   return`${anio}-${mes}-${dia}`;
 };
 const parsearEtiquetasColectaPDF=async(file)=>{
@@ -6672,11 +6674,11 @@ function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armado
       esFlex:envio.origen==="ML",
       esEdicion:false,
     }).catch(err=>console.error("Error guardando armado:",err));
-    updateDoc(doc(db,"envios",envio.id),{
+    setDoc(doc(db,"envios",envio.id),{
       preparado:true,bultos,
       armadorId:armador.id,armadorNombre:armador.nombre,
       armadoTs:ts,
-    }).catch(err=>console.error("Error persistiendo preparado:",err));
+    },{merge:true}).catch(err=>{console.error("Error persistiendo preparado:",err);alert("⚠️ El armado se registró pero no se pudo actualizar el estado del envío. Anotá el pedido y avisá al administrador.");});
   },[setEnvios,armador,controladorSel]);
 
   // Armado de colectas ML (circuito separado de envíos) — sin panel, directo con el armador fijo de la vista.
@@ -7893,11 +7895,11 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
     }).catch(err=>console.error("Error guardando armado:",err));
     // Persistir preparado en Firestore para que el check "Ya preparado" funcione
     // entre sesiones y evitar dobles armados por re-escaneo accidental
-    updateDoc(doc(db,"envios",envio.id),{
+    setDoc(doc(db,"envios",envio.id),{
       preparado:true,bultos,
       armadorId:armador.id,armadorNombre:armador.nombre,
       armadoTs:ts,
-    }).catch(err=>console.error("Error persistiendo preparado:",err));
+    },{merge:true}).catch(err=>{console.error("Error persistiendo preparado:",err);alert("⚠️ El armado se registró pero no se pudo actualizar el estado del envío. Anotá el pedido y avisá al administrador.");});
     if(bultos>1&&impresionHabilitada&&envio.origen!=="ML")imprimirEtiquetasExtra({...envio,bultos},lc);
   },[setEnvios,lc,impresionHabilitada,showOverlay]);
 
