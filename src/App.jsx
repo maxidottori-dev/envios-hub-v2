@@ -1197,7 +1197,17 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
   const nroSegDuplicado=nroSegCambiado&&envios.some(o=>o.id!==envio.id&&o.nroSeguimiento===e.nroSeguimiento);
   const handleSave=()=>{
     if(nroSegDuplicado){alert("⚠️ Ese nro. de seguimiento ya está asignado a otro envío. Cada nro. es único.");return;}
-    setGuardando(true);onSave({...e,importeOverride:costoOverride||null,
+    // Los campos de armado siempre vienen del prop envio (actualizado por onSnapshot)
+    // para no pisar con valores stale del estado local e (que se inicializa una sola vez al abrir el panel)
+    const armadoActual={
+      preparado:envio.preparado||false,
+      armadorId:envio.armadorId||"",
+      armadorNombre:envio.armadorNombre||"",
+      armadoTs:envio.armadoTs||"",
+      controladorId:envio.controladorId||"",
+      controladorNombre:envio.controladorNombre||"",
+    };
+    setGuardando(true);onSave({...e,...armadoActual,importeOverride:costoOverride||null,
     ...(esReprogramado?{reprogramado:true}:{}),
     ...(audit?{ultimaEdicionPor:audit}:{}),
     ...(transAsignado&&audit?{asignadoPor:audit}:{}),
