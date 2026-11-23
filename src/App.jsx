@@ -1589,7 +1589,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
     if(soloReprog&&!e.reprogramado)return false;
     if(soloSinEtiqueta&&(e.origen!=="ML"||/^4\d{10}$/.test(e.nroSeguimiento||"")))return false;
     if(soloSinPreparar&&(e.preparado||e.despachado||!e.trans||e.estado==="cancelado"))return false;
-    if(soloSinDespachar&&(!e.preparado||e.despachado||e.estado==="cancelado"))return false;
+    if(soloSinDespachar&&(e.despachado||e.estado==="cancelado"))return false;
     if(busqueda){const haystack=norm([e.direccion,e.localidad,e.partido,e.cp,e.id,e.clienteNombre,e.nroSeguimiento,e.nroOrdenTN].filter(Boolean).join(" "));const palabras=norm(busqueda).split(/\s+/).filter(Boolean);return palabras.every(p=>haystack.includes(p));}
     return true;
   });
