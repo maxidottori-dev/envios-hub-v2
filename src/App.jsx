@@ -2912,7 +2912,7 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
     }
   },[f.ordenOriginal,envios,modo]);
 
-  const seleccionarEnvioOrigen=(e)=>{
+  const seleccionarEnvioOrigen=async(e)=>{
     const nombre=e.clienteNombre||e.destinatario||"";
     setBusqOrden(nombre?`${e.id} — ${nombre}`:e.id);
     setF(p=>({...p,
@@ -2928,6 +2928,25 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
       cp:e.cp||p.cp,
     }));
     setMostrarSugsOrden(false);
+    // Si controladorNombre no está en el doc de envios (armados previos al fix),
+    // lo buscamos en la colección armados
+    if(!e.controladorNombre){
+      try{
+        const armSnap=await getDocs(query(collection(db,"armados"),where("envioId","==",e.id),orderBy("ts","desc"),limit(1)));
+        if(!armSnap.empty){
+          const arm=armSnap.docs[0].data();
+          if(arm.controladorNombre){
+            setF(p=>({...p,controlador:arm.controladorNombre}));
+          }
+          if(arm.armadorNombre&&!e.armadorNombre){
+            setF(p=>({...p,armador:arm.armadorNombre}));
+          }
+          if(arm.ts&&!e.armadoTs){
+            setF(p=>({...p,armadoTs:arm.ts}));
+          }
+        }
+      }catch(err){console.warn("armados lookup",err);}
+    }
   };
   const abrirNuevo=()=>{setEditId(null);setF(VACIO);setOrdenEncontrada(null);setBusqOrden("");setErr("");setModo("nuevo");};
   const abrirEditar=(caso)=>{setEditId(caso.id);setF({...VACIO,...caso});setOrdenEncontrada(null);setBusqOrden(caso.ordenOriginal||"");setErr("");setModo("editar");};
