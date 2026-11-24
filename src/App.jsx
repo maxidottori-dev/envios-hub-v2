@@ -2530,6 +2530,248 @@ function imprimirNotaPV(caso,envioDoc,tipoLabelOverride){
   win.onload=()=>win.print();
 }
 
+// ── QR SVG generator (simple version usando qrcode URL) ──
+function qrDataURL(text){
+  // Genera URL del servicio de QR de Google Charts (funciona offline en impresión)
+  return`https://chart.googleapis.com/chart?cht=qr&chs=120x120&chl=${encodeURIComponent(text)}&chld=M|2`;
+}
+
+function imprimirFormularioArmadoPV(caso, envioDoc){
+  const pvId=caso.nroCaso||("PV-"+caso.id.slice(-6).toUpperCase());
+  const envioId=caso.envioId||pvId+"E";
+  const fechaDespacho=envioDoc?.fecha?new Date(envioDoc.fecha+"T12:00:00").toLocaleDateString("es-AR"):"—";
+  const trans=envioDoc?.trans||caso.envioTrans||"—";
+  const direccionFull=[caso.direccion,caso.localidad,caso.partido,caso.cp].filter(Boolean).join(", ");
+  const tipoLabel=caso.tipoIncidente||"";
+  const qrSrc=qrDataURL(envioId);
+
+  const copia=`
+    <div class="copia">
+      <div class="header">
+        <div>
+          <div class="empresa">Umpapel Distribuidora</div>
+          <div class="doc-title">Formulario de Armado — <span style="color:#6366f1">POST VENTA</span></div>
+        </div>
+        <div style="text-align:right">
+          <div class="pvid">${pvId}</div>
+          <div class="sub">Envío: <strong>${envioId}</strong></div>
+        </div>
+      </div>
+      <div class="row3">
+        <div class="field"><div class="flabel">Cliente</div><div class="fval">${caso.clienteNombre||"—"}</div></div>
+        <div class="field"><div class="flabel">Logística</div><div class="fval">${trans}</div></div>
+        <div class="field"><div class="flabel">Fecha despacho</div><div class="fval">${fechaDespacho}</div></div>
+      </div>
+      <div class="field full"><div class="flabel">Dirección</div><div class="fval">${direccionFull||"—"}</div></div>
+      <div class="row2">
+        <div class="field"><div class="flabel">Teléfono</div><div class="fval">${caso.telefono||"—"}</div></div>
+        <div class="field"><div class="flabel">Motivo / Tipo</div><div class="fval tipo">${tipoLabel||"—"}</div></div>
+      </div>
+      <div class="field full envia"><div class="flabel">📦 QUÉ SE ENVÍA</div><div class="fval big">${caso.queEnvia||"—"}</div></div>
+      ${caso.queRetira?`<div class="field full retira"><div class="flabel">↩ QUÉ SE RETIRA DEL CLIENTE</div><div class="fval big">${caso.queRetira}</div></div>`:""}
+      ${caso.notasResolucion?`<div class="field full"><div class="flabel">Notas para el armador</div><div class="fval notas">${caso.notasResolucion}</div></div>`:""}
+      <div class="footer">
+        <div class="armadores">${caso.armador?`Armó: <strong>${caso.armador}</strong>`:""}</div>
+        <img src="${qrSrc}" width="80" height="80"/>
+      </div>
+    </div>`;
+
+  const css=`
+    @page{size:A4 landscape;margin:12mm 14mm}
+    *{box-sizing:border-box}
+    body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:10pt}
+    .copia{height:calc(50% - 5mm);display:flex;flex-direction:column;gap:3mm;page-break-inside:avoid}
+    .copia+.copia{border-top:2px dashed #bbb;margin-top:6mm;padding-top:6mm}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:3mm;margin-bottom:3mm}
+    .empresa{font-size:7pt;color:#666;text-transform:uppercase;letter-spacing:.5px}
+    .doc-title{font-size:13pt;font-weight:800;color:#111}
+    .pvid{font-size:16pt;font-weight:900;color:#6366f1}
+    .sub{font-size:9pt;color:#555}
+    .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4mm;margin-bottom:3mm}
+    .row2{display:grid;grid-template-columns:1fr 1fr;gap:4mm;margin-bottom:3mm}
+    .field{margin-bottom:2mm}
+    .full{margin-bottom:3mm}
+    .flabel{font-size:7pt;color:#888;text-transform:uppercase;font-weight:700;margin-bottom:1mm}
+    .fval{font-size:10.5pt;font-weight:600;color:#111;border-bottom:1px solid #ddd;padding-bottom:1mm;min-height:7mm}
+    .fval.big{font-size:12pt;font-weight:700;min-height:10mm;padding:2mm 0}
+    .fval.notas{font-size:9pt;color:#444;font-style:italic;min-height:8mm}
+    .fval.tipo{color:#92400E;font-weight:700}
+    .field.envia .flabel{color:#065f46;background:#ecfdf5;padding:1mm 2mm;border-radius:2px}
+    .field.envia .fval{border:1.5px solid #065f46;border-radius:3px;padding:2mm;min-height:12mm}
+    .field.retira .flabel{color:#92400E;background:#fef3c7;padding:1mm 2mm;border-radius:2px}
+    .field.retira .fval{border:1.5px solid #b45309;border-radius:3px;padding:2mm;min-height:10mm}
+    .footer{display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto;padding-top:2mm;border-top:.5px solid #ddd}
+    .armadores{font-size:8.5pt;color:#666}
+  `;
+
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Armado ${pvId}</title><style>${css}</style></head><body>${copia}${copia}</body></html>`;
+  const win=window.open("","_blank","width=1050,height=750");
+  win.document.write(html);win.document.close();win.onload=()=>win.print();
+}
+
+function imprimirFormularioLogisticaPV(caso, envioDoc){
+  const pvId=caso.nroCaso||("PV-"+caso.id.slice(-6).toUpperCase());
+  const envioId=caso.envioId||pvId+"E";
+  const fechaVisita=envioDoc?.fecha?new Date(envioDoc.fecha+"T12:00:00").toLocaleDateString("es-AR"):"—";
+  const trans=envioDoc?.trans||caso.envioTrans||"—";
+  const direccionFull=[caso.direccion,caso.localidad,caso.partido,caso.cp].filter(Boolean).join(", ");
+  const qrSrc=qrDataURL(envioId);
+
+  const copia=`
+    <div class="copia">
+      <div class="header">
+        <div>
+          <div class="empresa">Umpapel Distribuidora</div>
+          <div class="doc-title">Formulario para Logística — <span style="color:#10b981">POST VENTA</span></div>
+        </div>
+        <div style="text-align:right">
+          <div class="pvid">${pvId}</div>
+          <div class="sub">Envío: <strong>${envioId}</strong></div>
+        </div>
+      </div>
+      <div class="row3">
+        <div class="field"><div class="flabel">Cliente</div><div class="fval">${caso.clienteNombre||"—"}</div></div>
+        <div class="field"><div class="flabel">Logística</div><div class="fval log">${trans}</div></div>
+        <div class="field"><div class="flabel">Fecha de visita</div><div class="fval">${fechaVisita}</div></div>
+      </div>
+      <div class="field full"><div class="flabel">Dirección completa</div><div class="fval">${direccionFull||"—"}</div></div>
+      <div class="row2">
+        <div class="field"><div class="flabel">Teléfono</div><div class="fval">${caso.telefono||"—"}</div></div>
+        <div class="field"><div class="flabel">Horario de entrega</div><div class="fval">${caso.horarioEntrega||"Sin restricción"}</div></div>
+      </div>
+      <div class="field full envia"><div class="flabel">📦 QUÉ SE ENTREGA</div><div class="fval big">${caso.queEnvia||"—"}</div></div>
+      ${caso.queRetira?`<div class="field full retira"><div class="flabel">↩ QUÉ SE RETIRA DEL CLIENTE</div><div class="fval big">${caso.queRetira}</div></div>`:""}
+      ${caso.instruccionesEspeciales?`<div class="field full"><div class="flabel">⚠ Instrucciones especiales</div><div class="fval notas">${caso.instruccionesEspeciales}</div></div>`:""}
+      <div class="footer">
+        <div class="empresa" style="font-size:9pt;color:#111">Umpapel Distribuidora</div>
+        <img src="${qrSrc}" width="80" height="80"/>
+      </div>
+    </div>`;
+
+  const css=`
+    @page{size:A4 landscape;margin:12mm 14mm}
+    *{box-sizing:border-box}
+    body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:10pt}
+    .copia{height:calc(50% - 5mm);display:flex;flex-direction:column;gap:3mm;page-break-inside:avoid}
+    .copia+.copia{border-top:2px dashed #bbb;margin-top:6mm;padding-top:6mm}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:3mm;margin-bottom:3mm}
+    .empresa{font-size:7pt;color:#666;text-transform:uppercase;letter-spacing:.5px}
+    .doc-title{font-size:13pt;font-weight:800;color:#111}
+    .pvid{font-size:16pt;font-weight:900;color:#10b981}
+    .sub{font-size:9pt;color:#555}
+    .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4mm;margin-bottom:3mm}
+    .row2{display:grid;grid-template-columns:1fr 1fr;gap:4mm;margin-bottom:3mm}
+    .field{margin-bottom:2mm}
+    .full{margin-bottom:3mm}
+    .flabel{font-size:7pt;color:#888;text-transform:uppercase;font-weight:700;margin-bottom:1mm}
+    .fval{font-size:10.5pt;font-weight:600;color:#111;border-bottom:1px solid #ddd;padding-bottom:1mm;min-height:7mm}
+    .fval.big{font-size:12pt;font-weight:700;min-height:10mm;padding:2mm 0}
+    .fval.log{color:#065f46;font-weight:800;font-size:12pt}
+    .fval.notas{font-size:9.5pt;color:#333;min-height:8mm;border:1.5px solid #f59e0b;border-radius:3px;padding:2mm;background:#fffbeb}
+    .field.envia .flabel{color:#065f46;background:#ecfdf5;padding:1mm 2mm;border-radius:2px}
+    .field.envia .fval{border:1.5px solid #065f46;border-radius:3px;padding:2mm;min-height:12mm}
+    .field.retira .flabel{color:#92400E;background:#fef3c7;padding:1mm 2mm;border-radius:2px}
+    .field.retira .fval{border:1.5px solid #b45309;border-radius:3px;padding:2mm;min-height:10mm}
+    .footer{display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto;padding-top:2mm;border-top:.5px solid #ddd}
+  `;
+
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Logística ${pvId}</title><style>${css}</style></head><body>${copia}${copia}</body></html>`;
+  const win=window.open("","_blank","width=1050,height=750");
+  win.document.write(html);win.document.close();win.onload=()=>win.print();
+}
+
+function imprimirEtiquetaEnvioPV(caso, envioDoc){
+  const pvId=caso.nroCaso||("PV-"+caso.id.slice(-6).toUpperCase());
+  const envioId=caso.envioId||pvId+"E";
+  const fechaEntrega=envioDoc?.fecha?new Date(envioDoc.fecha+"T12:00:00").toLocaleDateString("es-AR"):"—";
+  const trans=envioDoc?.trans||caso.envioTrans||"—";
+  const direccionFull=[caso.direccion,caso.localidad,caso.partido,caso.cp].filter(Boolean).join(", ");
+  const qrSrc=qrDataURL(envioId);
+
+  const etiqueta=`
+    <div class="etiqueta">
+      <div class="pv-badge">POST VENTA</div>
+      <div class="pvid">${envioId}</div>
+      <div class="empresa">Umpapel Distribuidora</div>
+      <div class="sep"></div>
+      <div class="dest-nombre">${caso.clienteNombre||"—"}</div>
+      <div class="dest-dir">${direccionFull||"—"}</div>
+      ${caso.telefono?`<div class="dest-tel">📞 ${caso.telefono}</div>`:""}
+      <div class="sep"></div>
+      <div class="row-info">
+        <div><div class="lbl">Logística</div><div class="val">${trans}</div></div>
+        <div><div class="lbl">Fecha</div><div class="val">${fechaEntrega}</div></div>
+      </div>
+      <div class="qr-row">
+        <img src="${qrSrc}" width="100" height="100"/>
+        <div class="qr-label">ID: ${envioId}</div>
+      </div>
+    </div>`;
+
+  const css=`
+    @page{size:A5 landscape;margin:8mm}
+    *{box-sizing:border-box}
+    body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:10pt}
+    .etiqueta{border:2.5px solid #111;border-radius:6px;padding:5mm;display:flex;flex-direction:column;gap:2.5mm;height:calc(100vh - 20mm)}
+    .pv-badge{background:#6366f1;color:#fff;font-size:9pt;font-weight:900;padding:1.5mm 4mm;border-radius:3px;text-align:center;letter-spacing:1px;text-transform:uppercase;align-self:flex-start}
+    .pvid{font-size:22pt;font-weight:900;color:#111;letter-spacing:1px}
+    .empresa{font-size:7pt;color:#888;text-transform:uppercase;letter-spacing:.5px}
+    .sep{border-top:1px solid #ddd;margin:1mm 0}
+    .dest-nombre{font-size:16pt;font-weight:800;color:#111}
+    .dest-dir{font-size:10pt;color:#333;font-weight:500}
+    .dest-tel{font-size:9pt;color:#555}
+    .row-info{display:grid;grid-template-columns:1fr 1fr;gap:4mm;margin-top:1mm}
+    .lbl{font-size:7pt;color:#888;text-transform:uppercase;font-weight:700}
+    .val{font-size:11pt;font-weight:800;color:#111}
+    .qr-row{display:flex;align-items:center;gap:4mm;margin-top:auto}
+    .qr-label{font-size:8pt;color:#666}
+  `;
+
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Etiqueta ${envioId}</title><style>${css}</style></head><body>${etiqueta}</body></html>`;
+  const win=window.open("","_blank","width=800,height=600");
+  win.document.write(html);win.document.close();win.onload=()=>win.print();
+}
+
+function imprimirEtiquetaDevolucionPV(caso){
+  const pvId=caso.nroCaso||("PV-"+caso.id.slice(-6).toUpperCase());
+  const direccionCliente=[caso.direccion,caso.localidad,caso.partido,caso.cp].filter(Boolean).join(", ");
+
+  const etiqueta=`
+    <div class="etiqueta">
+      <div class="dev-badge">DEVOLUCIÓN</div>
+      <div class="pvid">${pvId}</div>
+      <div class="empresa">Umpapel Distribuidora</div>
+      <div class="sep"></div>
+      <div class="lbl">Cliente / Origen</div>
+      <div class="dest-nombre">${caso.clienteNombre||"—"}</div>
+      <div class="dest-dir">${direccionCliente||"—"}</div>
+      <div class="sep"></div>
+      <div class="lbl">Producto a devolver</div>
+      <div class="producto">${caso.queRetira||caso.queEnvia||"—"}</div>
+      <div class="firma-box">Recibido: _____________________ Fecha: ___________</div>
+    </div>`;
+
+  const css=`
+    @page{size:A5 landscape;margin:8mm}
+    *{box-sizing:border-box}
+    body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:10pt}
+    .etiqueta{border:2.5px solid #111;border-radius:6px;padding:5mm;display:flex;flex-direction:column;gap:2.5mm;height:calc(100vh - 20mm)}
+    .dev-badge{background:#f59e0b;color:#111;font-size:9pt;font-weight:900;padding:1.5mm 4mm;border-radius:3px;text-align:center;letter-spacing:1px;text-transform:uppercase;align-self:flex-start}
+    .pvid{font-size:22pt;font-weight:900;color:#111;letter-spacing:1px}
+    .empresa{font-size:7pt;color:#888;text-transform:uppercase;letter-spacing:.5px}
+    .sep{border-top:1px solid #ddd;margin:1mm 0}
+    .lbl{font-size:7pt;color:#888;text-transform:uppercase;font-weight:700}
+    .dest-nombre{font-size:14pt;font-weight:800;color:#111}
+    .dest-dir{font-size:9pt;color:#555}
+    .producto{font-size:12pt;font-weight:700;color:#111;border:1.5px solid #b45309;border-radius:3px;padding:2mm;min-height:12mm;margin-top:1mm;background:#fffbeb}
+    .firma-box{margin-top:auto;border-top:1px dashed #bbb;padding-top:3mm;font-size:9pt;color:#666}
+  `;
+
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Dev. ${pvId}</title><style>${css}</style></head><body>${etiqueta}</body></html>`;
+  const win=window.open("","_blank","width=800,height=600");
+  win.document.write(html);win.document.close();win.onload=()=>win.print();
+}
+
 function semanaActual(){
   const d=new Date();const day=d.getDay()||7;
   const lun=new Date(d);lun.setDate(d.getDate()-day+1);
@@ -2549,6 +2791,7 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
   const [ordenEncontrada,setOrdenEncontrada]=useState(null);
   const [busqOrden,setBusqOrden]=useState("");
   const [mostrarSugsOrden,setMostrarSugsOrden]=useState(false);
+  const [printMenuId,setPrintMenuId]=useState(null);
   const sw=semanaActual();
   const [statsDesde,setStatsDesde]=useState(sw.desde);
   const [statsHasta,setStatsHasta]=useState(sw.hasta);
@@ -2628,7 +2871,8 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
   },[busqOrden,envios]);
   const VACIO={ordenOriginal:"",clienteNombre:"",telefono:"",direccion:"",localidad:"",partido:"",cp:"",
     tipoIncidente:"",descripcion:"",resolucion:"",subtipoEnvio:"envio",queEnvia:"",queRetira:"",notasResolucion:"",costoResolucion:0,
-    armador:"",controlador:"",
+    armador:"",controlador:"",armadoTs:"",
+    horarioEntrega:"",instruccionesEspeciales:"",costoLogisticoPV:0,sinCostoLogistico:false,
     envioTrans:"",envioFecha:hoy,envioTurno:"",envioId:"",nroCaso:"",estado:"pendiente"};
   const [f,setF]=useState(VACIO);
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
@@ -2675,6 +2919,7 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
       ordenOriginal:e.id,
       armador:e.armadorNombre||p.armador,
       controlador:e.controladorNombre||p.controlador,
+      armadoTs:e.armadoTs||p.armadoTs,
       clienteNombre:nombre||p.clienteNombre,
       telefono:e.telefono||p.telefono,
       direccion:e.direccion||p.direccion,
@@ -2713,10 +2958,12 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
         }
         const upd={...f,modificadoTs:new Date().toISOString(),...(audit?{modificadoPor:audit}:{})};
         await setDoc(doc(db,"postventa",editId),upd,{merge:true});
-        // Si hay envío vinculado y es cambio → sync campo `cambio` en el envío
-        if(casoOriginal?.envioId&&f.resolucion==="envio"&&f.subtipoEnvio==="cambio"){
+        // Si hay envío vinculado → sync campo `cambio` y `horarioEntrega` en el envío
+        if(casoOriginal?.envioId&&f.resolucion==="envio"){
           const envRef=doc(db,"envios",casoOriginal.envioId);
-          await updateDoc(envRef,{cambio:f.queRetira||"Retiro pendiente"});
+          const envUpd={horarioEntrega:f.horarioEntrega||""};
+          if(f.queRetira)envUpd.cambio=f.queRetira;
+          await updateDoc(envRef,envUpd);
         }
         cancelar();return;
       }
@@ -2733,14 +2980,15 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
       const pvData={...f,nroCaso,fechaCreacion:new Date().toISOString(),...(audit?{creadoPor:audit}:{})};
       // No guardamos envioTrans/envioFecha/envioTurno en el doc PV — son sólo para el envío generado
       const pvRef=await addDoc(collection(db,"postventa"),pvData);
-      // Si resolución es Envío (o Cambio) → crear envío automáticamente
+      // Si resolución es Envío → crear envío automáticamente
       if(f.resolucion==="envio"){
         const tipoLabel=tipoPVMap[f.tipoIncidente]?.l||f.tipoIncidente;
-        const esCambio=f.subtipoEnvio==="cambio";
         const envioId=nroCaso+"E";
         const obsPartes=[`Post Venta ${nroCaso} — ${tipoLabel} — Ref. #${f.ordenOriginal}`];
         if(f.queEnvia)obsPartes.push(`Envía: ${f.queEnvia}`);
-        if(esCambio&&f.queRetira)obsPartes.push(`Retira: ${f.queRetira}`);
+        if(f.queRetira)obsPartes.push(`Retira: ${f.queRetira}`);
+        if(f.horarioEntrega)obsPartes.push(`Horario: ${f.horarioEntrega}`);
+        if(f.instruccionesEspeciales)obsPartes.push(`Instrucciones: ${f.instruccionesEspeciales}`);
         const envioData={
           id:envioId,tipo:"Manual",origen:"Manual",
           clienteNombre:f.clienteNombre,telefono:f.telefono,
@@ -2751,7 +2999,8 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
           cobranza:null,retiro:null,esCC:false,importeCC:0,nroFactura:"",
           observaciones:obsPartes.join(" | "),
           tarifaLog:0,pvCasoId:pvRef.id,
-          ...(esCambio?{cambio:f.queRetira||"Retiro pendiente"}:{}),
+          horarioEntrega:f.horarioEntrega||"",
+          ...(f.queRetira?{cambio:f.queRetira}:{}),
           creadoTs:new Date().toISOString(),
           ...(audit?{creadoPor:audit}:{}),
         };
@@ -2881,8 +3130,8 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
               style={{...S.input,display:"block",width:"100%",resize:"vertical",fontSize:"0.8rem"}}/>
           </div>
 
-          {/* B2: Armador / Controlador */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.6rem",marginBottom:"0.75rem"}}>
+          {/* B2: Armador / Controlador / ArmadoTs */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.6rem",marginBottom:f.armadoTs?"0.4rem":"0.75rem"}}>
             <div>
               <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Armó</div>
               <input value={f.armador||""} onChange={ev=>set("armador",ev.target.value)} placeholder="Nombre del armador" style={{...S.input,width:"100%",fontSize:"0.8rem"}}/>
@@ -2892,6 +3141,13 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
               <input value={f.controlador||""} onChange={ev=>set("controlador",ev.target.value)} placeholder="Nombre del controlador" style={{...S.input,width:"100%",fontSize:"0.8rem"}}/>
             </div>
           </div>
+          {f.armadoTs&&(
+            <div style={{marginBottom:"0.75rem",fontSize:"0.68rem",color:"#6b7280",display:"flex",alignItems:"center",gap:"6px"}}>
+              <span style={{color:"#4b5563",fontWeight:700,textTransform:"uppercase",fontSize:"0.6rem"}}>Armado:</span>
+              <span style={{color:"#9ca3af"}}>{(()=>{const d=new Date(f.armadoTs);return d.toLocaleDateString("es-AR")+" "+d.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});})()}</span>
+              <span style={{color:"#374151",fontSize:"0.6rem"}}>(para verificar grabación)</span>
+            </div>
+          )}
 
           {/* C: Resolución */}
           {(()=>{
@@ -2926,18 +3182,47 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
                       placeholder="Ej: 1× Resma A4 Navigator 500hj" rows={2}
                       style={{...S.input,display:"block",width:"100%",resize:"vertical",fontSize:"0.78rem"}}/>
                   </div>
-                  {/* Qué se retira — solo en Cambio */}
-                  {f.subtipoEnvio==="cambio"&&(
-                    <div style={{marginBottom:"6px"}}>
-                      <div style={{color:"#fbbf24",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Qué se retira <span style={{color:"#4b5563"}}>(se imprime · va a Retiros)</span></div>
-                      <textarea value={f.queRetira||""} onChange={ev=>set("queRetira",ev.target.value)}
-                        placeholder="Ej: 1× Resma incorrecta (etiqueta cruzada)" rows={2}
-                        style={{...S.input,display:"block",width:"100%",resize:"vertical",fontSize:"0.78rem",borderColor:"#78350f"}}/>
-                    </div>
-                  )}
-                  {!f.envioId&&<div style={{color:"#6ee7b7",marginBottom:"8px",fontWeight:700,fontSize:"0.7rem"}}>Se creará envío {f.subtipoEnvio==="cambio"?"con retiro pendiente ":""}al guardar</div>}
+                  {/* Qué se retira — siempre visible */}
+                  <div style={{marginBottom:"6px"}}>
+                    <div style={{color:"#fbbf24",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Qué se retira <span style={{color:"#4b5563"}}>(opcional · se imprime · va a Retiros)</span></div>
+                    <textarea value={f.queRetira||""} onChange={ev=>set("queRetira",ev.target.value)}
+                      placeholder="Ej: 1× Resma incorrecta (etiqueta cruzada) — dejar vacío si no hay retiro"
+                      rows={2}
+                      style={{...S.input,display:"block",width:"100%",resize:"vertical",fontSize:"0.78rem",borderColor:f.queRetira?"#78350f":"#1e2535"}}/>
+                  </div>
+                  {!f.envioId&&<div style={{color:"#6ee7b7",marginBottom:"8px",fontWeight:700,fontSize:"0.7rem"}}>Se creará envío {f.queRetira?"con retiro pendiente ":""}al guardar</div>}
                   {f.envioId&&<div style={{color:"#6ee7b7",marginBottom:"8px"}}>Envío vinculado: <strong>{f.envioId}</strong></div>}
-                  {!f.envioId&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"6px"}}>
+                  {/* Dirección y teléfono del nuevo envío — editables */}
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px",marginBottom:"6px"}}>
+                    <div>
+                      <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"2px"}}>Dirección</div>
+                      <input value={f.direccion||""} onChange={ev=>set("direccion",ev.target.value)}
+                        placeholder="Dirección completa con piso/dpto"
+                        style={{...S.input,width:"100%",fontSize:"0.78rem"}}/>
+                    </div>
+                    <div>
+                      <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"2px"}}>Teléfono</div>
+                      <input value={f.telefono||""} onChange={ev=>set("telefono",ev.target.value)}
+                        placeholder="Tel. de contacto"
+                        style={{...S.input,width:"100%",fontSize:"0.78rem"}}/>
+                    </div>
+                  </div>
+                  {/* Horario de entrega e instrucciones */}
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px",marginBottom:"6px"}}>
+                    <div>
+                      <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"2px"}}>Horario de entrega</div>
+                      <input value={f.horarioEntrega||""} onChange={ev=>set("horarioEntrega",ev.target.value)}
+                        placeholder="Ej: 9–13 hs, solo mañanas"
+                        style={{...S.input,width:"100%",fontSize:"0.78rem"}}/>
+                    </div>
+                    <div>
+                      <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"2px"}}>Instrucciones especiales</div>
+                      <input value={f.instruccionesEspeciales||""} onChange={ev=>set("instruccionesEspeciales",ev.target.value)}
+                        placeholder="Ej: Llamar antes de ir"
+                        style={{...S.input,width:"100%",fontSize:"0.78rem"}}/>
+                    </div>
+                  </div>
+                  {!f.envioId&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"6px",marginBottom:"6px"}}>
                     <div>
                       <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"2px"}}>Fecha</div>
                       <input type="date" value={f.envioFecha} onChange={ev=>set("envioFecha",ev.target.value)}
@@ -2961,6 +3246,23 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
                       </select>
                     </div>
                   </div>}
+                  {/* Costo logístico PV */}
+                  <div style={{display:"flex",alignItems:"center",gap:"10px",marginTop:"4px"}}>
+                    <div style={{flex:1}}>
+                      <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"2px"}}>Costo logístico ($)</div>
+                      <input type="number" value={f.sinCostoLogistico?"":(f.costoLogisticoPV||"")}
+                        onChange={ev=>set("costoLogisticoPV",parseFloat(ev.target.value)||0)}
+                        disabled={f.sinCostoLogistico}
+                        placeholder="0"
+                        style={{...S.input,width:"120px",fontSize:"0.78rem",opacity:f.sinCostoLogistico?0.4:1}}/>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:"6px",marginTop:"16px",cursor:"pointer"}} onClick={()=>set("sinCostoLogistico",!f.sinCostoLogistico)}>
+                      <div style={{width:14,height:14,borderRadius:"3px",border:"1.5px solid "+(f.sinCostoLogistico?"#6366f1":"#374151"),background:f.sinCostoLogistico?"#6366f1":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        {f.sinCostoLogistico&&<svg width="9" height="7" viewBox="0 0 10 8"><path d="M1 4L3.5 6.5L9 1" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" fill="none"/></svg>}
+                      </div>
+                      <span style={{fontSize:"0.72rem",color:f.sinCostoLogistico?"#c4b5fd":"#6b7280"}}>Sin costo logístico</span>
+                    </div>
+                  </div>
                 </div>
               )}
               {f.resolucion==="reintegro"&&(
@@ -3064,7 +3366,9 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
       {/* ── STATS ── */}
       {modo==="stats"&&(()=>{
         const casosS=casos.filter(c=>{const f=(c.fechaCreacion||"").slice(0,10);return f>=statsDesde&&f<=statsHasta;});
-        const totalCosto=casosS.reduce((s,c)=>s+(c.costoResolucion||0),0);
+        const totalCostoReintegro=casosS.reduce((s,c)=>s+(c.costoResolucion||0),0);
+        const totalCostoLog=casosS.reduce((s,c)=>s+(c.sinCostoLogistico?0:(c.costoLogisticoPV||0)),0);
+        const totalCosto=totalCostoReintegro+totalCostoLog;
         const porTipo=tiposPV.map(t=>({...t,n:casosS.filter(c=>c.tipoIncidente===t.k).length})).filter(x=>x.n>0);
         // Agrupación por armador
         const armadores=[...new Set(casosS.map(c=>c.armador||"").filter(Boolean))].sort();
@@ -3072,7 +3376,7 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
           nombre:a,
           total:casosS.filter(c=>c.armador===a).length,
           porTipo:tiposPV.map(t=>({...t,n:casosS.filter(c=>c.armador===a&&c.tipoIncidente===t.k).length})).filter(x=>x.n>0),
-          costo:casosS.filter(c=>c.armador===a).reduce((s,c)=>s+(c.costoResolucion||0),0),
+          costo:casosS.filter(c=>c.armador===a).reduce((s,c)=>s+(c.costoResolucion||0)+(c.sinCostoLogistico?0:(c.costoLogisticoPV||0)),0),
         }));
         const sinArmador=casosS.filter(c=>!c.armador).length;
         const thS={padding:"5px 8px",textAlign:"left",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",color:"#6b7280",borderBottom:"1px solid #252d40",background:"#12172a",whiteSpace:"nowrap"};
@@ -3108,8 +3412,12 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
                 </div>
               </div>
               {totalCosto>0&&<div style={{background:"#0d1119",border:"1px solid #252d40",borderRadius:"10px",padding:"0.85rem 1rem"}}>
-                <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"6px"}}>Costo total reintegros</div>
+                <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"6px"}}>Costo total PV</div>
                 <div style={{fontSize:"1.5rem",fontWeight:800,color:"#fbbf24",lineHeight:1}}>${totalCosto.toLocaleString("es-AR")}</div>
+                <div style={{marginTop:"5px",display:"flex",flexDirection:"column",gap:"2px"}}>
+                  {totalCostoReintegro>0&&<div style={{fontSize:"0.65rem",color:"#9ca3af"}}>Reintegros: ${totalCostoReintegro.toLocaleString("es-AR")}</div>}
+                  {totalCostoLog>0&&<div style={{fontSize:"0.65rem",color:"#9ca3af"}}>Logística PV: ${totalCostoLog.toLocaleString("es-AR")}</div>}
+                </div>
               </div>}
               {armadores.length>0&&<div style={{background:"#0d1119",border:"1px solid #252d40",borderRadius:"10px",padding:"0.85rem 1rem"}}>
                 <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"6px"}}>Por armador</div>
@@ -3143,7 +3451,8 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
                   <tbody>{casosS.map((c,i)=>{
                     const tc=tipoPVMap[c.tipoIncidente]||{bg:"#1a1f2e",t:"#9ca3af"};
                     const tipoL=tipoPVMap[c.tipoIncidente]?.l||c.tipoIncidente||"—";
-                    const costo=c.resolucion==="reintegro"&&c.costoResolucion>0?"$"+Number(c.costoResolucion).toLocaleString("es-AR"):"—";
+                    const costoNum=(c.costoResolucion||0)+(c.sinCostoLogistico?0:(c.costoLogisticoPV||0));
+                    const costo=costoNum>0?"$"+costoNum.toLocaleString("es-AR"):"—";
                     const res=c.resolucion==="envio"?("Envío"+(c.envioId?" "+c.envioId:""))
                       :c.resolucion==="reintegro"?"Reintegro"
                       :c.resolucion==="sin_costo"?"Sin costo":"—";
@@ -3206,9 +3515,33 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
                     </div>
                     {caso.notasResolucion&&<div style={{fontSize:"0.72rem",color:"#6b7280",marginTop:"2px",fontStyle:"italic"}}>💬 {caso.notasResolucion}</div>}
                   </div>
-                  <div style={{display:"flex",gap:"4px",flexShrink:0,flexWrap:"wrap",justifyContent:"flex-end"}}>
+                  <div style={{display:"flex",gap:"4px",flexShrink:0,flexWrap:"wrap",justifyContent:"flex-end",position:"relative"}}>
                     {caso.resolucion==="envio"&&caso.envioId&&(
-                      <button onClick={()=>imprimirNotaPV(caso,envios.find(e=>e.id===caso.envioId),tipoLabel)} style={{...S.btnSm(false),color:"#6366f1",border:"1px solid #6366f1",fontSize:"0.68rem",padding:"3px 8px"}}>🖨 Imprimir</button>
+                      <div style={{position:"relative"}}>
+                        <button onClick={()=>setPrintMenuId(printMenuId===caso.id?null:caso.id)}
+                          style={{...S.btnSm(false),color:"#6366f1",border:"1px solid #6366f1",fontSize:"0.68rem",padding:"3px 8px"}}>🖨 Imprimir ▾</button>
+                        {printMenuId===caso.id&&(
+                          <>
+                            <div style={{position:"fixed",inset:0,zIndex:49}} onClick={()=>setPrintMenuId(null)}/>
+                            <div style={{position:"absolute",right:0,top:"calc(100% + 2px)",zIndex:50,background:"#1a1f2e",border:"1px solid #374151",borderRadius:"6px",minWidth:"180px",overflow:"hidden",boxShadow:"0 4px 20px rgba(0,0,0,0.6)"}}>
+                              {[
+                                {label:"📋 Formulario Armado",fn:()=>{imprimirFormularioArmadoPV(caso,envios.find(e=>e.id===caso.envioId));setPrintMenuId(null);}},
+                                {label:"🚚 Formulario Logística",fn:()=>{imprimirFormularioLogisticaPV(caso,envios.find(e=>e.id===caso.envioId));setPrintMenuId(null);}},
+                                {label:"🏷 Etiqueta Envío PV",fn:()=>{imprimirEtiquetaEnvioPV(caso,envios.find(e=>e.id===caso.envioId));setPrintMenuId(null);}},
+                                {label:"↩ Etiqueta Devolución",fn:()=>{imprimirEtiquetaDevolucionPV(caso);setPrintMenuId(null);}},
+                                {label:"📄 Nota PV (anterior)",fn:()=>{imprimirNotaPV(caso,envios.find(e=>e.id===caso.envioId),tipoLabel);setPrintMenuId(null);}},
+                              ].map((item,i)=>(
+                                <div key={i} onClick={item.fn}
+                                  style={{padding:"7px 12px",cursor:"pointer",fontSize:"0.72rem",color:"#e5e7eb",borderBottom:"1px solid #252d40",transition:"background 0.1s"}}
+                                  onMouseEnter={ev=>ev.currentTarget.style.background="#252d40"}
+                                  onMouseLeave={ev=>ev.currentTarget.style.background="transparent"}>
+                                  {item.label}
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
                     )}
                     <button onClick={()=>abrirEditar(caso)} style={{...S.btnSm(false),color:"#f59e0b",border:"1px solid #78350f",fontSize:"0.68rem",padding:"3px 8px"}}>✏ Editar</button>
                     <button onClick={()=>toggleEstado(caso)} style={{...S.btnSm(caso.estado==="resuelto","#10b981"),fontSize:"0.68rem",padding:"3px 8px"}}>
@@ -4430,9 +4763,11 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
     e.cobranza !== null && e.cobranza !== undefined && e.cobranza > 0 && getEstado(e) !== "cancelado"
   );
   // Envios con cambio, retiro, o devolución por cancelación tras despacho
+  // También incluye envíos PV con queRetira aunque no sean subtipoEnvio="cambio"
   const conRetiro = enviosEfectivos.filter(e =>
     ((!!e.cambio || e.retiro !== null) && getEstado(e) !== "cancelado") ||
-    (e.devolucionPendiente && !e.devolucionCancelacionRecibida)
+    (e.devolucionPendiente && !e.devolucionCancelacionRecibida) ||
+    (e.pvCasoId && !!e.cambio && getEstado(e) !== "cancelado")
   );
 
   const lista = [...(seccion === "cobranzas" ? conCobranza : conRetiro)].filter(e => {
@@ -4448,7 +4783,8 @@ function TabLiquidacion({ envios, setEnvios, lc, sesion=null }) {
       const srch = norm(busqueda);
       return norm(e.direccion).includes(srch) ||
              (e.nroOrdenTN||"").includes(srch) ||
-             (e.id||"").includes(srch) ||
+             (e.id||"").toLowerCase().includes(srch) ||
+             ((e.pvCasoId||"")).toLowerCase().includes(srch) ||
              norm(e.clienteNombre).includes(srch);
     }
     return true;
