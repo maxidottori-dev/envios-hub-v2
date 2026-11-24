@@ -3182,14 +3182,16 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
                       placeholder="Ej: 1× Resma A4 Navigator 500hj" rows={2}
                       style={{...S.input,display:"block",width:"100%",resize:"vertical",fontSize:"0.78rem"}}/>
                   </div>
-                  {/* Qué se retira — siempre visible */}
-                  <div style={{marginBottom:"6px"}}>
-                    <div style={{color:"#fbbf24",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Qué se retira <span style={{color:"#4b5563"}}>(opcional · se imprime · va a Retiros)</span></div>
-                    <textarea value={f.queRetira||""} onChange={ev=>set("queRetira",ev.target.value)}
-                      placeholder="Ej: 1× Resma incorrecta (etiqueta cruzada) — dejar vacío si no hay retiro"
-                      rows={2}
-                      style={{...S.input,display:"block",width:"100%",resize:"vertical",fontSize:"0.78rem",borderColor:f.queRetira?"#78350f":"#1e2535"}}/>
-                  </div>
+                  {/* Qué se retira — solo para Cambio */}
+                  {f.subtipoEnvio==="cambio"&&(
+                    <div style={{marginBottom:"6px"}}>
+                      <div style={{color:"#fbbf24",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Qué se retira <span style={{color:"#4b5563"}}>(se imprime · va a Retiros)</span></div>
+                      <textarea value={f.queRetira||""} onChange={ev=>set("queRetira",ev.target.value)}
+                        placeholder="Ej: 1× Resma incorrecta (etiqueta cruzada)"
+                        rows={2}
+                        style={{...S.input,display:"block",width:"100%",resize:"vertical",fontSize:"0.78rem",borderColor:"#78350f"}}/>
+                    </div>
+                  )}
                   {!f.envioId&&<div style={{color:"#6ee7b7",marginBottom:"8px",fontWeight:700,fontSize:"0.7rem"}}>Se creará envío {f.queRetira?"con retiro pendiente ":""}al guardar</div>}
                   {f.envioId&&<div style={{color:"#6ee7b7",marginBottom:"8px"}}>Envío vinculado: <strong>{f.envioId}</strong></div>}
                   {/* Dirección y teléfono del nuevo envío — editables */}
@@ -7024,6 +7026,7 @@ function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armado
       preparado:true,bultos,
       armadorId:armador.id,armadorNombre:armador.nombre,
       armadoTs:ts,
+      controladorId:ctrl?.id||"",controladorNombre:ctrl?.nombre||"",
     },{merge:true}).catch(err=>{console.error("Error persistiendo preparado:",err);alert("⚠️ El armado se registró pero no se pudo actualizar el estado del envío. Anotá el pedido y avisá al administrador.");});
   },[setEnvios,armador,controladorSel]);
 
@@ -8245,6 +8248,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
       preparado:true,bultos,
       armadorId:armador.id,armadorNombre:armador.nombre,
       armadoTs:ts,
+      controladorId:controlador?.id||"",controladorNombre:controlador?.nombre||"",
     },{merge:true}).catch(err=>{console.error("Error persistiendo preparado:",err);alert("⚠️ El armado se registró pero no se pudo actualizar el estado del envío. Anotá el pedido y avisá al administrador.");});
     if(bultos>1&&impresionHabilitada&&envio.origen!=="ML")imprimirEtiquetasExtra({...envio,bultos},lc);
   },[setEnvios,lc,impresionHabilitada,showOverlay]);
