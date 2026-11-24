@@ -2912,14 +2912,32 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
     }
   },[f.ordenOriginal,envios,modo]);
 
+  // Datos de armado/control de un envío: primero el doc de envios, si falta, la colección armados.
+  // Sin orderBy (requeriría índice compuesto y fallaba en silencio): se ordena en el cliente.
+  const datosArmado=async(envio,id)=>{
+    let armador=envio?.armadorNombre||"",controlador=envio?.controladorNombre||"",ts=envio?.armadoTs||"";
+    if(!armador||!controlador||!ts){
+      try{
+        const snap=await getDocs(query(collection(db,"armados"),where("envioId","==",id)));
+        const docs=snap.docs.map(d=>d.data()).sort((x,y)=>(y.ts||"").localeCompare(x.ts||""));
+        for(const a of docs){
+          armador=armador||a.armadorNombre||"";
+          controlador=controlador||a.controladorNombre||"";
+          ts=ts||a.ts||"";
+        }
+      }catch(err){console.error("datosArmado armados lookup",err);}
+    }
+    return{armador,controlador,ts};
+  };
+
   const seleccionarEnvioOrigen=async(e)=>{
     const nombre=e.clienteNombre||e.destinatario||"";
     setBusqOrden(nombre?`${e.id} — ${nombre}`:e.id);
     setF(p=>({...p,
       ordenOriginal:e.id,
-      armador:e.armadorNombre||p.armador,
-      controlador:e.controladorNombre||p.controlador,
-      armadoTs:e.armadoTs||p.armadoTs,
+      armador:e.armadorNombre||"",
+      controlador:e.controladorNombre||"",
+      armadoTs:e.armadoTs||"",
       clienteNombre:nombre||p.clienteNombre,
       telefono:e.telefono||p.telefono,
       direccion:e.direccion||p.direccion,
@@ -2928,44 +2946,16 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
       cp:e.cp||p.cp,
     }));
     setMostrarSugsOrden(false);
-    // Si controladorNombre no está en el doc de envios (armados previos al fix),
-    // lo buscamos en la colección armados
-    if(!e.controladorNombre){
-      try{
-        const armSnap=await getDocs(query(collection(db,"armados"),where("envioId","==",e.id),orderBy("ts","desc"),limit(1)));
-        if(!armSnap.empty){
-          const arm=armSnap.docs[0].data();
-          if(arm.controladorNombre){
-            setF(p=>({...p,controlador:arm.controladorNombre}));
-          }
-          if(arm.armadorNombre&&!e.armadorNombre){
-            setF(p=>({...p,armador:arm.armadorNombre}));
-          }
-          if(arm.ts&&!e.armadoTs){
-            setF(p=>({...p,armadoTs:arm.ts}));
-          }
-        }
-      }catch(err){console.warn("armados lookup",err);}
-    }
+    const d=await datosArmado(e,e.id);
+    setF(p=>p.ordenOriginal===e.id?{...p,armador:d.armador,controlador:d.controlador,armadoTs:d.ts}:p);
   };
   const abrirNuevo=()=>{setEditId(null);setF(VACIO);setOrdenEncontrada(null);setBusqOrden("");setErr("");setModo("nuevo");};
   const abrirEditar=async(caso)=>{
     setEditId(caso.id);setF({...VACIO,...caso});setOrdenEncontrada(null);setBusqOrden(caso.ordenOriginal||"");setErr("");setModo("editar");
-    // Casos viejos sin controlador/armadoTs: completar desde envios o armados
-    if(caso.ordenOriginal&&(!caso.controlador||!caso.armadoTs)){
-      try{
-        const env=envios.find(x=>x.id===caso.ordenOriginal);
-        let ctrl=env?.controladorNombre||"",ts=env?.armadoTs||"",arm=env?.armadorNombre||"";
-        if(!ctrl||!ts){
-          const s=await getDocs(query(collection(db,"armados"),where("envioId","==",caso.ordenOriginal),orderBy("ts","desc"),limit(1)));
-          if(!s.empty){const a=s.docs[0].data();ctrl=ctrl||a.controladorNombre||"";ts=ts||a.ts||"";arm=arm||a.armadorNombre||"";}
-        }
-        setF(p=>({...p,
-          controlador:p.controlador||ctrl,
-          armadoTs:p.armadoTs||ts,
-          armador:p.armador||arm,
-        }));
-      }catch(err){console.warn("abrirEditar armados lookup",err);}
+    if(caso.ordenOriginal&&(!caso.controlador||!caso.armador||!caso.armadoTs)){
+      const env=envios.find(x=>x.id===caso.ordenOriginal);
+      const d=await datosArmado(env,caso.ordenOriginal);
+      setF(p=>({...p,armador:p.armador||d.armador,controlador:p.controlador||d.controlador,armadoTs:p.armadoTs||d.ts}));
     }
   };
   const cancelar=()=>{setModo("lista");setEditId(null);setF(VACIO);setOrdenEncontrada(null);setBusqOrden("");setErr("");};
@@ -3171,11 +3161,11 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.6rem",marginBottom:f.armadoTs?"0.4rem":"0.75rem"}}>
             <div>
               <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Armó</div>
-              <input value={f.armador||""} onChange={ev=>set("armador",ev.target.value)} placeholder="Nombre del armador" style={{...S.input,width:"100%",fontSize:"0.8rem"}}/>
+              <input value={f.armador||""} readOnly placeholder="Sin dato de armado" style={{...S.input,width:"100%",fontSize:"0.8rem",opacity:0.85,cursor:"default"}}/>
             </div>
             <div>
               <div style={{color:"#6b7280",fontSize:"0.6rem",fontWeight:700,textTransform:"uppercase",marginBottom:"3px"}}>Controló</div>
-              <input value={f.controlador||""} onChange={ev=>set("controlador",ev.target.value)} placeholder="Nombre del controlador" style={{...S.input,width:"100%",fontSize:"0.8rem"}}/>
+              <input value={f.controlador||""} readOnly placeholder="Sin dato de control" style={{...S.input,width:"100%",fontSize:"0.8rem",opacity:0.85,cursor:"default"}}/>
             </div>
           </div>
           {f.armadoTs&&(
