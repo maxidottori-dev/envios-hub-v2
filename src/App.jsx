@@ -2949,7 +2949,25 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
     }
   };
   const abrirNuevo=()=>{setEditId(null);setF(VACIO);setOrdenEncontrada(null);setBusqOrden("");setErr("");setModo("nuevo");};
-  const abrirEditar=(caso)=>{setEditId(caso.id);setF({...VACIO,...caso});setOrdenEncontrada(null);setBusqOrden(caso.ordenOriginal||"");setErr("");setModo("editar");};
+  const abrirEditar=async(caso)=>{
+    setEditId(caso.id);setF({...VACIO,...caso});setOrdenEncontrada(null);setBusqOrden(caso.ordenOriginal||"");setErr("");setModo("editar");
+    // Casos viejos sin controlador/armadoTs: completar desde envios o armados
+    if(caso.ordenOriginal&&(!caso.controlador||!caso.armadoTs)){
+      try{
+        const env=envios.find(x=>x.id===caso.ordenOriginal);
+        let ctrl=env?.controladorNombre||"",ts=env?.armadoTs||"",arm=env?.armadorNombre||"";
+        if(!ctrl||!ts){
+          const s=await getDocs(query(collection(db,"armados"),where("envioId","==",caso.ordenOriginal),orderBy("ts","desc"),limit(1)));
+          if(!s.empty){const a=s.docs[0].data();ctrl=ctrl||a.controladorNombre||"";ts=ts||a.ts||"";arm=arm||a.armadorNombre||"";}
+        }
+        setF(p=>({...p,
+          controlador:p.controlador||ctrl,
+          armadoTs:p.armadoTs||ts,
+          armador:p.armador||arm,
+        }));
+      }catch(err){console.warn("abrirEditar armados lookup",err);}
+    }
+  };
   const cancelar=()=>{setModo("lista");setEditId(null);setF(VACIO);setOrdenEncontrada(null);setBusqOrden("");setErr("");};
 
   const guardar=async()=>{
