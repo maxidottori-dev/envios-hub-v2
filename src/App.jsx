@@ -2706,20 +2706,20 @@ function imprimirEtiquetaEnvioPV(caso, envioDoc){
   const css=`
     @page{size:A5 landscape;margin:8mm}
     *{box-sizing:border-box}
-    body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:10pt}
+    body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:12pt}
     .etiqueta{border:2.5px solid #111;border-radius:6px;padding:5mm;display:flex;flex-direction:column;gap:2.5mm;height:calc(100vh - 20mm)}
-    .pv-badge{background:#6366f1;color:#fff;font-size:9pt;font-weight:900;padding:1.5mm 4mm;border-radius:3px;text-align:center;letter-spacing:1px;text-transform:uppercase;align-self:flex-start}
-    .pvid{font-size:22pt;font-weight:900;color:#111;letter-spacing:1px}
-    .empresa{font-size:7pt;color:#888;text-transform:uppercase;letter-spacing:.5px}
+    .pv-badge{background:#6366f1;color:#fff;font-size:11pt;font-weight:900;padding:1.5mm 4mm;border-radius:3px;text-align:center;letter-spacing:1px;text-transform:uppercase;align-self:flex-start}
+    .pvid{font-size:24pt;font-weight:900;color:#111;letter-spacing:1px}
+    .empresa{font-size:9pt;color:#888;text-transform:uppercase;letter-spacing:.5px}
     .sep{border-top:1px solid #ddd;margin:1mm 0}
-    .dest-nombre{font-size:16pt;font-weight:800;color:#111}
-    .dest-dir{font-size:10pt;color:#333;font-weight:500}
-    .dest-tel{font-size:9pt;color:#555}
+    .dest-nombre{font-size:18pt;font-weight:800;color:#111}
+    .dest-dir{font-size:12pt;color:#333;font-weight:500}
+    .dest-tel{font-size:11pt;color:#555}
     .row-info{display:grid;grid-template-columns:1fr 1fr;gap:4mm;margin-top:1mm}
-    .lbl{font-size:7pt;color:#888;text-transform:uppercase;font-weight:700}
-    .val{font-size:11pt;font-weight:800;color:#111}
+    .lbl{font-size:9pt;color:#888;text-transform:uppercase;font-weight:700}
+    .val{font-size:13pt;font-weight:800;color:#111}
     .qr-row{display:flex;align-items:center;gap:4mm;margin-top:auto}
-    .qr-label{font-size:8pt;color:#666}
+    .qr-label{font-size:10pt;color:#666}
   `;
 
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Etiqueta ${envioId}</title><style>${css}</style></head><body>${etiqueta}</body></html>`;
@@ -2730,6 +2730,7 @@ function imprimirEtiquetaEnvioPV(caso, envioDoc){
 function imprimirEtiquetaDevolucionPV(caso){
   const pvId=caso.nroCaso||("PV-"+caso.id.slice(-6).toUpperCase());
   const direccionCliente=[caso.direccion,caso.localidad,caso.partido,caso.cp].filter(Boolean).join(", ");
+  const qrSrc=qrDataURL(pvId);
 
   const etiqueta=`
     <div class="etiqueta">
@@ -2743,23 +2744,23 @@ function imprimirEtiquetaDevolucionPV(caso){
       <div class="sep"></div>
       <div class="lbl">Producto a devolver</div>
       <div class="producto">${caso.queRetira||caso.queEnvia||"—"}</div>
-      <div class="firma-box">Recibido: _____________________ Fecha: ___________</div>
+      <div class="firma-box"><img src="${qrSrc}" width="90" height="90" style="float:right;margin-top:-6mm"/>Recibido: _____________________ Fecha: ___________</div>
     </div>`;
 
   const css=`
     @page{size:A5 landscape;margin:8mm}
     *{box-sizing:border-box}
-    body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:10pt}
+    body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:12pt}
     .etiqueta{border:2.5px solid #111;border-radius:6px;padding:5mm;display:flex;flex-direction:column;gap:2.5mm;height:calc(100vh - 20mm)}
-    .dev-badge{background:#f59e0b;color:#111;font-size:9pt;font-weight:900;padding:1.5mm 4mm;border-radius:3px;text-align:center;letter-spacing:1px;text-transform:uppercase;align-self:flex-start}
-    .pvid{font-size:22pt;font-weight:900;color:#111;letter-spacing:1px}
-    .empresa{font-size:7pt;color:#888;text-transform:uppercase;letter-spacing:.5px}
+    .dev-badge{background:#f59e0b;color:#111;font-size:11pt;font-weight:900;padding:1.5mm 4mm;border-radius:3px;text-align:center;letter-spacing:1px;text-transform:uppercase;align-self:flex-start}
+    .pvid{font-size:24pt;font-weight:900;color:#111;letter-spacing:1px}
+    .empresa{font-size:9pt;color:#888;text-transform:uppercase;letter-spacing:.5px}
     .sep{border-top:1px solid #ddd;margin:1mm 0}
-    .lbl{font-size:7pt;color:#888;text-transform:uppercase;font-weight:700}
-    .dest-nombre{font-size:14pt;font-weight:800;color:#111}
-    .dest-dir{font-size:9pt;color:#555}
-    .producto{font-size:12pt;font-weight:700;color:#111;border:1.5px solid #b45309;border-radius:3px;padding:2mm;min-height:12mm;margin-top:1mm;background:#fffbeb}
-    .firma-box{margin-top:auto;border-top:1px dashed #bbb;padding-top:3mm;font-size:9pt;color:#666}
+    .lbl{font-size:9pt;color:#888;text-transform:uppercase;font-weight:700}
+    .dest-nombre{font-size:16pt;font-weight:800;color:#111}
+    .dest-dir{font-size:11pt;color:#555}
+    .producto{font-size:14pt;font-weight:700;color:#111;border:1.5px solid #b45309;border-radius:3px;padding:2mm;min-height:12mm;margin-top:1mm;background:#fffbeb}
+    .firma-box{margin-top:auto;border-top:1px dashed #bbb;padding-top:3mm;font-size:11pt;color:#666}
   `;
 
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Dev. ${pvId}</title><style>${css}</style></head><body>${etiqueta}</body></html>`;
