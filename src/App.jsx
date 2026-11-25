@@ -1915,7 +1915,7 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
                     {e.turno&&<Bdg label={e.turno} bg={TURNO_C[e.turno]?.bg||"#130d2a"} t={TURNO_C[e.turno]?.c||"#a78bfa"}/>}
                     {e.fecha&&<Bdg label={fmtCorta(e.fecha)} bg="#12172a" t="#6b7280"/>}
                     {e.cobranza!==null&&<Bdg label={"$"+Number(e.cobranza).toLocaleString("es-AR")} bg="#1c1500" t="#fbbf24"/>}
-                    {!!e.cambio&&<Bdg label="Cambio" bg="#1c0514" t="#ec4899"/>}
+                    {(!!e.cambio||e.pvSubtipo==="cambio")&&<Bdg label="Cambio" bg="#1c0514" t="#ec4899"/>}
                     {e.retiro!==null&&<Bdg label="Retiro" bg="#1c1000" t="#f97316"/>}
                     {e.alertaDireccion&&<Bdg label="Sin CP/Dir" bg="#1c0a00" t="#fb923c"/>}
                     {!e.partido&&getEstado(e)!=="cancelado"&&<Bdg label="Sin partido" bg="#1c0a00" t="#fb923c"/>}
@@ -3029,8 +3029,9 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
         // Si hay envío vinculado → sync campo `cambio` y `horarioEntrega` en el envío
         if(casoOriginal?.envioId&&f.resolucion==="envio"){
           const envRef=doc(db,"envios",casoOriginal.envioId);
-          const envUpd={horarioEntrega:f.horarioEntrega||""};
-          if(f.queRetira)envUpd.cambio=f.queRetira;
+          const envUpd={horarioEntrega:f.horarioEntrega||"",pvSubtipo:f.subtipoEnvio||"envio"};
+          // Lo que se retira va en `retiro` (una sola fuente; antes iba a `cambio` y se duplicaba con el retiro manual)
+          if(f.queRetira){envUpd.retiro=f.queRetira;envUpd.cambio=null;}
           await updateDoc(envRef,envUpd);
         }
         cancelar();return;
@@ -3064,11 +3065,11 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
           fecha:f.envioFecha||hoy,fechaVenta:f.envioFecha||hoy,
           turno:f.envioTurno||"",trans:f.envioTrans||"",
           estado:f.envioTrans?"asignado":"sin_asignar",bultos:1,
-          cobranza:null,retiro:null,esCC:false,importeCC:0,nroFactura:"",
+          cobranza:null,esCC:false,importeCC:0,nroFactura:"",
           observaciones:obsPartes.join(" | "),
           tarifaLog:0,pvCasoId:pvRef.id,
           horarioEntrega:f.horarioEntrega||"",
-          ...(f.queRetira?{cambio:f.queRetira}:{}),
+          retiro:f.queRetira||null,cambio:null,pvSubtipo:f.subtipoEnvio||"envio",
           creadoTs:new Date().toISOString(),
           ...(audit?{creadoPor:audit}:{}),
         };
@@ -3133,7 +3134,7 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
       {/* Formulario nuevo/editar */}
       {esFormulario&&(
         <div style={{...S.card,padding:"1rem",marginBottom:"1rem",border:`1px solid ${modo==="editar"?"#f59e0b":"#6366f1"}`}}>
-          {modo==="editar"&&<div style={{color:"#f59e0b",fontSize:"0.7rem",fontWeight:700,marginBottom:"0.6rem",textTransform:"uppercase"}}>✏ Editando caso</div>}
+          {modo==="editar"&&<div style={{color:"#f59e0b",fontSize:"0.7rem",fontWeight:700,marginBottom:"0.6rem",textTransform:"uppercase"}}>✏ Editando caso {f.nroCaso||""}</div>}
 
           {/* A: Origen e incidente */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.6rem",marginBottom:"0.75rem"}}>
@@ -6953,7 +6954,7 @@ function VistaLogistica({envios,sesion,lc}){
                     :<Bdg label="No preparado" bg="#1c1200" t="#f59e0b"/>
                   }
                   {e.cobranza!==null&&<Bdg label={"Cobrar $"+Number(e.cobranza).toLocaleString("es-AR")} bg="#1c1500" t="#fbbf24"/>}
-                  {!!e.cambio&&<Bdg label="Cambio" bg="#1c0514" t="#ec4899"/>}
+                  {(!!e.cambio||e.pvSubtipo==="cambio")&&<Bdg label="Cambio" bg="#1c0514" t="#ec4899"/>}
                   {e.retiro!==null&&<Bdg label="Retiro" bg="#1c1000" t="#f97316"/>}
                 </div>
                 {(()=>{
