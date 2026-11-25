@@ -76,6 +76,7 @@ const FEATURES=[
   {key:"accion_imprimir",     grupo:"acciones", label:"Imprimir etiquetas", desc:"Imprimir etiquetas de envíos individuales con código QR y datos de entrega"},
   {key:"accion_autorizarcc",  grupo:"acciones", label:"Autorizar Cta. Corriente", desc:"Autorizar que un pedido de Tienda Nube con pago pendiente de acreditación pase a Cuenta Corriente, para poder asignarlo a una logística sin esperar el pago"},
   {key:"accion_verhistorialdespacho", grupo:"acciones", label:"Ver historial de despacho", desc:"Ver el registro histórico de envíos despachados, agrupado por fecha y logística"},
+  {key:"accion_reasignardespachado", grupo:"acciones", defaultOff:true, label:"Reasignar envío despachado", desc:"Cambiar la logística de un envío que ya fue despachado. Por defecto solo el admin puede; se habilita por usuario"},
 ];
 
 // Devuelve true si la sesión puede usar esa feature
@@ -85,8 +86,13 @@ function puedeVer(sesion,feature){
   if(sesion.rol==="admin")return true;
   if(sesion.rol!=="colaborador")return false;
   const p=sesion.permisos||{};
+  // Features "defaultOff": solo habilitadas si el admin las activó explícitamente
+  if(FEATURES.find(f=>f.key===feature)?.defaultOff)return p[feature]===true;
   return p[feature]!==false;
 }
+// Reasignar la logística de un envío ya despachado: solo admin o usuario habilitado
+function puedeReasignarDespachado(sesion){return puedeVer(sesion,"accion_reasignardespachado");}
+const MSG_DESPACHADO_BLOQ="Este envío ya fue despachado: no se puede reasignar la logística. Solo el administrador o un usuario habilitado puede hacerlo.";
 
 
 // ════════════════════════════════════════════════════════════════════
@@ -1200,6 +1206,7 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
   const nroSegCambiado=e.nroSeguimiento&&e.nroSeguimiento!==(envio.nroSeguimiento||"");
   const nroSegDuplicado=nroSegCambiado&&envios.some(o=>o.id!==envio.id&&o.nroSeguimiento===e.nroSeguimiento);
   const handleSave=()=>{
+    if(envio.despachado&&envio.trans&&e.trans!==envio.trans&&!esAdmin&&!puedeReasignarDespachado(sesion)){alert(MSG_DESPACHADO_BLOQ);return;}
     if(nroSegDuplicado){alert("⚠️ Ese nro. de seguimiento ya está asignado a otro envío. Cada nro. es único.");return;}
     // Los campos de armado siempre vienen del prop envio (actualizado por onSnapshot)
     // para no pisar con valores stale del estado local e (que se inicializa una sola vez al abrir el panel)
@@ -1217,7 +1224,10 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
     ...(transAsignado&&audit?{asignadoPor:audit}:{}),
     ...(costoOverride!==null&&costoOverride!==(envio.importeOverride||null)&&audit?{importeEditadoPor:audit}:{})});}
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
-  const handleTrans=l=>{const t=e.trans===l?"":l;setE(p=>({...p,trans:t,estado:t?"asignado":(p.estado==="cancelado"?"cancelado":"sin_asignar")}));};
+  const bloqueaReasignar=!!(envio.despachado&&envio.trans&&!esAdmin&&!puedeReasignarDespachado(sesion));
+  const handleTrans=l=>{
+    if(bloqueaReasignar){alert(MSG_DESPACHADO_BLOQ);return;}
+    const t=e.trans===l?"":l;setE(p=>({...p,trans:t,estado:t?"asignado":(p.estado==="cancelado"?"cancelado":"sin_asignar")}));};
   // Cuando un envío ya despachado pasa a Cancelado, se marca devolucionPendiente + Sin cargo en liq.
   const handleEstado=v=>{
     if(v==="cancelado"&&envio.despachado){
@@ -1375,7 +1385,8 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.6rem 1rem",marginBottom:"0.6rem",opacity:(esTN&&e.pagoEstado==="pendiente")?0.35:1,pointerEvents:(esTN&&e.pagoEstado==="pendiente")?"none":"auto"}}>
           <div>
             <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Logistica</div>
-            <div style={{display:"flex",gap:"3px",flexWrap:"wrap"}}>{logActivas.map(l=><button key={l} onClick={()=>handleTrans(l)} style={S.chip(e.trans===l,lc[l].color,lc[l].bg)}>{l}</button>)}</div>
+            <div style={{display:"flex",gap:"3px",flexWrap:"wrap",opacity:bloqueaReasignar?0.5:1}}>{logActivas.map(l=><button key={l} onClick={()=>handleTrans(l)} style={S.chip(e.trans===l,lc[l].color,lc[l].bg)}>{l}</button>)}</div>
+            {bloqueaReasignar&&<div style={{color:"#f59e0b",fontSize:"0.68rem",marginTop:"4px"}}>🔒 Envío despachado: la logística solo la puede cambiar el administrador o un usuario habilitado.</div>}
           </div>
           <div>
             <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Turno</div>
@@ -1623,7 +1634,17 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
   };
   const eliminar=async id=>{if(window.confirm("Eliminar este envio?")){await deleteDoc(doc(db,"envios",id));setEnvios(p=>p.filter(e=>e.id!==id));}};
   const eliminarSel=async()=>{if(!window.confirm(`Eliminar ${seleccionados.size} envio(s)?`))return;await Promise.all([...seleccionados].map(id=>deleteDoc(doc(db,"envios",id))));setEnvios(p=>p.filter(e=>!seleccionados.has(e.id)));setSeleccionados(new Set());setModoSel(false);};
-  const reasignarSel=()=>{const items=envios.filter(e=>seleccionados.has(e.id));onReasignar(items);setSeleccionados(new Set());setModoSel(false);};
+  const reasignarSel=()=>{
+    let items=envios.filter(e=>seleccionados.has(e.id));
+    if(!esAdmin&&!puedeReasignarDespachado(sesion)){
+      const bloq=items.filter(e=>e.despachado&&e.trans);
+      if(bloq.length){
+        alert(`${bloq.length} envío${bloq.length>1?"s":""} ya despachado${bloq.length>1?"s":""} no se pueden reasignar (solo admin o usuario habilitado). Se excluyen de la selección.`);
+        items=items.filter(e=>!(e.despachado&&e.trans));
+      }
+    }
+    if(!items.length)return;
+    onReasignar(items);setSeleccionados(new Set());setModoSel(false);};
   const [cancelando,setCancelando]=useState(false);
   const cancelarSel=async()=>{if(!window.confirm(`Cancelar ${seleccionados.size} envio(s)?`))return;setCancelando(true);const auditC=mkAudit(sesion);await Promise.all([...seleccionados].map(id=>setDoc(doc(db,"envios",id),{estado:"cancelado",...(auditC?{canceladoPor:auditC}:{})},{merge:true})));setEnvios(p=>p.map(e=>seleccionados.has(e.id)?{...e,estado:"cancelado"}:e));setSeleccionados(new Set());setModoSel(false);setCancelando(false);};
   // Resumen FLEX hoy (solo cuando mostrarResumenFlex=true)
@@ -2265,11 +2286,19 @@ function TabImprimir({envios,setEnvios,zc,lc}){
       err=>console.error("acuses:",err));
     return()=>unsub();
   },[fecha]);
+  // Solo las logísticas que tienen un usuario de logística activo entran al circuito de aceptación
+  const [logsConApp,setLogsConApp]=useState(()=>new Set());
+  useEffect(()=>{
+    const unsub=onSnapshot(query(collection(db,"usuarios"),where("rol","==","logistica")),
+      snap=>setLogsConApp(new Set(snap.docs.map(d=>d.data()).filter(u=>u.activo!==false&&u.logistica).map(u=>u.logistica))),
+      err=>console.error("usuarios logistica:",err));
+    return()=>unsub();
+  },[]);
   const estadoAcuseLog=l=>{
     const act=envios.filter(e=>(e.fecha||e.fechaVenta||"")===fecha&&e.trans===l&&e.estado!=="cancelado");
     return{act,...calcAcuse(act,acusesDia[acuseId(l,fecha)]),acuse:acusesDia[acuseId(l,fecha)]};
   };
-  const chipsAcuse=logActivas.map(l=>({l,...estadoAcuseLog(l)})).filter(x=>x.estado!=="vacio");
+  const chipsAcuse=logActivas.filter(l=>logsConApp.has(l)).map(l=>({l,...estadoAcuseLog(l)})).filter(x=>x.estado!=="vacio");
 
   // WhatsApp: guardar despacho en Firestore y generar link copiable
   const [waCopied,setWaCopied]=useState(false);
@@ -6777,7 +6806,8 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{},esAdmin=
 
   const togglePerm=async(u,featureKey)=>{
     const actual=(u.permisos||{})[featureKey];
-    const nuevoVal=actual===false?true:false; // si era false → true; si era undefined/true → false
+    const defOff=FEATURES.find(f=>f.key===featureKey)?.defaultOff;
+    const nuevoVal=defOff?actual!==true:(actual===false?true:false); // normal: false→true, resto→false; defaultOff: true→false, resto→true
     const nuevosPermisos={...(u.permisos||{}),[featureKey]:nuevoVal};
     setUsuarios(prev=>prev.map(x=>x.id===u.id?{...x,permisos:nuevosPermisos}:x));
     await setDoc(doc(db,"usuarios",u.id),{permisos:nuevosPermisos},{merge:true});
@@ -6815,7 +6845,7 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{},esAdmin=
       <div style={{background:"#0d1221",borderTop:"1px solid #252d40",padding:"1rem"}}>
         <div style={{fontSize:"0.72rem",fontWeight:700,color:"#9ca3af",marginBottom:"0.75rem",textTransform:"uppercase",letterSpacing:"0.06em"}}>
           Permisos de <span style={{color:"#e5e7eb"}}>{u.usuario}</span>
-          <span style={{color:"#4b5563",fontWeight:400,marginLeft:"8px"}}>— por defecto todos habilitados; desactivá los que no apliquen</span>
+          <span style={{color:"#4b5563",fontWeight:400,marginLeft:"8px"}}>— por defecto todos habilitados (salvo "Reasignar envío despachado", que viene apagado); ajustá los que no apliquen</span>
         </div>
         {grupos.map(g=>{
           const feats=FEATURES.filter(f=>f.grupo===g.id);
@@ -6824,7 +6854,7 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{},esAdmin=
               <div style={{color:g.color,fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:"6px",paddingBottom:"4px",borderBottom:"1px solid #1a1f2e"}}>{g.label}</div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:"4px"}}>
                 {feats.map(f=>{
-                  const habilitado=perms[f.key]!==false;
+                  const habilitado=f.defaultOff?perms[f.key]===true:perms[f.key]!==false;
                   const ttId=u.id+"_"+f.key;
                   return(
                     <div key={f.key} style={{display:"flex",alignItems:"center",gap:"8px",padding:"5px 8px",borderRadius:"6px",background:habilitado?"#0f1a10":"#1c0a0a",border:"1px solid "+(habilitado?"#1a3a1a":"#3a1a1a"),cursor:"pointer",userSelect:"none"}}
