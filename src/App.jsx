@@ -7106,6 +7106,7 @@ function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armado
   const [sesionActiva,setSesionActiva]=useState(false);
   const [sesionInicioTs,setSesionInicioTs]=useState(null);
   const [camara,setCamara]=useState(false);
+  const [teclado,setTeclado]=useState(false); // false = no abre el teclado del celular (escáner/cámara); true = tipeo manual
   const [colectasArmadas,setColectasArmadas]=useState([]);
   const soportaCamera=typeof window!=="undefined"&&"mediaDevices" in navigator&&!!navigator.mediaDevices?.getUserMedia;
   const inputRef=useRef(null);
@@ -7240,8 +7241,8 @@ function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armado
     setPendiente(null);
     resetGapTimer();
     beepOK();
-    if(inputRef.current)inputRef.current.focus();
-  },[pendiente,controladorSel,armador,hoy,setEnvios,setColectas,correr,resetGapTimer]);
+    if(!camara&&inputRef.current)inputRef.current.focus();
+  },[pendiente,controladorSel,armador,hoy,setEnvios,setColectas,correr,resetGapTimer,camara]);
 
   const deshacer=useCallback(()=>{
     if(!ultimo)return;
@@ -7454,10 +7455,14 @@ function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armado
             <div style={{...S.card,padding:"0.8rem 0.9rem",marginBottom:"0.75rem",border:"1px solid #6366f133"}}>
               <div style={{display:"flex",gap:"8px",marginBottom:camara?"8px":"0"}}>
                 <input ref={inputRef} value={qrInput} onChange={e=>setQrInput(e.target.value)}
+                  inputMode={teclado?"text":"none"}
                   onKeyDown={e=>{if(e.key==="Enter"){procesarScan(qrInput);setQrInput("");}}}
-                  placeholder="Escaneá o ingresá el nro..."
+                  placeholder={teclado?"Ingresá el nro...":"Escaneá el código..."}
                   style={{...S.input,flex:1,fontSize:"0.95rem",padding:"11px 12px"}} autoComplete="off"/>
                 <button onClick={()=>{procesarScan(qrInput);setQrInput("");}} style={{...S.btn(true),background:"#12172a",border:"1px solid #6366f1",color:"#a78bfa",padding:"8px 14px",fontWeight:700}}>OK</button>
+                <button onClick={()=>{setTeclado(t=>{const n=!t;if(!n&&inputRef.current)inputRef.current.blur();return n;});setTimeout(()=>inputRef.current&&inputRef.current.focus(),50);}}
+                  title="Escribir a mano"
+                  style={{...S.btn(teclado),background:teclado?"#12172a":"#0f1420",border:"1px solid "+(teclado?"#6366f1":"#252d40"),color:teclado?"#a78bfa":"#6b7280",padding:"8px 12px",fontSize:"1.1rem"}}>⌨</button>
                 {soportaCamera&&(
                   <button onClick={()=>setCamara(p=>!p)} style={{...S.btn(camara),background:camara?"#0d1c04":"#0f1420",border:"1px solid "+(camara?"#84cc16":"#252d40"),color:camara?"#84cc16":"#6b7280",padding:"8px 12px",fontSize:"1.2rem"}}>📷</button>
                 )}
