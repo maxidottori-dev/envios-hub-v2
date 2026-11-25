@@ -11655,7 +11655,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
   // Helpers para PDF y UI: dirección sin referencia, nro de envío unificado
   const dirCorta=(dir)=>(dir||"").split(/\s*\/\s*/)[0].trim();
   // Los envíos de Post Venta no tienen seguimiento ni nro TN: se referencian por su ID (PV0175E)
-  const nroRef=(e)=>e.nroSeguimiento||  (e.nroOrdenTN?"#"+e.nroOrdenTN:(e.pvCasoId?e.id:""));
+  const nroRef=(e)=>e.nroSeguimiento||  (e.nroOrdenTN?"#"+e.nroOrdenTN:(e.pvCasoId?e.id:(e.origen==="Manual"?String(e.id).slice(-8):"")));
   const nroRefPDF=(e)=>e.nroSeguimiento||(e.nroOrdenTN?"#"+e.nroOrdenTN:(e.pvCasoId?e.id:""));
 
   // Generar PDF con jsPDF y guardar sesión en Firestore.
@@ -12094,11 +12094,17 @@ function TabSalida({envios,setEnvios,lc,sesion}){
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{display:"flex",alignItems:"center",gap:"5px",flexWrap:"wrap"}}>
                         {e.reprogramado&&<span style={{background:"#1c1500",color:"#fbbf24",border:"1px solid #78350f",padding:"1px 5px",borderRadius:"4px",fontSize:"0.6rem",fontWeight:700,flexShrink:0}}>⟳ Reprog.</span>}
-                        {e.pvCasoId&&<span style={{background:"#1e1b4b",color:"#a5b4fc",border:"1px solid #4338ca",padding:"1px 6px",borderRadius:"4px",fontSize:"0.65rem",fontWeight:800,flexShrink:0}}>PV · {e.id}</span>}
+                        {(()=>{
+                          const t=e.pvCasoId?{l:"Post venta",bg:"#1e1b4b",c:"#a5b4fc",b:"#4338ca"}
+                            :e.origen==="ML"?{l:"Flex",bg:"#0d1c04",c:"#84cc16",b:"#3f6212"}
+                            :e.origen==="Tienda Nube"?{l:"Tienda Nube",bg:"#0c1a2e",c:"#38bdf8",b:"#0c4a6e"}
+                            :e.origen==="Manual"?{l:"Manual",bg:"#1a1f2e",c:"#9ca3af",b:"#374151"}
+                            :null;
+                          return t?<span style={{background:t.bg,color:t.c,border:`1px solid ${t.b}`,padding:"1px 6px",borderRadius:"4px",fontSize:"0.62rem",fontWeight:700,flexShrink:0}}>{t.l}</span>:null;
+                        })()}
                         <span style={{fontWeight:600,fontSize:"0.78rem",color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dirCorta(e.direccion)}</span>
                       </div>
                       <div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginTop:"1px"}}>
-                        {e.pvCasoId&&e.clienteNombre&&<span style={{color:"#d1d5db",fontSize:"0.67rem",fontWeight:600}}>{e.clienteNombre}</span>}
                         {(e.localidad||e.ciudad||e.partido)&&<span style={{color:muted,fontSize:"0.67rem"}}>{e.localidad||e.ciudad||e.partido}</span>}
                         {nroRef(e)&&<span style={{color:muted,fontSize:"0.67rem",fontFamily:"monospace"}}>{nroRef(e)}</span>}
                         {prep
