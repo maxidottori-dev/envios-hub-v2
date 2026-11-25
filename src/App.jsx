@@ -2689,6 +2689,24 @@ function imprimirFormularioLogisticaPV(caso, envioDoc){
   win.document.write(html);win.document.close();win.onload=()=>win.print();
 }
 
+// Marcas que debe llevar la etiqueta según el caso (cambio / faltante)
+function tagsPV(caso){
+  const k=String(caso.tipoIncidente||"").toLowerCase();
+  const t=[];
+  if(caso.subtipoEnvio==="cambio"||k.includes("cambio"))t.push("CAMBIO");
+  if(k.includes("faltante"))t.push("FALTANTE");
+  return t;
+}
+function tagsHtml(caso){
+  const t=tagsPV(caso);
+  return t.length?`<div class="tags">${t.map(x=>`<span class="tag">${x}</span>`).join("")}</div>`:"";
+}
+// Tamaño de letra del detalle de producto según largo
+function ptProducto(txt){
+  const n=(txt||"").length;
+  return n>260?9:n>180?10:n>120?11:n>70?12.5:15;
+}
+
 function imprimirEtiquetaEnvioPV(caso, envioDoc){
   const pvId=caso.nroCaso||("PV-"+caso.id.slice(-6).toUpperCase());
   const envioId=caso.envioId||pvId+"E";
@@ -2704,6 +2722,7 @@ function imprimirEtiquetaEnvioPV(caso, envioDoc){
         <div class="empresa">Umpapel Distribuidora</div>
       </div>
       <div class="pvid">${envioId}</div>
+      ${tagsHtml(caso)}
       <div class="sep"></div>
       <div class="dest-nombre">${caso.clienteNombre||"—"}</div>
       <div class="dest-dir" style="font-size:${ptDireccion(direccionFull,16)}pt">${direccionFull||"—"}</div>
@@ -2729,8 +2748,10 @@ function imprimirEtiquetaEnvioPV(caso, envioDoc){
     .empresa{font-size:8pt;color:#666;text-transform:uppercase;letter-spacing:.4px;text-align:right}
     .pvid{font-size:24pt;font-weight:900;color:#111;letter-spacing:1px;line-height:1.1}
     .sep{border-top:1px solid #bbb}
+    .tags{display:flex;gap:2mm;flex-wrap:wrap}
+    .tag{border:2.5px solid #111;border-radius:3px;padding:.8mm 3mm;font-size:15pt;font-weight:900;letter-spacing:1px}
     .dest-nombre{font-size:15pt;font-weight:800;color:#111;line-height:1.15}
-    .dest-dir{font-size:16pt;color:#000;font-weight:800;line-height:1.2}
+    .dest-dir{font-size:16pt;color:#000;font-weight:400;line-height:1.2}
     .dest-tel{font-size:12pt;color:#333;font-weight:600}
     .row-info{display:grid;grid-template-columns:1fr 1fr;gap:3mm}
     .lbl{font-size:8pt;color:#777;text-transform:uppercase;font-weight:700}
@@ -2756,17 +2777,17 @@ function imprimirEtiquetaDevolucionPV(caso){
         <div class="empresa">Umpapel Distribuidora</div>
       </div>
       <div class="pvid">${pvId}</div>
+      ${tagsHtml(caso)}
       <div class="sep"></div>
       <div class="lbl">Cliente / Origen</div>
       <div class="dest-nombre">${caso.clienteNombre||"—"}</div>
       <div class="dest-dir" style="font-size:${ptDireccion(direccionCliente,14)}pt">${direccionCliente||"—"}</div>
       <div class="sep"></div>
       <div class="lbl">Producto a devolver</div>
-      <div class="producto">${caso.queRetira||caso.queEnvia||"—"}</div>
+      <div class="producto" style="font-size:${ptProducto(caso.queRetira||caso.queEnvia||"")}pt">${caso.queRetira||caso.queEnvia||"—"}</div>
       <div class="qr-row">
         <img class="qr" src="${qrSrc}"/>
       </div>
-      <div class="firma-box">Recibido: ____________________ Fecha: ________</div>
     </div>`;
 
   const css=`
@@ -2780,13 +2801,14 @@ function imprimirEtiquetaDevolucionPV(caso){
     .empresa{font-size:8pt;color:#666;text-transform:uppercase;letter-spacing:.4px;text-align:right}
     .pvid{font-size:24pt;font-weight:900;color:#111;letter-spacing:1px;line-height:1.1}
     .sep{border-top:1px solid #bbb}
+    .tags{display:flex;gap:2mm;flex-wrap:wrap}
+    .tag{border:2.5px solid #111;border-radius:3px;padding:.8mm 3mm;font-size:15pt;font-weight:900;letter-spacing:1px}
     .lbl{font-size:8pt;color:#777;text-transform:uppercase;font-weight:700}
     .dest-nombre{font-size:14pt;font-weight:800;color:#111;line-height:1.15}
-    .dest-dir{font-size:14pt;color:#000;font-weight:700;line-height:1.2}
-    .producto{font-size:12pt;font-weight:700;color:#111;border:1.5px solid #111;border-radius:3px;padding:1.5mm;line-height:1.2}
+    .dest-dir{font-size:14pt;color:#000;font-weight:400;line-height:1.2}
+    .producto{font-size:12pt;font-weight:700;color:#111;border:1.5px solid #111;border-radius:3px;padding:1.5mm;line-height:1.2;flex:1 1 0;min-height:12mm;overflow:hidden}
     .qr-row{display:flex;justify-content:center;align-items:center;margin-top:auto;flex-shrink:0}
     .qr{width:34mm;height:34mm;image-rendering:pixelated;flex-shrink:0}
-    .firma-box{flex-shrink:0;border-top:1px dashed #999;padding-top:2mm;font-size:10pt;color:#555}
   `;
 
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Dev. ${pvId}</title><style>${css}</style></head><body>${etiqueta}</body></html>`;
