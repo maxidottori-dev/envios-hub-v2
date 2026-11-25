@@ -2554,13 +2554,14 @@ function qrDataURL(text,cell=5){
   return q.createDataURL(cell,4);
 }
 
-function imprimirFormularioArmadoPV(caso, envioDoc){
+function imprimirFormularioArmadoPV(caso, envioDoc, tipoLabelOverride){
   const pvId=caso.nroCaso||("PV-"+caso.id.slice(-6).toUpperCase());
   const envioId=caso.envioId||pvId+"E";
   const fechaDespacho=envioDoc?.fecha?new Date(envioDoc.fecha+"T12:00:00").toLocaleDateString("es-AR"):"—";
   const trans=envioDoc?.trans||caso.envioTrans||"—";
   const direccionFull=direccionPV(caso);
-  const tipoLabel=caso.tipoIncidente||"";
+  // Nombre legible del tipo: el que viene de la config; si no, se arma desde la clave (producto_incorrecto -> Producto incorrecto)
+  const tipoLabel=tipoLabelOverride||(caso.tipoIncidente?(caso.tipoIncidente.replace(/_/g," ").replace(/^./,c=>c.toUpperCase())):"");
   const qrSrc=qrDataURL(envioId);
 
   const copia=`
@@ -3594,7 +3595,7 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
                             <div style={{position:"fixed",inset:0,zIndex:49}} onClick={()=>setPrintMenuId(null)}/>
                             <div style={{position:"absolute",right:0,top:"calc(100% + 2px)",zIndex:50,background:"#1a1f2e",border:"1px solid #374151",borderRadius:"6px",minWidth:"180px",overflow:"hidden",boxShadow:"0 4px 20px rgba(0,0,0,0.6)"}}>
                               {[
-                                {label:"📋 Formulario Armado",fn:()=>{imprimirFormularioArmadoPV(caso,envios.find(e=>e.id===caso.envioId));setPrintMenuId(null);}},
+                                {label:"📋 Formulario Armado",fn:()=>{imprimirFormularioArmadoPV(caso,envios.find(e=>e.id===caso.envioId),tipoLabel);setPrintMenuId(null);}},
                                 {label:"🚚 Formulario Logística",fn:()=>{imprimirFormularioLogisticaPV(caso,envios.find(e=>e.id===caso.envioId));setPrintMenuId(null);}},
                                 {label:"🏷 Etiqueta Envío PV",fn:()=>{imprimirEtiquetaEnvioPV(caso,envios.find(e=>e.id===caso.envioId));setPrintMenuId(null);}},
                                 {label:"↩ Etiqueta Devolución",fn:()=>{imprimirEtiquetaDevolucionPV(caso);setPrintMenuId(null);}},
