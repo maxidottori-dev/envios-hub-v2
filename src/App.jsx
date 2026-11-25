@@ -2532,6 +2532,20 @@ function imprimirNotaPV(caso,envioDoc,tipoLabelOverride){
 }
 
 // ── QR SVG generator (simple version usando qrcode URL) ──
+// Dirección para imprimir: la dirección de ML ya suele traer CP/localidad/partido; solo se agrega lo que falte.
+function direccionPV(caso){
+  const base=String(caso.direccion||"").trim();
+  const low=base.toLowerCase();
+  const extra=[caso.localidad,caso.partido,caso.cp].map(x=>String(x||"").trim()).filter(x=>x&&!low.includes(x.toLowerCase()));
+  const uniq=extra.filter((x,i)=>extra.findIndex(y=>y.toLowerCase()===x.toLowerCase())===i);
+  return [base,...uniq].filter(Boolean).join(", ");
+}
+// Tamaño de letra de la dirección según largo, para que entre en la etiqueta
+function ptDireccion(txt,max=16){
+  const n=(txt||"").length;
+  return n>150?11.5:n>115?12.5:n>85?14:max;
+}
+
 function qrDataURL(text,cell=5){
   // QR generado localmente (data URL): no depende de servicios externos ni de internet al imprimir.
   const q=qrcode(0,"M");
@@ -2545,7 +2559,7 @@ function imprimirFormularioArmadoPV(caso, envioDoc){
   const envioId=caso.envioId||pvId+"E";
   const fechaDespacho=envioDoc?.fecha?new Date(envioDoc.fecha+"T12:00:00").toLocaleDateString("es-AR"):"—";
   const trans=envioDoc?.trans||caso.envioTrans||"—";
-  const direccionFull=[caso.direccion,caso.localidad,caso.partido,caso.cp].filter(Boolean).join(", ");
+  const direccionFull=direccionPV(caso);
   const tipoLabel=caso.tipoIncidente||"";
   const qrSrc=qrDataURL(envioId);
 
@@ -2611,7 +2625,7 @@ function imprimirFormularioLogisticaPV(caso, envioDoc){
   const envioId=caso.envioId||pvId+"E";
   const fechaVisita=envioDoc?.fecha?new Date(envioDoc.fecha+"T12:00:00").toLocaleDateString("es-AR"):"—";
   const trans=envioDoc?.trans||caso.envioTrans||"—";
-  const direccionFull=[caso.direccion,caso.localidad,caso.partido,caso.cp].filter(Boolean).join(", ");
+  const direccionFull=direccionPV(caso);
   const qrSrc=qrDataURL(envioId);
 
   const copia=`
@@ -2680,7 +2694,7 @@ function imprimirEtiquetaEnvioPV(caso, envioDoc){
   const envioId=caso.envioId||pvId+"E";
   const fechaEntrega=envioDoc?.fecha?new Date(envioDoc.fecha+"T12:00:00").toLocaleDateString("es-AR"):"—";
   const trans=envioDoc?.trans||caso.envioTrans||"—";
-  const direccionFull=[caso.direccion,caso.localidad,caso.partido,caso.cp].filter(Boolean).join(", ");
+  const direccionFull=direccionPV(caso);
   const qrSrc=qrDataURL(envioId,10);
 
   const etiqueta=`
@@ -2692,7 +2706,7 @@ function imprimirEtiquetaEnvioPV(caso, envioDoc){
       <div class="pvid">${envioId}</div>
       <div class="sep"></div>
       <div class="dest-nombre">${caso.clienteNombre||"—"}</div>
-      <div class="dest-dir">${direccionFull||"—"}</div>
+      <div class="dest-dir" style="font-size:${ptDireccion(direccionFull,16)}pt">${direccionFull||"—"}</div>
       ${caso.telefono?`<div class="dest-tel">📞 ${caso.telefono}</div>`:""}
       <div class="sep"></div>
       <div class="row-info">
@@ -2711,7 +2725,7 @@ function imprimirEtiquetaEnvioPV(caso, envioDoc){
     body{font-family:Arial,sans-serif;color:#111;font-size:12pt}
     .etiqueta{border:2.5px solid #111;border-radius:5px;padding:3.5mm;display:flex;flex-direction:column;gap:2mm;height:144mm;overflow:hidden}
     .top{display:flex;justify-content:space-between;align-items:center;gap:2mm}
-    .pv-badge{background:#6366f1;color:#fff;font-size:10pt;font-weight:900;padding:1.2mm 3mm;border-radius:3px;letter-spacing:1px;text-transform:uppercase;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .pv-badge{background:#111;color:#fff;font-size:10pt;font-weight:900;padding:1.2mm 3mm;border-radius:3px;letter-spacing:1px;text-transform:uppercase;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .empresa{font-size:8pt;color:#666;text-transform:uppercase;letter-spacing:.4px;text-align:right}
     .pvid{font-size:24pt;font-weight:900;color:#111;letter-spacing:1px;line-height:1.1}
     .sep{border-top:1px solid #bbb}
@@ -2721,8 +2735,8 @@ function imprimirEtiquetaEnvioPV(caso, envioDoc){
     .row-info{display:grid;grid-template-columns:1fr 1fr;gap:3mm}
     .lbl{font-size:8pt;color:#777;text-transform:uppercase;font-weight:700}
     .val{font-size:13pt;font-weight:800;color:#111}
-    .qr-row{display:flex;justify-content:center;align-items:center;margin-top:auto}
-    .qr{width:44mm;height:44mm;image-rendering:pixelated}
+    .qr-row{display:flex;justify-content:center;align-items:center;margin-top:auto;flex-shrink:0}
+    .qr{width:40mm;height:40mm;image-rendering:pixelated;flex-shrink:0}
   `;
 
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Etiqueta ${envioId}</title><style>${css}</style></head><body>${etiqueta}</body></html>`;
@@ -2732,7 +2746,7 @@ function imprimirEtiquetaEnvioPV(caso, envioDoc){
 
 function imprimirEtiquetaDevolucionPV(caso){
   const pvId=caso.nroCaso||("PV-"+caso.id.slice(-6).toUpperCase());
-  const direccionCliente=[caso.direccion,caso.localidad,caso.partido,caso.cp].filter(Boolean).join(", ");
+  const direccionCliente=direccionPV(caso);
   const qrSrc=qrDataURL(pvId,10);
 
   const etiqueta=`
@@ -2745,7 +2759,7 @@ function imprimirEtiquetaDevolucionPV(caso){
       <div class="sep"></div>
       <div class="lbl">Cliente / Origen</div>
       <div class="dest-nombre">${caso.clienteNombre||"—"}</div>
-      <div class="dest-dir">${direccionCliente||"—"}</div>
+      <div class="dest-dir" style="font-size:${ptDireccion(direccionCliente,14)}pt">${direccionCliente||"—"}</div>
       <div class="sep"></div>
       <div class="lbl">Producto a devolver</div>
       <div class="producto">${caso.queRetira||caso.queEnvia||"—"}</div>
@@ -2762,17 +2776,17 @@ function imprimirEtiquetaDevolucionPV(caso){
     body{font-family:Arial,sans-serif;color:#111;font-size:12pt}
     .etiqueta{border:2.5px solid #111;border-radius:5px;padding:3.5mm;display:flex;flex-direction:column;gap:2mm;height:144mm;overflow:hidden}
     .top{display:flex;justify-content:space-between;align-items:center;gap:2mm}
-    .dev-badge{background:#f59e0b;color:#111;font-size:10pt;font-weight:900;padding:1.2mm 3mm;border-radius:3px;letter-spacing:1px;text-transform:uppercase;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .dev-badge{background:#111;color:#fff;font-size:10pt;font-weight:900;padding:1.2mm 3mm;border-radius:3px;letter-spacing:1px;text-transform:uppercase;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .empresa{font-size:8pt;color:#666;text-transform:uppercase;letter-spacing:.4px;text-align:right}
     .pvid{font-size:24pt;font-weight:900;color:#111;letter-spacing:1px;line-height:1.1}
     .sep{border-top:1px solid #bbb}
     .lbl{font-size:8pt;color:#777;text-transform:uppercase;font-weight:700}
     .dest-nombre{font-size:14pt;font-weight:800;color:#111;line-height:1.15}
     .dest-dir{font-size:14pt;color:#000;font-weight:700;line-height:1.2}
-    .producto{font-size:12pt;font-weight:700;color:#111;border:1.5px solid #b45309;border-radius:3px;padding:1.5mm;min-height:10mm}
-    .qr-row{display:flex;justify-content:center;align-items:center;margin-top:auto}
-    .qr{width:40mm;height:40mm;image-rendering:pixelated}
-    .firma-box{border-top:1px dashed #999;padding-top:2mm;font-size:10pt;color:#555}
+    .producto{font-size:12pt;font-weight:700;color:#111;border:1.5px solid #111;border-radius:3px;padding:1.5mm;line-height:1.2}
+    .qr-row{display:flex;justify-content:center;align-items:center;margin-top:auto;flex-shrink:0}
+    .qr{width:34mm;height:34mm;image-rendering:pixelated;flex-shrink:0}
+    .firma-box{flex-shrink:0;border-top:1px dashed #999;padding-top:2mm;font-size:10pt;color:#555}
   `;
 
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Dev. ${pvId}</title><style>${css}</style></head><body>${etiqueta}</body></html>`;
