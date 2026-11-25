@@ -3,6 +3,7 @@ import * as XLSXLib from "xlsx";
 import jsQR from "jsqr";
 import { jsPDF } from "jspdf";
 import { db } from "./firebase.js";
+import qrcode from "qrcode-generator";
 import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, updateDoc, query, where, getDocs, addDoc, serverTimestamp, limit, orderBy, writeBatch, runTransaction } from "firebase/firestore";
 
 const VERSION = "2.1";
@@ -2532,8 +2533,11 @@ function imprimirNotaPV(caso,envioDoc,tipoLabelOverride){
 
 // ── QR SVG generator (simple version usando qrcode URL) ──
 function qrDataURL(text){
-  // Genera URL del servicio de QR de Google Charts (funciona offline en impresión)
-  return`https://chart.googleapis.com/chart?cht=qr&chs=120x120&chl=${encodeURIComponent(text)}&chld=M|2`;
+  // QR generado localmente (data URL): no depende de servicios externos ni de internet al imprimir.
+  const q=qrcode(0,"M");
+  q.addData(String(text));
+  q.make();
+  return q.createDataURL(5,4);
 }
 
 function imprimirFormularioArmadoPV(caso, envioDoc){
@@ -2552,9 +2556,12 @@ function imprimirFormularioArmadoPV(caso, envioDoc){
           <div class="empresa">Umpapel Distribuidora</div>
           <div class="doc-title">Formulario de Armado — <span style="color:#6366f1">POST VENTA</span></div>
         </div>
-        <div style="text-align:right">
-          <div class="pvid">${pvId}</div>
-          <div class="sub">Envío: <strong>${envioId}</strong></div>
+        <div style="display:flex;align-items:flex-start;gap:3mm">
+          <div style="text-align:right">
+            <div class="pvid">${pvId}</div>
+            <div class="sub">Envío: <strong>${envioId}</strong></div>
+          </div>
+          <img src="${qrSrc}" width="64" height="64"/>
         </div>
       </div>
       <div class="row3">
@@ -2568,40 +2575,30 @@ function imprimirFormularioArmadoPV(caso, envioDoc){
         <div class="field"><div class="flabel">Motivo / Tipo</div><div class="fval tipo">${tipoLabel||"—"}</div></div>
       </div>
       <div class="field full envia"><div class="flabel">📦 QUÉ SE ENVÍA</div><div class="fval big">${caso.queEnvia||"—"}</div></div>
-      ${caso.queRetira?`<div class="field full retira"><div class="flabel">↩ QUÉ SE RETIRA DEL CLIENTE</div><div class="fval big">${caso.queRetira}</div></div>`:""}
       ${caso.notasResolucion?`<div class="field full"><div class="flabel">Notas para el armador</div><div class="fval notas">${caso.notasResolucion}</div></div>`:""}
-      <div class="footer">
-        <div class="armadores">${caso.armador?`Armó: <strong>${caso.armador}</strong>`:""}</div>
-        <img src="${qrSrc}" width="80" height="80"/>
-      </div>
     </div>`;
 
   const css=`
-    @page{size:A4 landscape;margin:12mm 14mm}
+    @page{size:A4 landscape;margin:8mm 12mm}
     *{box-sizing:border-box}
-    body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:10pt}
-    .copia{height:calc(50% - 5mm);display:flex;flex-direction:column;gap:3mm;page-break-inside:avoid}
-    .copia+.copia{border-top:2px dashed #bbb;margin-top:6mm;padding-top:6mm}
-    .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:3mm;margin-bottom:3mm}
-    .empresa{font-size:7pt;color:#666;text-transform:uppercase;letter-spacing:.5px}
-    .doc-title{font-size:13pt;font-weight:800;color:#111}
-    .pvid{font-size:16pt;font-weight:900;color:#6366f1}
-    .sub{font-size:9pt;color:#555}
-    .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4mm;margin-bottom:3mm}
-    .row2{display:grid;grid-template-columns:1fr 1fr;gap:4mm;margin-bottom:3mm}
-    .field{margin-bottom:2mm}
-    .full{margin-bottom:3mm}
-    .flabel{font-size:7pt;color:#888;text-transform:uppercase;font-weight:700;margin-bottom:1mm}
-    .fval{font-size:10.5pt;font-weight:600;color:#111;border-bottom:1px solid #ddd;padding-bottom:1mm;min-height:7mm}
-    .fval.big{font-size:12pt;font-weight:700;min-height:10mm;padding:2mm 0}
-    .fval.notas{font-size:9pt;color:#444;font-style:italic;min-height:8mm}
+    html,body{margin:0;padding:0}
+    body{font-family:Arial,sans-serif;color:#111;font-size:12pt;height:194mm}
+    .copia{height:96mm;overflow:hidden;display:flex;flex-direction:column;gap:2.5mm;page-break-inside:avoid;padding-bottom:2mm}
+    .copia+.copia{border-top:2px dashed #999;padding-top:4mm;padding-bottom:0}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:2mm}
+    .empresa{font-size:9pt;color:#666;text-transform:uppercase;letter-spacing:.5px}
+    .doc-title{font-size:15pt;font-weight:800;color:#111}
+    .pvid{font-size:18pt;font-weight:900;color:#6366f1}
+    .sub{font-size:11pt;color:#555}
+    .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4mm}
+    .row2{display:grid;grid-template-columns:1fr 1fr;gap:4mm}
+    .flabel{font-size:9pt;color:#888;text-transform:uppercase;font-weight:700;margin-bottom:.8mm}
+    .fval{font-size:12.5pt;font-weight:600;color:#111;border-bottom:1px solid #ddd;padding-bottom:1mm;min-height:6mm}
+    .fval.big{font-size:14pt;font-weight:700;min-height:9mm;padding:1.5mm 0}
+    .fval.notas{font-size:11pt;color:#444;font-style:italic;min-height:7mm}
     .fval.tipo{color:#92400E;font-weight:700}
     .field.envia .flabel{color:#065f46;background:#ecfdf5;padding:1mm 2mm;border-radius:2px}
-    .field.envia .fval{border:1.5px solid #065f46;border-radius:3px;padding:2mm;min-height:12mm}
-    .field.retira .flabel{color:#92400E;background:#fef3c7;padding:1mm 2mm;border-radius:2px}
-    .field.retira .fval{border:1.5px solid #b45309;border-radius:3px;padding:2mm;min-height:10mm}
-    .footer{display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto;padding-top:2mm;border-top:.5px solid #ddd}
-    .armadores{font-size:8.5pt;color:#666}
+    .field.envia .fval{border:1.5px solid #065f46;border-radius:3px;padding:2mm;min-height:14mm}
   `;
 
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Armado ${pvId}</title><style>${css}</style></head><body>${copia}${copia}</body></html>`;
@@ -2624,9 +2621,12 @@ function imprimirFormularioLogisticaPV(caso, envioDoc){
           <div class="empresa">Umpapel Distribuidora</div>
           <div class="doc-title">Formulario para Logística — <span style="color:#10b981">POST VENTA</span></div>
         </div>
-        <div style="text-align:right">
-          <div class="pvid">${pvId}</div>
-          <div class="sub">Envío: <strong>${envioId}</strong></div>
+        <div style="display:flex;align-items:flex-start;gap:3mm">
+          <div style="text-align:right">
+            <div class="pvid">${pvId}</div>
+            <div class="sub">Envío: <strong>${envioId}</strong></div>
+          </div>
+          <img src="${qrSrc}" width="64" height="64"/>
         </div>
       </div>
       <div class="row3">
@@ -2639,40 +2639,35 @@ function imprimirFormularioLogisticaPV(caso, envioDoc){
         <div class="field"><div class="flabel">Teléfono</div><div class="fval">${caso.telefono||"—"}</div></div>
         <div class="field"><div class="flabel">Horario de entrega</div><div class="fval">${caso.horarioEntrega||"Sin restricción"}</div></div>
       </div>
-      <div class="field full envia"><div class="flabel">📦 QUÉ SE ENTREGA</div><div class="fval big">${caso.queEnvia||"—"}</div></div>
-      ${caso.queRetira?`<div class="field full retira"><div class="flabel">↩ QUÉ SE RETIRA DEL CLIENTE</div><div class="fval big">${caso.queRetira}</div></div>`:""}
+      <div class="pair"><div class="field envia"><div class="flabel">📦 QUÉ SE ENTREGA</div><div class="fval big">${caso.queEnvia||"—"}</div></div>
+      ${caso.queRetira?`<div class="field retira"><div class="flabel">↩ QUÉ SE RETIRA DEL CLIENTE</div><div class="fval big">${caso.queRetira}</div></div>`:""}</div>
       ${caso.instruccionesEspeciales?`<div class="field full"><div class="flabel">⚠ Instrucciones especiales</div><div class="fval notas">${caso.instruccionesEspeciales}</div></div>`:""}
-      <div class="footer">
-        <div class="empresa" style="font-size:9pt;color:#111">Umpapel Distribuidora</div>
-        <img src="${qrSrc}" width="80" height="80"/>
-      </div>
     </div>`;
 
   const css=`
-    @page{size:A4 landscape;margin:12mm 14mm}
+    @page{size:A4 landscape;margin:8mm 12mm}
     *{box-sizing:border-box}
-    body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:10pt}
-    .copia{height:calc(50% - 5mm);display:flex;flex-direction:column;gap:3mm;page-break-inside:avoid}
-    .copia+.copia{border-top:2px dashed #bbb;margin-top:6mm;padding-top:6mm}
-    .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:3mm;margin-bottom:3mm}
-    .empresa{font-size:7pt;color:#666;text-transform:uppercase;letter-spacing:.5px}
-    .doc-title{font-size:13pt;font-weight:800;color:#111}
-    .pvid{font-size:16pt;font-weight:900;color:#10b981}
-    .sub{font-size:9pt;color:#555}
-    .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4mm;margin-bottom:3mm}
-    .row2{display:grid;grid-template-columns:1fr 1fr;gap:4mm;margin-bottom:3mm}
-    .field{margin-bottom:2mm}
-    .full{margin-bottom:3mm}
-    .flabel{font-size:7pt;color:#888;text-transform:uppercase;font-weight:700;margin-bottom:1mm}
-    .fval{font-size:10.5pt;font-weight:600;color:#111;border-bottom:1px solid #ddd;padding-bottom:1mm;min-height:7mm}
-    .fval.big{font-size:12pt;font-weight:700;min-height:10mm;padding:2mm 0}
-    .fval.log{color:#065f46;font-weight:800;font-size:12pt}
-    .fval.notas{font-size:9.5pt;color:#333;min-height:8mm;border:1.5px solid #f59e0b;border-radius:3px;padding:2mm;background:#fffbeb}
+    html,body{margin:0;padding:0}
+    body{font-family:Arial,sans-serif;color:#111;font-size:12pt;height:194mm}
+    .copia{height:96mm;overflow:hidden;display:flex;flex-direction:column;gap:2mm;page-break-inside:avoid;padding-bottom:2mm}
+    .copia+.copia{border-top:2px dashed #999;padding-top:4mm;padding-bottom:0}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:2mm}
+    .empresa{font-size:9pt;color:#666;text-transform:uppercase;letter-spacing:.5px}
+    .doc-title{font-size:15pt;font-weight:800;color:#111}
+    .pvid{font-size:18pt;font-weight:900;color:#10b981}
+    .sub{font-size:11pt;color:#555}
+    .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4mm}
+    .row2{display:grid;grid-template-columns:1fr 1fr;gap:4mm}
+    .pair{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4mm}
+    .flabel{font-size:9pt;color:#888;text-transform:uppercase;font-weight:700;margin-bottom:.8mm}
+    .fval{font-size:12.5pt;font-weight:600;color:#111;border-bottom:1px solid #ddd;padding-bottom:1mm;min-height:6mm}
+    .fval.big{font-size:14pt;font-weight:700;min-height:9mm;padding:1.5mm 0}
+    .fval.log{color:#065f46;font-weight:800;font-size:14pt}
+    .fval.notas{font-size:11.5pt;color:#333;min-height:7mm;border:1.5px solid #f59e0b;border-radius:3px;padding:1.5mm;background:#fffbeb}
     .field.envia .flabel{color:#065f46;background:#ecfdf5;padding:1mm 2mm;border-radius:2px}
     .field.envia .fval{border:1.5px solid #065f46;border-radius:3px;padding:2mm;min-height:12mm}
     .field.retira .flabel{color:#92400E;background:#fef3c7;padding:1mm 2mm;border-radius:2px}
-    .field.retira .fval{border:1.5px solid #b45309;border-radius:3px;padding:2mm;min-height:10mm}
-    .footer{display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto;padding-top:2mm;border-top:.5px solid #ddd}
+    .field.retira .fval{border:1.5px solid #b45309;border-radius:3px;padding:2mm;min-height:12mm}
   `;
 
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Logística ${pvId}</title><style>${css}</style></head><body>${copia}${copia}</body></html>`;
