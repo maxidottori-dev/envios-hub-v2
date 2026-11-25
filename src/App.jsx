@@ -63,6 +63,9 @@ const FEATURES=[
   {key:"tab_salida",      grupo:"tabs",    label:"Salida",            desc:"Escanear pedidos al entregarlos a la logística: despacho controlado por logística"},
   {key:"tab_usuarios",    grupo:"tabs",    label:"Usuarios",          desc:"Administrar usuarios del sistema, sus roles, contraseñas y permisos"},
   {key:"tab_pendientes",  grupo:"tabs",    label:"Pendientes",         desc:"Alertas operativas: retiros vencidos, fechas pasadas, devoluciones y pedidos sin pago"},
+  {key:"tab_postventa",   grupo:"tabs",    label:"Post Venta",         desc:"Casos de post venta: faltantes, cambios y reclamos. Crear, editar, imprimir formularios y etiquetas, y ver estadísticas"},
+  {key:"tab_clientes",    grupo:"tabs",    label:"Clientes",           desc:"Ficha de clientes: datos de contacto, historial de pedidos y facturación"},
+  {key:"tab_otros",       grupo:"tabs",    label:"Otros Pedidos",      desc:"Pedidos fuera del sistema (retiro en local u otros canales): carga, armado y seguimiento"},
   // ── Acciones ─────────────────────────────────────────────────────
   {key:"accion_cargaexcel",   grupo:"acciones", label:"Cargar Excel",       desc:"Importar envíos desde un archivo Excel con fecha de entrega seleccionable"},
   {key:"accion_asignartN",    grupo:"acciones", label:"Asignar TN",         desc:"Asignar logística a pedidos de Tienda Nube que aún no tienen transportista"},
@@ -5219,6 +5222,8 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
   const [borrandoPago,setBorrandoPago]=useState(null);
   const [pagoExpandido,setPagoExpandido]=useState(null); // id del pago con detalle visible
   const [mostrarTodosEnvios,setMostrarTodosEnvios]=useState(false);
+  const [ccDesde,setCcDesde]=useState(""); // filtro por período (fecha del pedido); vacío = sin límite
+  const [ccHasta,setCcHasta]=useState("");
   const [renombrando,setRenombrando]=useState(null); // null | {key, nombre, nuevoNombre}
   const [renombrandoLoading,setRenombrandoLoading]=useState(false);
 
@@ -5331,6 +5336,9 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
     if(e.fecha&&e.fecha<map[key].fechaMin)map[key].fechaMin=e.fecha;
   };
   enviosEfectivos.forEach(e=>{
+    const fe=e.fecha||e.fechaVenta||"";
+    if(ccDesde&&(!fe||fe<ccDesde))return;
+    if(ccHasta&&(!fe||fe>ccHasta))return;
     const deuda=getDeudaEnvio(e);
     if(!deuda)return;
     addToMap(clientesMap,e,deuda);
@@ -5763,6 +5771,15 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
         {[{k:"todos",l:"Todos"},{k:"deuda",l:"Con deuda"},{k:"vencidos",l:"Vencidos"},{k:"saldados",l:"Saldados"},{k:"fc_pend",l:"🧾 FC pend."}].map(f=>(
           <button key={f.k} onClick={()=>setFiltro(f.k)} style={S.btnSm(filtro===f.k,"#6366f1")}>{f.l}</button>
         ))}
+        <span style={{color:"#6b7280",fontSize:"0.68rem",fontWeight:700,textTransform:"uppercase",marginLeft:"6px"}}>Período</span>
+        <input type="date" value={ccDesde} onChange={e=>setCcDesde(e.target.value)} title="Desde (fecha del pedido)" style={{...S.input,width:"130px",padding:"3px 6px",fontSize:"0.75rem"}}/>
+        <input type="date" value={ccHasta} onChange={e=>setCcHasta(e.target.value)} title="Hasta (fecha del pedido)" style={{...S.input,width:"130px",padding:"3px 6px",fontSize:"0.75rem"}}/>
+        {[
+          {l:"Este mes",fn:()=>{const d=new Date();const a=new Date(d.getFullYear(),d.getMonth(),1);const b=new Date(d.getFullYear(),d.getMonth()+1,0);const f=x=>new Date(x.getTime()-x.getTimezoneOffset()*60000).toISOString().split("T")[0];setCcDesde(f(a));setCcHasta(f(b));}},
+          {l:"Mes anterior",fn:()=>{const d=new Date();const a=new Date(d.getFullYear(),d.getMonth()-1,1);const b=new Date(d.getFullYear(),d.getMonth(),0);const f=x=>new Date(x.getTime()-x.getTimezoneOffset()*60000).toISOString().split("T")[0];setCcDesde(f(a));setCcHasta(f(b));}},
+          {l:"30 días",fn:()=>{const b=new Date();const a=new Date();a.setDate(a.getDate()-30);const f=x=>new Date(x.getTime()-x.getTimezoneOffset()*60000).toISOString().split("T")[0];setCcDesde(f(a));setCcHasta(f(b));}},
+        ].map(b=><button key={b.l} onClick={b.fn} style={{...S.btnSm(false,"#6366f1"),fontSize:"0.68rem",padding:"2px 8px"}}>{b.l}</button>)}
+        {(ccDesde||ccHasta)&&<button onClick={()=>{setCcDesde("");setCcHasta("");}} style={{...S.btnSm(false,"#ef4444"),fontSize:"0.68rem",padding:"2px 8px"}}>✕ Quitar período</button>}
         <input value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Nombre, dirección o nro orden..." style={{...S.input,width:"240px",marginLeft:"auto"}}/>
         <button onClick={()=>{
           // Helper saldo por envio
@@ -12511,7 +12528,7 @@ export default function App(){
     tablero:"tab_tablero",envios:"tab_noflex",flex:"tab_flex",
     imprimir:"tab_despacho",manual:"tab_manual",tarifas:"tab_tarifas",
     informe:"tab_informe",liquidacion:"tab_cobranzaslog",
-    ctasctes:"tab_ctasctes",
+    ctasctes:"tab_ctasctes",postventa:"tab_postventa",clientes:"tab_clientes",otros:"tab_otros",
     localidades:"tab_localidades",expedicion:"tab_expedicion",statsarmado:"tab_statsarmado",consultaarmado:"tab_consultaarmado",salida:"tab_salida",usuarios:"tab_usuarios",pendientes:"tab_pendientes",
   };
   const TABS=[
