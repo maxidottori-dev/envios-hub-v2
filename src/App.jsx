@@ -2532,12 +2532,12 @@ function imprimirNotaPV(caso,envioDoc,tipoLabelOverride){
 }
 
 // ── QR SVG generator (simple version usando qrcode URL) ──
-function qrDataURL(text){
+function qrDataURL(text,cell=5){
   // QR generado localmente (data URL): no depende de servicios externos ni de internet al imprimir.
   const q=qrcode(0,"M");
   q.addData(String(text));
   q.make();
-  return q.createDataURL(5,4);
+  return q.createDataURL(cell,4);
 }
 
 function imprimirFormularioArmadoPV(caso, envioDoc){
@@ -2681,13 +2681,15 @@ function imprimirEtiquetaEnvioPV(caso, envioDoc){
   const fechaEntrega=envioDoc?.fecha?new Date(envioDoc.fecha+"T12:00:00").toLocaleDateString("es-AR"):"—";
   const trans=envioDoc?.trans||caso.envioTrans||"—";
   const direccionFull=[caso.direccion,caso.localidad,caso.partido,caso.cp].filter(Boolean).join(", ");
-  const qrSrc=qrDataURL(envioId);
+  const qrSrc=qrDataURL(envioId,10);
 
   const etiqueta=`
     <div class="etiqueta">
-      <div class="pv-badge">POST VENTA</div>
+      <div class="top">
+        <div class="pv-badge">POST VENTA</div>
+        <div class="empresa">Umpapel Distribuidora</div>
+      </div>
       <div class="pvid">${envioId}</div>
-      <div class="empresa">Umpapel Distribuidora</div>
       <div class="sep"></div>
       <div class="dest-nombre">${caso.clienteNombre||"—"}</div>
       <div class="dest-dir">${direccionFull||"—"}</div>
@@ -2698,45 +2700,48 @@ function imprimirEtiquetaEnvioPV(caso, envioDoc){
         <div><div class="lbl">Fecha</div><div class="val">${fechaEntrega}</div></div>
       </div>
       <div class="qr-row">
-        <img src="${qrSrc}" width="100" height="100"/>
-        <div class="qr-label">ID: ${envioId}</div>
+        <img class="qr" src="${qrSrc}"/>
       </div>
     </div>`;
 
   const css=`
-    @page{size:A5 landscape;margin:8mm}
+    @page{size:102mm 152mm;margin:4mm}
     *{box-sizing:border-box}
-    body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:12pt}
-    .etiqueta{border:2.5px solid #111;border-radius:6px;padding:5mm;display:flex;flex-direction:column;gap:2.5mm;height:calc(100vh - 20mm)}
-    .pv-badge{background:#6366f1;color:#fff;font-size:11pt;font-weight:900;padding:1.5mm 4mm;border-radius:3px;text-align:center;letter-spacing:1px;text-transform:uppercase;align-self:flex-start}
-    .pvid{font-size:24pt;font-weight:900;color:#111;letter-spacing:1px}
-    .empresa{font-size:9pt;color:#888;text-transform:uppercase;letter-spacing:.5px}
-    .sep{border-top:1px solid #ddd;margin:1mm 0}
-    .dest-nombre{font-size:18pt;font-weight:800;color:#111}
-    .dest-dir{font-size:12pt;color:#333;font-weight:500}
-    .dest-tel{font-size:11pt;color:#555}
-    .row-info{display:grid;grid-template-columns:1fr 1fr;gap:4mm;margin-top:1mm}
-    .lbl{font-size:9pt;color:#888;text-transform:uppercase;font-weight:700}
+    html,body{margin:0;padding:0}
+    body{font-family:Arial,sans-serif;color:#111;font-size:12pt}
+    .etiqueta{border:2.5px solid #111;border-radius:5px;padding:3.5mm;display:flex;flex-direction:column;gap:2mm;height:144mm;overflow:hidden}
+    .top{display:flex;justify-content:space-between;align-items:center;gap:2mm}
+    .pv-badge{background:#6366f1;color:#fff;font-size:10pt;font-weight:900;padding:1.2mm 3mm;border-radius:3px;letter-spacing:1px;text-transform:uppercase;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .empresa{font-size:8pt;color:#666;text-transform:uppercase;letter-spacing:.4px;text-align:right}
+    .pvid{font-size:24pt;font-weight:900;color:#111;letter-spacing:1px;line-height:1.1}
+    .sep{border-top:1px solid #bbb}
+    .dest-nombre{font-size:15pt;font-weight:800;color:#111;line-height:1.15}
+    .dest-dir{font-size:16pt;color:#000;font-weight:800;line-height:1.2}
+    .dest-tel{font-size:12pt;color:#333;font-weight:600}
+    .row-info{display:grid;grid-template-columns:1fr 1fr;gap:3mm}
+    .lbl{font-size:8pt;color:#777;text-transform:uppercase;font-weight:700}
     .val{font-size:13pt;font-weight:800;color:#111}
-    .qr-row{display:flex;align-items:center;gap:4mm;margin-top:auto}
-    .qr-label{font-size:10pt;color:#666}
+    .qr-row{display:flex;justify-content:center;align-items:center;margin-top:auto}
+    .qr{width:44mm;height:44mm;image-rendering:pixelated}
   `;
 
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Etiqueta ${envioId}</title><style>${css}</style></head><body>${etiqueta}</body></html>`;
-  const win=window.open("","_blank","width=800,height=600");
+  const win=window.open("","_blank","width=500,height=800");
   win.document.write(html);win.document.close();win.onload=()=>win.print();
 }
 
 function imprimirEtiquetaDevolucionPV(caso){
   const pvId=caso.nroCaso||("PV-"+caso.id.slice(-6).toUpperCase());
   const direccionCliente=[caso.direccion,caso.localidad,caso.partido,caso.cp].filter(Boolean).join(", ");
-  const qrSrc=qrDataURL(pvId);
+  const qrSrc=qrDataURL(pvId,10);
 
   const etiqueta=`
     <div class="etiqueta">
-      <div class="dev-badge">DEVOLUCIÓN</div>
+      <div class="top">
+        <div class="dev-badge">DEVOLUCIÓN</div>
+        <div class="empresa">Umpapel Distribuidora</div>
+      </div>
       <div class="pvid">${pvId}</div>
-      <div class="empresa">Umpapel Distribuidora</div>
       <div class="sep"></div>
       <div class="lbl">Cliente / Origen</div>
       <div class="dest-nombre">${caso.clienteNombre||"—"}</div>
@@ -2744,27 +2749,34 @@ function imprimirEtiquetaDevolucionPV(caso){
       <div class="sep"></div>
       <div class="lbl">Producto a devolver</div>
       <div class="producto">${caso.queRetira||caso.queEnvia||"—"}</div>
-      <div class="firma-box"><img src="${qrSrc}" width="90" height="90" style="float:right;margin-top:-6mm"/>Recibido: _____________________ Fecha: ___________</div>
+      <div class="qr-row">
+        <img class="qr" src="${qrSrc}"/>
+      </div>
+      <div class="firma-box">Recibido: ____________________ Fecha: ________</div>
     </div>`;
 
   const css=`
-    @page{size:A5 landscape;margin:8mm}
+    @page{size:102mm 152mm;margin:4mm}
     *{box-sizing:border-box}
-    body{font-family:Arial,sans-serif;color:#111;margin:0;font-size:12pt}
-    .etiqueta{border:2.5px solid #111;border-radius:6px;padding:5mm;display:flex;flex-direction:column;gap:2.5mm;height:calc(100vh - 20mm)}
-    .dev-badge{background:#f59e0b;color:#111;font-size:11pt;font-weight:900;padding:1.5mm 4mm;border-radius:3px;text-align:center;letter-spacing:1px;text-transform:uppercase;align-self:flex-start}
-    .pvid{font-size:24pt;font-weight:900;color:#111;letter-spacing:1px}
-    .empresa{font-size:9pt;color:#888;text-transform:uppercase;letter-spacing:.5px}
-    .sep{border-top:1px solid #ddd;margin:1mm 0}
-    .lbl{font-size:9pt;color:#888;text-transform:uppercase;font-weight:700}
-    .dest-nombre{font-size:16pt;font-weight:800;color:#111}
-    .dest-dir{font-size:11pt;color:#555}
-    .producto{font-size:14pt;font-weight:700;color:#111;border:1.5px solid #b45309;border-radius:3px;padding:2mm;min-height:12mm;margin-top:1mm;background:#fffbeb}
-    .firma-box{margin-top:auto;border-top:1px dashed #bbb;padding-top:3mm;font-size:11pt;color:#666}
+    html,body{margin:0;padding:0}
+    body{font-family:Arial,sans-serif;color:#111;font-size:12pt}
+    .etiqueta{border:2.5px solid #111;border-radius:5px;padding:3.5mm;display:flex;flex-direction:column;gap:2mm;height:144mm;overflow:hidden}
+    .top{display:flex;justify-content:space-between;align-items:center;gap:2mm}
+    .dev-badge{background:#f59e0b;color:#111;font-size:10pt;font-weight:900;padding:1.2mm 3mm;border-radius:3px;letter-spacing:1px;text-transform:uppercase;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .empresa{font-size:8pt;color:#666;text-transform:uppercase;letter-spacing:.4px;text-align:right}
+    .pvid{font-size:24pt;font-weight:900;color:#111;letter-spacing:1px;line-height:1.1}
+    .sep{border-top:1px solid #bbb}
+    .lbl{font-size:8pt;color:#777;text-transform:uppercase;font-weight:700}
+    .dest-nombre{font-size:14pt;font-weight:800;color:#111;line-height:1.15}
+    .dest-dir{font-size:14pt;color:#000;font-weight:700;line-height:1.2}
+    .producto{font-size:12pt;font-weight:700;color:#111;border:1.5px solid #b45309;border-radius:3px;padding:1.5mm;min-height:10mm}
+    .qr-row{display:flex;justify-content:center;align-items:center;margin-top:auto}
+    .qr{width:40mm;height:40mm;image-rendering:pixelated}
+    .firma-box{border-top:1px dashed #999;padding-top:2mm;font-size:10pt;color:#555}
   `;
 
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Dev. ${pvId}</title><style>${css}</style></head><body>${etiqueta}</body></html>`;
-  const win=window.open("","_blank","width=800,height=600");
+  const win=window.open("","_blank","width=500,height=800");
   win.document.write(html);win.document.close();win.onload=()=>win.print();
 }
 
