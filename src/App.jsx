@@ -2719,10 +2719,9 @@ function imprimirEtiquetaEnvioPV(caso, envioDoc){
     <div class="etiqueta">
       <div class="top">
         <div class="pv-badge">POST VENTA</div>
-        <div class="empresa">Umpapel Distribuidora</div>
+        ${tagsHtml(caso)}
       </div>
       <div class="pvid">${envioId}</div>
-      ${tagsHtml(caso)}
       <div class="sep"></div>
       <div class="dest-nombre">${caso.clienteNombre||"—"}</div>
       <div class="dest-dir" style="font-size:${ptDireccion(direccionFull,16)}pt">${direccionFull||"—"}</div>
@@ -2743,12 +2742,11 @@ function imprimirEtiquetaEnvioPV(caso, envioDoc){
     html,body{margin:0;padding:0}
     body{font-family:Arial,sans-serif;color:#111;font-size:12pt}
     .etiqueta{border:2.5px solid #111;border-radius:5px;padding:3.5mm;display:flex;flex-direction:column;gap:2mm;height:144mm;overflow:hidden}
-    .top{display:flex;justify-content:space-between;align-items:center;gap:2mm}
+    .top{display:flex;justify-content:space-between;align-items:flex-start;gap:2mm}
     .pv-badge{background:#111;color:#fff;font-size:10pt;font-weight:900;padding:1.2mm 3mm;border-radius:3px;letter-spacing:1px;text-transform:uppercase;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .empresa{font-size:8pt;color:#666;text-transform:uppercase;letter-spacing:.4px;text-align:right}
     .pvid{font-size:24pt;font-weight:900;color:#111;letter-spacing:1px;line-height:1.1}
     .sep{border-top:1px solid #bbb}
-    .tags{display:flex;gap:2mm;flex-wrap:wrap}
+    .tags{display:flex;flex-direction:column;align-items:flex-end;gap:1.5mm}
     .tag{border:2.5px solid #111;border-radius:3px;padding:.8mm 3mm;font-size:15pt;font-weight:900;letter-spacing:1px}
     .dest-nombre{font-size:15pt;font-weight:800;color:#111;line-height:1.15}
     .dest-dir{font-size:16pt;color:#000;font-weight:400;line-height:1.2}
@@ -2774,10 +2772,9 @@ function imprimirEtiquetaDevolucionPV(caso){
     <div class="etiqueta">
       <div class="top">
         <div class="dev-badge">DEVOLUCIÓN</div>
-        <div class="empresa">Umpapel Distribuidora</div>
+        ${tagsHtml(caso)}
       </div>
       <div class="pvid">${pvId}</div>
-      ${tagsHtml(caso)}
       <div class="sep"></div>
       <div class="lbl">Cliente / Origen</div>
       <div class="dest-nombre">${caso.clienteNombre||"—"}</div>
@@ -2796,12 +2793,11 @@ function imprimirEtiquetaDevolucionPV(caso){
     html,body{margin:0;padding:0}
     body{font-family:Arial,sans-serif;color:#111;font-size:12pt}
     .etiqueta{border:2.5px solid #111;border-radius:5px;padding:3.5mm;display:flex;flex-direction:column;gap:2mm;height:144mm;overflow:hidden}
-    .top{display:flex;justify-content:space-between;align-items:center;gap:2mm}
+    .top{display:flex;justify-content:space-between;align-items:flex-start;gap:2mm}
     .dev-badge{background:#111;color:#fff;font-size:10pt;font-weight:900;padding:1.2mm 3mm;border-radius:3px;letter-spacing:1px;text-transform:uppercase;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .empresa{font-size:8pt;color:#666;text-transform:uppercase;letter-spacing:.4px;text-align:right}
     .pvid{font-size:24pt;font-weight:900;color:#111;letter-spacing:1px;line-height:1.1}
     .sep{border-top:1px solid #bbb}
-    .tags{display:flex;gap:2mm;flex-wrap:wrap}
+    .tags{display:flex;flex-direction:column;align-items:flex-end;gap:1.5mm}
     .tag{border:2.5px solid #111;border-radius:3px;padding:.8mm 3mm;font-size:15pt;font-weight:900;letter-spacing:1px}
     .lbl{font-size:8pt;color:#777;text-transform:uppercase;font-weight:700}
     .dest-nombre{font-size:14pt;font-weight:800;color:#111;line-height:1.15}
