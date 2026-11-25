@@ -11654,8 +11654,9 @@ function TabSalida({envios,setEnvios,lc,sesion}){
 
   // Helpers para PDF y UI: dirección sin referencia, nro de envío unificado
   const dirCorta=(dir)=>(dir||"").split(/\s*\/\s*/)[0].trim();
-  const nroRef=(e)=>e.nroSeguimiento||  (e.nroOrdenTN?"#"+e.nroOrdenTN:"");
-  const nroRefPDF=(e)=>e.nroSeguimiento||(e.nroOrdenTN?"#"+e.nroOrdenTN:"");
+  // Los envíos de Post Venta no tienen seguimiento ni nro TN: se referencian por su ID (PV0175E)
+  const nroRef=(e)=>e.nroSeguimiento||  (e.nroOrdenTN?"#"+e.nroOrdenTN:(e.pvCasoId?e.id:""));
+  const nroRefPDF=(e)=>e.nroSeguimiento||(e.nroOrdenTN?"#"+e.nroOrdenTN:(e.pvCasoId?e.id:""));
 
   // Generar PDF con jsPDF y guardar sesión en Firestore.
   // sesionIds es la fuente autoritativa: no depende del flag e.despachado
@@ -12093,9 +12094,11 @@ function TabSalida({envios,setEnvios,lc,sesion}){
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{display:"flex",alignItems:"center",gap:"5px",flexWrap:"wrap"}}>
                         {e.reprogramado&&<span style={{background:"#1c1500",color:"#fbbf24",border:"1px solid #78350f",padding:"1px 5px",borderRadius:"4px",fontSize:"0.6rem",fontWeight:700,flexShrink:0}}>⟳ Reprog.</span>}
+                        {e.pvCasoId&&<span style={{background:"#1e1b4b",color:"#a5b4fc",border:"1px solid #4338ca",padding:"1px 6px",borderRadius:"4px",fontSize:"0.65rem",fontWeight:800,flexShrink:0}}>PV · {e.id}</span>}
                         <span style={{fontWeight:600,fontSize:"0.78rem",color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dirCorta(e.direccion)}</span>
                       </div>
                       <div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginTop:"1px"}}>
+                        {e.pvCasoId&&e.clienteNombre&&<span style={{color:"#d1d5db",fontSize:"0.67rem",fontWeight:600}}>{e.clienteNombre}</span>}
                         {(e.localidad||e.ciudad||e.partido)&&<span style={{color:muted,fontSize:"0.67rem"}}>{e.localidad||e.ciudad||e.partido}</span>}
                         {nroRef(e)&&<span style={{color:muted,fontSize:"0.67rem",fontFamily:"monospace"}}>{nroRef(e)}</span>}
                         {prep
