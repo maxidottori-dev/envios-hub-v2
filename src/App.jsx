@@ -2028,6 +2028,196 @@ function TabEnvios({envios,setEnvios,zc,lc,onReasignar,esAdmin=false,sesion=null
   );
 }
 
+// ════════════════════════════════════════════════════════════════════
+// ACUSE DE LOTE — la logística acepta lo asignado por (logística + fecha).
+// El estado se DERIVA comparando los envíos actuales contra el snapshot aceptado,
+// así detecta altas, reasignaciones, cambios de fecha/turno/dirección y cancelaciones
+// sin tocar los lugares donde se asigna o edita.
+// ════════════════════════════════════════════════════════════════════
+const acuseId=(log,fecha)=>String(log||"").replace(/[^A-Za-z0-9]/g,"_")+"__"+fecha;
+const snapEnvioAcuse=e=>({turno:e.turno||"",dir:[e.direccion,e.localidad].filter(Boolean).join(", ").slice(0,90),nro:e.nroSeguimiento||(e.nroOrdenTN?"#"+e.nroOrdenTN:"")||e.id});
+function calcAcuse(actuales,acuse){
+  const prev=acuse?.envios||{};
+  const cur=new Map(actuales.map(e=>[e.id,e]));
+  if(!acuse)return{estado:actuales.length?"sin_aceptar":"vacio",nuevos:actuales,quitados:[],cambiados:[]};
+  const nuevos=actuales.filter(e=>!prev[e.id]);
+  const quitados=Object.entries(prev).filter(([id])=>!cur.has(id)).map(([id,s])=>({id,...s}));
+  const cambiados=actuales.filter(e=>{const p=prev[e.id];return p&&((p.turno||"")!==(e.turno||"")||(p.dir||"")!==snapEnvioAcuse(e).dir);}).map(e=>({e,antes:prev[e.id]}));
+  if(!actuales.length&&!Object.keys(prev).length)return{estado:"vacio",nuevos,quitados,cambiados};
+  const hay=nuevos.length||quitados.length||cambiados.length;
+  return{estado:hay?"con_cambios":"aceptado",nuevos,quitados,cambiados};
+}
+const ACUSE_UI={
+  sin_aceptar:{l:"Sin aceptar",c:"#f59e0b",bg:"#1c1200"},
+  con_cambios:{l:"Cambios sin aceptar",c:"#f87171",bg:"#1c0a0a"},
+  aceptado:{l:"Aceptado",c:"#34d399",bg:"#041f14"},
+  vacio:{l:"Sin envíos",c:"#6b7280",bg:"#12172a"},
+};
+const fmtHoraAcuse=iso=>iso?new Date(iso).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}):"";
+
+// ════════════════════════════════════════════════════════════════════
+// VISTA LOGÍSTICA (lote) — única pantalla para usuarios rol "logistica"
+// Consulta SOLO sus envíos (trans == su logística) para los próximos 8 días.
+// ════════════════════════════════════════════════════════════════════
+function VistaLogisticaLote({sesion}){
+  const hoy=fechaHoy();
+  const logNombre=sesion.logistica;
+  const alias=sesion.alias||"Logística";
+  const fechas=useMemo(()=>Array.from({length:8},(_,i)=>{const d=new Date(hoy+"T12:00:00");d.setDate(d.getDate()+i);return d.toISOString().split("T")[0];}),[hoy]);
+  const [envios,setEnvios]=useState([]);
+  const [acuses,setAcuses]=useState({});
+  const [fechaSel,setFechaSel]=useState(hoy);
+  const [cargando,setCargando]=useState(true);
+  const [err,setErr]=useState("");
+  const [guardando,setGuardando]=useState(false);
+
+  useEffect(()=>{
+    const u1=onSnapshot(query(collection(db,"envios"),where("trans","==",logNombre),where("fecha","in",fechas)),
+      snap=>{setEnvios(snap.docs.map(d=>({...d.data(),id:d.id})).filter(e=>getEstado(e)!=="cancelado"));setCargando(false);setErr("");},
+      e=>{console.error("logistica envios:",e);setErr("No se pudieron cargar los envíos: "+e.message);setCargando(false);});
+    const u2=onSnapshot(query(collection(db,"acuses"),where("logistica","==",logNombre)),
+      snap=>{const m={};snap.docs.forEach(d=>{const x=d.data();m[x.fecha]=x;});setAcuses(m);},
+      e=>console.error("acuses:",e));
+    return()=>{u1();u2();};
+  },[logNombre,fechas]);
+
+  const enviosDe=f=>envios.filter(e=>e.fecha===f);
+  const estadoDe=f=>calcAcuse(enviosDe(f),acuses[f]);
+  // Días a mostrar: próximos 8 + días futuros con acuse (por si quedaron envíos quitados)
+  const dias=[...new Set([...fechas,...Object.keys(acuses).filter(f=>f>=hoy)])].sort();
+  const lista=enviosDe(fechaSel);
+  const ac=estadoDe(fechaSel);
+  const ui=ACUSE_UI[ac.estado];
+  const acuse=acuses[fechaSel];
+  const nuevosIds=new Set(ac.nuevos.map(e=>e.id));
+  const cambIds=new Map(ac.cambiados.map(x=>[x.e.id,x.antes]));
+  const pendientesTotal=dias.filter(f=>{const s=estadoDe(f).estado;return s==="sin_aceptar"||s==="con_cambios";}).length;
+
+  const aceptar=async()=>{
+    if(guardando||!lista.length&&!ac.quitados.length)return;
+    setGuardando(true);
+    try{
+      const ts=new Date().toISOString();
+      const snapEnvios={};
+      lista.forEach(e=>{snapEnvios[e.id]=snapEnvioAcuse(e);});
+      await setDoc(doc(db,"acuses",acuseId(logNombre,fechaSel)),{
+        logistica:logNombre,alias,fecha:fechaSel,
+        aceptadoTs:ts,aceptadoPor:sesion.usuario||"",
+        primeraAceptacionTs:acuse?.primeraAceptacionTs||ts,
+        cantidad:lista.length,envios:snapEnvios,
+      });
+    }catch(e){setErr("No se pudo guardar la aceptación: "+e.message);}
+    setGuardando(false);
+  };
+
+  const fechaLarga=f=>new Date(f+"T12:00:00").toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long"});
+  const porTurno=[...TURNOS,""].map(t=>({t,items:lista.filter(e=>(e.turno||"")===t)})).filter(g=>g.items.length);
+  const otrosTurnos=lista.filter(e=>e.turno&&!TURNOS.includes(e.turno));
+  if(otrosTurnos.length){const g=porTurno.find(x=>x.t==="");if(g)g.items.push(...otrosTurnos);else porTurno.push({t:"",items:otrosTurnos});}
+
+  return(
+    <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif"}}>
+      <style>{`*{box-sizing:border-box;}`}</style>
+      <div style={{position:"sticky",top:0,zIndex:100,background:"#0f1420",borderBottom:"1px solid #1a1f2e",padding:"0.7rem 1rem",display:"flex",alignItems:"center",gap:"0.75rem"}}>
+        <div style={{width:"26px",height:"26px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:"7px",display:"flex",alignItems:"center",justifyContent:"center"}}>🛵</div>
+        <div>
+          <div style={{fontWeight:800,fontSize:"0.92rem"}}>EnviosHub</div>
+          <div style={{color:"#a5b4fc",fontSize:"0.68rem",fontWeight:700}}>{alias}</div>
+        </div>
+        {pendientesTotal>0&&<span style={{padding:"2px 10px",background:"#1c1200",border:"1px solid #f59e0b",color:"#f59e0b",borderRadius:"10px",fontSize:"0.7rem",fontWeight:700}}>{pendientesTotal} día{pendientesTotal>1?"s":""} por aceptar</span>}
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:"0.6rem"}}>
+          <span style={{color:"#4b5563",fontSize:"0.72rem"}}>{sesion.usuario}</span>
+          <button onClick={()=>{clearSession();window.location.reload();}} style={{...S.btnSm(false),color:"#f87171"}}>Salir</button>
+        </div>
+      </div>
+
+      <div style={{padding:"0.85rem 1rem",maxWidth:"760px",margin:"0 auto"}}>
+        {err&&<div style={{background:"#1c0a0a",border:"1px solid #f87171",color:"#fca5a5",borderRadius:"8px",padding:"8px 12px",fontSize:"0.78rem",marginBottom:"10px"}}>{err}</div>}
+
+        <div style={{display:"flex",gap:"6px",overflowX:"auto",paddingBottom:"8px",marginBottom:"8px"}}>
+          {dias.map(f=>{
+            const s=estadoDe(f);const u=ACUSE_UI[s.estado];const sel=f===fechaSel;
+            return(
+              <button key={f} onClick={()=>setFechaSel(f)} style={{flexShrink:0,padding:"6px 12px",borderRadius:"10px",cursor:"pointer",textAlign:"center",background:sel?"#1e2440":"#0f1420",border:"1px solid "+(sel?"#6366f1":s.estado==="aceptado"?"#065f46":s.estado==="vacio"?"#1a1f2e":u.c),color:s.estado==="vacio"?"#4b5563":"#e5e7eb"}}>
+                <div style={{fontSize:"0.68rem",fontWeight:700,textTransform:"capitalize"}}>{f===hoy?"Hoy":new Date(f+"T12:00:00").toLocaleDateString("es-AR",{weekday:"short"})} {fmtCorta(f)}</div>
+                <div style={{fontSize:"0.95rem",fontWeight:800,color:s.estado==="vacio"?"#4b5563":u.c}}>{enviosDe(f).length}</div>
+                <div style={{fontSize:"0.58rem",color:u.c}}>{u.l}</div>
+              </button>
+            );
+          })}
+        </div>
+
+        {cargando&&<div style={{textAlign:"center",color:"#6b7280",padding:"2rem"}}>Cargando…</div>}
+
+        {!cargando&&<>
+          {/* Banner de estado del lote */}
+          <div style={{background:ui.bg,border:"1px solid "+ui.c,borderRadius:"12px",padding:"0.8rem 1rem",marginBottom:"0.8rem"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"10px",flexWrap:"wrap"}}>
+              <div>
+                <div style={{color:ui.c,fontWeight:800,fontSize:"0.95rem",textTransform:"capitalize"}}>{fechaLarga(fechaSel)}</div>
+                <div style={{color:"#9ca3af",fontSize:"0.75rem",marginTop:"2px"}}>
+                  {ac.estado==="vacio"&&"No tenés envíos asignados para este día."}
+                  {ac.estado==="sin_aceptar"&&`${lista.length} envío${lista.length!==1?"s":""} asignado${lista.length!==1?"s":""} — confirmá que los leíste.`}
+                  {ac.estado==="con_cambios"&&"Hubo cambios desde tu última aceptación. Revisalos y volvé a aceptar."}
+                  {ac.estado==="aceptado"&&`Aceptado ${fmtHoraAcuse(acuse?.aceptadoTs)}${acuse?.aceptadoPor?" por "+acuse.aceptadoPor:""}.`}
+                </div>
+              </div>
+              {(ac.estado==="sin_aceptar"||ac.estado==="con_cambios")&&
+                <button onClick={aceptar} disabled={guardando} style={{padding:"10px 18px",background:"linear-gradient(135deg,#10b981,#059669)",border:"none",borderRadius:"10px",color:"#fff",fontWeight:800,fontSize:"0.88rem",cursor:guardando?"wait":"pointer"}}>
+                  {guardando?"Guardando…":ac.estado==="sin_aceptar"?`✓ Aceptar lote (${lista.length})`:"✓ Aceptar cambios"}
+                </button>}
+            </div>
+          </div>
+
+          {/* Cambios */}
+          {ac.estado==="con_cambios"&&<div style={{background:"#12100a",border:"1px solid #78350f",borderRadius:"10px",padding:"0.6rem 0.8rem",marginBottom:"0.8rem",display:"grid",gap:"4px"}}>
+            <div style={{color:"#fbbf24",fontWeight:800,fontSize:"0.72rem",textTransform:"uppercase"}}>Cambios</div>
+            {ac.nuevos.length>0&&<div style={{color:"#86efac",fontSize:"0.78rem"}}>➕ {ac.nuevos.length} envío{ac.nuevos.length>1?"s":""} nuevo{ac.nuevos.length>1?"s":""} agregado{ac.nuevos.length>1?"s":""} (marcados NUEVO abajo)</div>}
+            {ac.cambiados.map(({e,antes})=><div key={e.id} style={{color:"#fcd34d",fontSize:"0.78rem"}}>✏ {antes.nro}: {(antes.turno||"")!==(e.turno||"")?`turno ${antes.turno||"—"} → ${e.turno||"—"}`:"cambió la dirección"}</div>)}
+            {ac.quitados.map(q=>{
+              const otroDia=envios.find(e=>e.id===q.id);
+              return<div key={q.id} style={{color:"#fca5a5",fontSize:"0.78rem"}}>➖ {q.nro} — {q.dir}: {otroDia?`pasó al ${fmtCorta(otroDia.fecha)}`:"ya no está asignado a vos para este día (reasignado, reprogramado o cancelado)"}</div>;
+            })}
+          </div>}
+
+          {/* Listado por turno */}
+          {porTurno.map(g=><div key={g.t||"sin"} style={{marginBottom:"0.9rem"}}>
+            <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"4px"}}>
+              <Bdg label={g.t||"Sin turno"} bg={TURNO_C[g.t]?.bg||"#1a1f2e"} t={TURNO_C[g.t]?.c||"#9ca3af"}/>
+              <span style={{color:"#6b7280",fontSize:"0.72rem"}}>{g.items.length} envío{g.items.length!==1?"s":""}</span>
+            </div>
+            <div style={{display:"grid",gap:"4px"}}>
+              {g.items.map(e=>{
+                const esNuevo=ac.estado==="con_cambios"&&nuevosIds.has(e.id);
+                const antes=cambIds.get(e.id);
+                const nro=e.nroSeguimiento||(e.nroOrdenTN?"#"+e.nroOrdenTN:e.id);
+                return(
+                  <div key={e.id} style={{...S.card,padding:"0.6rem 0.75rem",borderLeft:(esNuevo||antes)?"3px solid #f59e0b":undefined}}>
+                    <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap",marginBottom:"2px"}}>
+                      <span style={{color:e.origen==="ML"?"#84cc16":"#7dd3fc",fontWeight:700,fontSize:"0.8rem"}}>{nro}</span>
+                      {esNuevo&&<Bdg label="NUEVO" bg="#1c1200" t="#fbbf24"/>}
+                      {antes&&<Bdg label="CAMBIÓ" bg="#1c1200" t="#fbbf24"/>}
+                      {e.tipoEntrega&&<Bdg label={e.tipoEntrega==="COMERCIAL"?"COM":"RES"} bg={e.tipoEntrega==="COMERCIAL"?"#0c1a40":"#0a1a0a"} t={e.tipoEntrega==="COMERCIAL"?"#38bdf8":"#86efac"}/>}
+                      {e.preparado?<Bdg label={(e.bultos||1)+" bulto"+((e.bultos||1)===1?"":"s")} bg="#0c1a2e" t="#60a5fa"/>:<Bdg label="No preparado" bg="#1c1200" t="#f59e0b"/>}
+                      {e.cobranza>0&&<Bdg label={"Cobrar $"+Number(e.cobranza).toLocaleString("es-AR")} bg="#1c1500" t="#fbbf24"/>}
+                      {(!!e.cambio||e.pvSubtipo==="cambio")&&<Bdg label="Cambio" bg="#1c0514" t="#ec4899"/>}
+                      {e.retiro&&<Bdg label="Retiro" bg="#1c1000" t="#f97316"/>}
+                    </div>
+                    <div style={{color:"#e5e7eb",fontSize:"0.84rem",fontWeight:600}}>{e.direccion}{e.referencia&&!(e.direccion||"").toLowerCase().includes(e.referencia.toLowerCase().slice(0,20))?<span style={{color:"#6b7280",fontWeight:400}}> — {e.referencia}</span>:null}</div>
+                    <div style={{color:"#6b7280",fontSize:"0.72rem"}}>{e.localidad?e.localidad+" · ":""}{e.partido}{e.cp?" · CP "+e.cp:""}</div>
+                    {(e.clienteNombre||e.telefono)&&<div style={{color:"#9ca3af",fontSize:"0.72rem"}}>{e.clienteNombre}{e.telefono?" · 📞 "+e.telefono:""}</div>}
+                    {e.notasCliente&&<div style={{color:"#9ca3af",fontSize:"0.72rem",fontStyle:"italic"}}>"{e.notasCliente}"</div>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>)}
+        </>}
+      </div>
+    </div>
+  );
+}
+
 function TabImprimir({envios,setEnvios,zc,lc}){
   const hoy=fechaHoy();
   const [fecha,setFecha]=useState(hoy);
@@ -2065,6 +2255,21 @@ function TabImprimir({envios,setEnvios,zc,lc}){
   const totalImp=lista.reduce((s,e)=>s+getImp(e),0);
   const cobTotal=lista.filter(e=>e.cobranza).reduce((s,e)=>s+(e.cobranza||0),0);
   const hayCobro=lista.some(e=>e.cobranza!==null&&e.cobranza>0);
+
+  // Acuses de las logísticas para la fecha elegida (aceptación de lote)
+  const [acusesDia,setAcusesDia]=useState({});
+  useEffect(()=>{
+    if(!fecha){setAcusesDia({});return;}
+    const unsub=onSnapshot(query(collection(db,"acuses"),where("fecha","==",fecha)),
+      snap=>{const m={};snap.docs.forEach(d=>{m[d.id]=d.data();});setAcusesDia(m);},
+      err=>console.error("acuses:",err));
+    return()=>unsub();
+  },[fecha]);
+  const estadoAcuseLog=l=>{
+    const act=envios.filter(e=>(e.fecha||e.fechaVenta||"")===fecha&&e.trans===l&&e.estado!=="cancelado");
+    return{act,...calcAcuse(act,acusesDia[acuseId(l,fecha)]),acuse:acusesDia[acuseId(l,fecha)]};
+  };
+  const chipsAcuse=logActivas.map(l=>({l,...estadoAcuseLog(l)})).filter(x=>x.estado!=="vacio");
 
   // WhatsApp: guardar despacho en Firestore y generar link copiable
   const [waCopied,setWaCopied]=useState(false);
@@ -2249,6 +2454,16 @@ function TabImprimir({envios,setEnvios,zc,lc}){
   };
   return(
     <div>
+      {chipsAcuse.length>0&&<div style={{display:"flex",gap:"6px",flexWrap:"wrap",alignItems:"center",marginBottom:"0.6rem"}}>
+        <span style={{color:"#6b7280",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Aceptación de lote</span>
+        {chipsAcuse.map(x=>{
+          const u=ACUSE_UI[x.estado];
+          const detalle=[x.nuevos.length&&`${x.nuevos.length} nuevo${x.nuevos.length>1?"s":""}`,x.cambiados.length&&`${x.cambiados.length} modificado${x.cambiados.length>1?"s":""}`,x.quitados.length&&`${x.quitados.length} quitado${x.quitados.length>1?"s":""}`].filter(Boolean).join(", ");
+          return<button key={x.l} onClick={()=>setTrans(x.l)} title={x.estado==="con_cambios"?detalle:""} style={{padding:"4px 10px",background:u.bg,border:"1px solid "+u.c,color:u.c,borderRadius:"8px",fontSize:"0.72rem",fontWeight:700,cursor:"pointer"}}>
+            {x.l} · {x.act.length} · {u.l}{x.estado==="aceptado"&&x.acuse?` ${fmtHoraAcuse(x.acuse.aceptadoTs)}`:""}{x.estado==="con_cambios"&&detalle?` (${detalle})`:""}
+          </button>;
+        })}
+      </div>}
       <div style={{...S.card,padding:"0.75rem 1rem",marginBottom:"0.9rem",display:"flex",gap:"0.5rem",flexWrap:"wrap",alignItems:"center"}}>
         <div style={{display:"flex",alignItems:"center",gap:"0.5rem"}}>
           <span style={{color:"#6b7280",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase"}}>Fecha</span>
@@ -6501,7 +6716,7 @@ function PantallaAsignacionTN({borrador,envios:enviosFresh=[],onConfirmar,onCanc
 function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{},esAdmin=false}){
   const [usuarios,setUsuarios]=useState([]);
   const [loading,setLoading]=useState(true);
-  const [form,setForm]=useState({usuario:"",password:"",rol:"colaborador",logistica:"",armadorId:"",esChofer:false,activo:true});
+  const [form,setForm]=useState({usuario:"",password:"",rol:"colaborador",logistica:"",alias:"",armadorId:"",esChofer:false,activo:true});
   const [editId,setEditId]=useState(null);
   const [toast,setToast]=useState("");
   const [permsOpenId,setPermsOpenId]=useState(null);
@@ -6549,7 +6764,7 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{},esAdmin=
     if(form.rol==="armador"&&!form.armadorId){mostrarToast("Selecciona el armador para este usuario");return;}
     const id=editId||("usr_"+Date.now());
     await setDoc(doc(db,"usuarios",id),{...form,usuario:form.usuario.toLowerCase().trim()});
-    setForm({usuario:"",password:"",rol:"colaborador",logistica:"",armadorId:"",esChofer:false,activo:true});
+    setForm({usuario:"",password:"",rol:"colaborador",logistica:"",alias:"",armadorId:"",esChofer:false,activo:true});
     setEditId(null);
     mostrarToast(editId?"Usuario actualizado":"Usuario creado");
   };
@@ -6558,7 +6773,7 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{},esAdmin=
     await setDoc(doc(db,"usuarios",u.id),{...u,activo:!u.activo});
   };
 
-  const editar=u=>{setForm({usuario:u.usuario,password:u.password,rol:u.rol,logistica:u.logistica||"",armadorId:u.armadorId||"",esChofer:u.esChofer||false,activo:u.activo});setEditId(u.id);};
+  const editar=u=>{setForm({usuario:u.usuario,password:u.password,rol:u.rol,logistica:u.logistica||"",alias:u.alias||"",armadorId:u.armadorId||"",esChofer:u.esChofer||false,activo:u.activo});setEditId(u.id);};
 
   const togglePerm=async(u,featureKey)=>{
     const actual=(u.permisos||{})[featureKey];
@@ -6674,7 +6889,7 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{},esAdmin=
           </div>
           <div>
             <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Rol</div>
-            <select value={form.rol} onChange={e=>setForm(p=>({...p,rol:e.target.value,logistica:"",armadorId:""}))} style={{...S.input,width:"100%"}}>
+            <select value={form.rol} onChange={e=>setForm(p=>({...p,rol:e.target.value,logistica:"",alias:"",armadorId:""}))} style={{...S.input,width:"100%"}}>
               <option value="admin">Administrador</option>
               <option value="colaborador">Colaborador</option>
               <option value="logistica">Logistica</option>
@@ -6683,10 +6898,8 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{},esAdmin=
             </select>
           </div>
           {form.rol==="logistica"&&<div>
-            <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}>
-              <input type="checkbox" id="esChofer" checked={form.esChofer||false} onChange={ev=>setForm(p=>({...p,esChofer:ev.target.checked}))} style={{width:"16px",height:"16px",cursor:"pointer"}}/>
-              <label htmlFor="esChofer" style={{color:"#9ca3af",fontSize:"0.78rem",cursor:"pointer"}}>Vista Chofer (app móvil simplificada para el repartidor)</label>
-            </div>
+            <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Nombre visible para la logística</div>
+            <input value={form.alias||""} onChange={ev=>setForm(p=>({...p,alias:ev.target.value}))} placeholder="Ej: Logística 1" style={{...S.input,width:"100%",marginBottom:"8px"}}/>
             <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Logistica asignada</div>
             <select value={form.logistica} onChange={e=>setForm(p=>({...p,logistica:e.target.value}))} style={{...S.input,width:"100%"}}>
               <option value="">Elegir...</option>
@@ -6706,7 +6919,7 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{},esAdmin=
         </div>
         <div style={{display:"flex",gap:"0.5rem"}}>
           <button onClick={guardar} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)"}}>{editId?"Guardar cambios":"Crear usuario"}</button>
-          {editId&&<button onClick={()=>{setEditId(null);setForm({usuario:"",password:"",rol:"colaborador",logistica:"",armadorId:"",esChofer:false,activo:true});}} style={S.btn(false)}>Cancelar</button>}
+          {editId&&<button onClick={()=>{setEditId(null);setForm({usuario:"",password:"",rol:"colaborador",logistica:"",alias:"",armadorId:"",esChofer:false,activo:true});}} style={S.btn(false)}>Cancelar</button>}
         </div>
       </div>
 
@@ -12309,6 +12522,7 @@ export default function App(){
   const [colectas,setColectas]=useState([]); // colectas ML pendientes de armado (estado=pendiente)
   const [otrosPedidos,setOtrosPedidos]=useState([]);
   useEffect(()=>{
+    if(sesion?.rol==="logistica")return; // la logística solo usa VistaLogisticaLote (consulta propia)
     // Traer todos salvo convertido_a_ump/despachado (incluye archivado/cancelado para que el filtro local los excluya en tiempo real)
     const q=query(collection(db,"otrosPedidos"),where("estado","not-in",["convertido_a_ump","despachado"]));
     const unsub=onSnapshot(q,snap=>{
@@ -12345,15 +12559,18 @@ export default function App(){
         .catch(()=>{});
     },15*60*1000);
     return()=>{unsub();clearInterval(syncInterval);};
-  },[]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[sesion?.rol]);
   useEffect(()=>{
+    if(sesion?.rol==="logistica")return; // la logística solo usa VistaLogisticaLote (consulta propia)
     const unsub=onSnapshot(
       query(collection(db,"colectas"),where("estado","==","pendiente")),
       snap=>{setColectas(snap.docs.map(d=>({...d.data(),id:d.id})));},
       err=>console.error("colectas listener error:",err)
     );
     return()=>unsub();
-  },[]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[sesion?.rol]);
   const [zc,setZc]=useState(ZONAS_INIT);
   const [lc,setLc]=useState(LOGISTICAS_INIT);
   const [mlTarifas,setMlTarifas]=useState(ML_TARIFAS_INIT);
@@ -12361,6 +12578,7 @@ export default function App(){
 
   // Cargar lc, zc y cpExtra desde Firebase al iniciar
   useEffect(()=>{
+    if(sesion?.rol==="logistica")return; // la logística solo usa VistaLogisticaLote (consulta propia)
     const unsubLc=onSnapshot(doc(db,"config","logisticas"),snap=>{
       if(snap.exists()){setLc(snap.data());}
     });
@@ -12389,7 +12607,8 @@ export default function App(){
       setCpExtra(data);
     });
     return()=>{unsubLc();unsubZc();unsubCp();unsubMl();};
-  },[]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[sesion?.rol]);
 
   const setLcPersist=useCallback((updater)=>{
     setLc(prev=>{
@@ -12421,16 +12640,18 @@ export default function App(){
   const [fileName,setFileName]=useState("");
   const [fechaImport,setFechaImport]=useState(fechaHoy());
   const [pagosCC,setPagosCC]=useState([]);
-  useEffect(()=>{const unsub=onSnapshot(collection(db,"pagosCC"),snap=>{setPagosCC(snap.docs.map(d=>({...d.data(),_id:d.id})));});return()=>unsub();},[]);
+  useEffect(()=>{if(sesion?.rol==="logistica")return;const unsub=onSnapshot(collection(db,"pagosCC"),snap=>{setPagosCC(snap.docs.map(d=>({...d.data(),_id:d.id})));});return()=>unsub();},[sesion?.rol]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // facturaClientes: {clienteKey: true} — guardado en config/clientesMeta
   const [facturaClientes,setFacturaClientesLocal]=useState({});
   useEffect(()=>{
+    if(sesion?.rol==="logistica")return; // la logística solo usa VistaLogisticaLote (consulta propia)
     const unsub=onSnapshot(doc(db,"config","clientesMeta"),snap=>{
       if(snap.exists())setFacturaClientesLocal(snap.data().facturaImpresa||{});
     });
     return()=>unsub();
-  },[]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[sesion?.rol]);
   const setFacturaCliente=(key,val)=>{
     const next=val?{...facturaClientes,[key]:true}:{...facturaClientes};
     if(!val)delete next[key];
@@ -12441,11 +12662,13 @@ export default function App(){
   // configExpedicion: {impresionHabilitada: bool, armadores: [{id,nombre,color}]}
   const [configExpedicion,setConfigExpedicionLocal]=useState({impresionHabilitada:false,armadores:[]});
   useEffect(()=>{
+    if(sesion?.rol==="logistica")return; // la logística solo usa VistaLogisticaLote (consulta propia)
     const unsub=onSnapshot(doc(db,"config","expedicion"),snap=>{
       if(snap.exists())setConfigExpedicionLocal(snap.data());
     });
     return()=>unsub();
-  },[]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[sesion?.rol]);
   const cfgSaveTimerRef=useRef(null);
   const cfgPendingRef=useRef(null);
   const setConfigExpedicion=useCallback((updater)=>{
@@ -12473,6 +12696,7 @@ export default function App(){
 
   useEffect(()=>{
     prevEnviosRef.current=null; // reset para no disparar alertas falsas al montar
+    if(sesion?.rol==="logistica"){setSyncLoading(false);return;} // la logística hace su propia consulta (VistaLogisticaLote)
     setSyncLoading(true);
     // Filtro 60 días: sólo carga los últimos 60 días en tiempo real (~10k docs vs 27k)
     const cutoff60=new Date();
@@ -12506,7 +12730,8 @@ export default function App(){
       setEnviosLocal(docs);setSyncLoading(false);
     },(err)=>{console.error(err);setSyncLoading(false);});
     return()=>unsub();
-  },[]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[sesion?.rol]);
 
   const [pendingSaves,setPendingSaves]=useState(0);
 
@@ -12629,9 +12854,7 @@ export default function App(){
   if(confirmToken)return<ConfirmPage token={confirmToken}/>;
   if(!sesion)return<PantallaLogin onLogin={s=>{setSession(s);setSesion(s);}}/>;
   if(sesion.rol==="logistica"){
-    const esChofer=sesion.esChofer===true;
-    if(esChofer)return<VistaChofer envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc}/>;
-    return<VistaLogistica envios={envios} sesion={sesion} lc={lc}/>;
+    return<VistaLogisticaLote sesion={sesion}/>;
   }
   if(sesion.rol==="expedicion")return<VistaExpedicion envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} configExpedicion={configExpedicion} otrosPedidos={otrosPedidos}/>;
   if(sesion.rol==="armador"){
