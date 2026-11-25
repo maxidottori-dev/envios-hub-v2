@@ -12560,34 +12560,31 @@ export default function App(){
       docs.sort((a,b)=>(b.fechaVenta||"").localeCompare(a.fechaVenta||""));
       setOtrosPedidos(docs);
     },err=>console.error("otrosPedidos:",err));
-    // Sincronizar automáticamente con TN: archiva los que TN ya cerró
-    fetch("/api/sync-otros-archivados",{method:"POST"})
-      .then(r=>r.json())
-      .then(d=>console.log("sync-otros-archivados:",d))
-      .catch(err=>console.warn("sync-otros-archivados error:",err));
-    // Sincronizar pagos pendientes: detecta los que TN ya confirmó
-    fetch("/api/sync-pagos-pendientes",{method:"POST"})
-      .then(r=>r.json())
-      .then(d=>console.log("sync-pagos-pendientes:",d))
-      .catch(err=>console.warn("sync-pagos-pendientes error:",err));
-    // Re-sincronizar turno AM/PM para envíos TN con fecha pero sin turno
-    fetch("/api/sync-turnos-pendientes",{method:"POST"})
-      .then(r=>r.json())
-      .then(d=>console.log("sync-turnos-pendientes:",d))
-      .catch(err=>console.warn("sync-turnos-pendientes error:",err));
-    fetch("/api/recover-cobranzas-efectivo",{method:"POST"})
-      .then(r=>r.json())
-      .then(d=>console.log("recover-cobranzas-efectivo:",d))
-      .catch(err=>console.warn("recover-cobranzas-efectivo error:",err));
-    // Sync periódico de pagos cada 15 minutos (backup al webhook de TN).
-    // Solo corre si la pestaña está a la vista, para no gastar CPU de Vercel con pestañas olvidadas.
-    const syncInterval=setInterval(()=>{
+    // Sincronizaciones con TN (cada una es una Vercel Function que consume CPU).
+    // Throttle compartido entre pestañas (localStorage): como máximo 1 vez cada 30 min por sync,
+    // y solo para admin/colaborador (armadores/expedición recargan seguido y no las necesitan).
+    // recover-cobranzas-efectivo era una recuperación única: ya no se llama automáticamente.
+    const correrSync=(nombre,minutos=30)=>{
       if(document.visibilityState!=="visible")return;
-      fetch("/api/sync-pagos-pendientes",{method:"POST"})
+      const key="envhub_sync_"+nombre;
+      try{
+        const last=Number(localStorage.getItem(key)||0);
+        if(Date.now()-last<minutos*60*1000)return;
+        localStorage.setItem(key,String(Date.now()));
+      }catch(e){}
+      fetch("/api/"+nombre,{method:"POST"})
         .then(r=>r.json())
-        .then(d=>{if(d.actualizados>0)console.log("sync-pagos-pendientes [periodic]:",d);})
-        .catch(()=>{});
-    },15*60*1000);
+        .then(d=>{if(d?.actualizados>0||d?.archivados>0)console.log(nombre+":",d);})
+        .catch(err=>console.warn(nombre+" error:",err));
+    };
+    const syncAll=()=>{
+      if(sesion?.rol!=="admin"&&sesion?.rol!=="colaborador")return;
+      correrSync("sync-otros-archivados");
+      correrSync("sync-pagos-pendientes");
+      correrSync("sync-turnos-pendientes");
+    };
+    syncAll();
+    const syncInterval=setInterval(syncAll,30*60*1000);
     return()=>{unsub();clearInterval(syncInterval);};
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[sesion?.rol]);
