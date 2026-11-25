@@ -2770,7 +2770,7 @@ function imprimirEtiquetaEnvioPV(caso, envioDoc){
 function imprimirEtiquetaDevolucionPV(caso){
   const pvId=caso.nroCaso||("PV-"+caso.id.slice(-6).toUpperCase());
   const direccionCliente=direccionPV(caso);
-  const qrSrc=qrDataURL(pvId,10);
+  const qrSrc=qrDataURL(caso.envioId||pvId+"E",10); // el QR siempre lleva el nro de envío
 
   const etiqueta=`
     <div class="etiqueta">
@@ -7045,158 +7045,220 @@ const MOTIVOS_FALLO=[
 // ════════════════════════════════════════════════════════════════════
 // VISTA ARMADOR — escaneo simple para celular propio, sesión personal
 // ════════════════════════════════════════════════════════════════════
-function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armador,armadores=[],gapUmbralMin=5}){
-  // "armado" = escaneo simple al armar; "salida" = TabSalida (despacho a logística) — mismo usuario, sin re-loguear.
-  const [modo,setModo]=useState("armado");
+// ── Helpers compartidos del flujo de armado (vista del armador y Expedición) ──
+function nroVisibleEnvio(e){
+  return e.nroSeguimiento||(e.nroOrdenTN?"#"+e.nroOrdenTN:(e.pvCasoId?e.id:String(e.id).slice(-8)));
+}
+function tipoEnvioInfo(e){
+  return e.pvCasoId?{l:"Post venta",bg:"#1e1b4b",c:"#a5b4fc",b:"#4338ca"}
+    :e.origen==="ML"?{l:"Flex",bg:"#0d1c04",c:"#84cc16",b:"#3f6212"}
+    :e.origen==="Tienda Nube"?{l:"Tienda Nube",bg:"#0c1a2e",c:"#38bdf8",b:"#0c4a6e"}
+    :{l:e.origen||"Envío",bg:"#1a1f2e",c:"#9ca3af",b:"#374151"};
+}
+// Candidatos por código escaneado. Si es el nro de caso PV sin la E (etiquetas viejas), prueba con la E.
+function buscarEnviosParaArmar(envios,srch){
+  const buscar=s=>{const n=s.replace(/\D/g,"");return envios.map(e=>({e,score:scoreBusqueda(e,s,n)})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score);};
+  let c=buscar(srch);
+  if(c.length===0&&/^PV\d+$/i.test(srch))c=buscar(srch.toUpperCase()+"E");
+  return c;
+}
+// Alertas antes de armar. bloqueo = no se puede armar; aviso = se arma con atención; info = solo informativo.
+function alertasArmado(e,hoy){
+  const a=[];
+  if(getEstado(e)==="cancelado")a.push({nivel:"bloqueo",msg:"Envío cancelado. No se arma."});
+  else if(e.preparado&&e.armadorNombre){
+    const h=e.armadoTs?new Date(e.armadoTs).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"}):"";
+    a.push({nivel:"bloqueo",msg:"Ya preparado por "+e.armadorNombre+(h?" · "+h:"")});
+  }
+  if(!e.trans)a.push({nivel:"aviso",msg:"Sin logística asignada"});
+  const f=e.fecha||e.fechaVenta||"";
+  if(f&&f!==hoy)a.push({nivel:"aviso",msg:"Entrega "+fmtCorta(f)+" (no es hoy)"});
+  if(e.pagoEstado==="pendiente")a.push({nivel:"info",msg:"Pago pendiente (se puede armar)"});
+  return a;
+}
+
+function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armador,armadores=[],gapUmbralMin=5,otrosPedidos=[]}){
+  // Vista liviana para celular: escaneo → tarjeta de confirmación (bultos + alertas) → armado. Sin listado de envíos.
+  const hoy=fechaHoy();
+  const [modo,setModo]=useState("armado"); // "armado" | "salida"
   const [qrInput,setQrInput]=useState("");
-  const [resultado,setResultado]=useState(null);
-  const [overlayRes,setOverlayRes]=useState(null); // fullscreen feedback (ok|false|"ya")
+  const [pendiente,setPendiente]=useState(null); // {tipo,obj,bultos,alertas,bloqueado}
+  const [ultimo,setUltimo]=useState(null);       // último armado, para deshacer
+  const [guardado,setGuardado]=useState(null);   // null | guardando | ok | error
+  const [reintento,setReintento]=useState(null);
+  const [overlayRes,setOverlayRes]=useState(null);
   const [sesionContador,setSesionContador]=useState(0);
-  const [controladorSel,setControladorSel]=useState(null); // sticky por sesión
+  const [controladorSel,setControladorSel]=useState(null);
   const [sesionActiva,setSesionActiva]=useState(false);
   const [sesionInicioTs,setSesionInicioTs]=useState(null);
   const [camara,setCamara]=useState(false);
+  const [colectasArmadas,setColectasArmadas]=useState([]);
   const soportaCamera=typeof window!=="undefined"&&"mediaDevices" in navigator&&!!navigator.mediaDevices?.getUserMedia;
   const inputRef=useRef(null);
   const videoRef=useRef(null);
   const canvasRef=useRef(null);
-  const sesionGapRef=useRef(null); // timer de inactividad de sesión
-  const GAP_MS=gapUmbralMin*60*1000; // minutos sin escanear → cierra sesión (configurable)
+  const sesionGapRef=useRef(null);
+  const gapMsRef=useRef(gapUmbralMin*60*1000);
+  gapMsRef.current=gapUmbralMin*60*1000;
+  const pausaRef=useRef(false);          // pausa la lectura de la cámara mientras hay una tarjeta abierta
+  const ultimoLeidoRef=useRef({v:"",t:0}); // evita doble lectura del mismo código
+  const procesarRef=useRef(null);
 
   const resetGapTimer=useCallback(()=>{
     if(sesionGapRef.current)clearTimeout(sesionGapRef.current);
     sesionGapRef.current=setTimeout(()=>{
-      setSesionActiva(false);setSesionInicioTs(null);
-      setResultado({ok:false,msg:"Sesión cerrada por inactividad ("+gapUmbralMin+" min)."});
-      setTimeout(()=>setResultado(null),6000);
-    },GAP_MS);
+      setSesionActiva(false);setSesionInicioTs(null);setControladorSel(null);setPendiente(null);
+      setOverlayRes({ok:false,msg:"Sesión cerrada por inactividad"});
+      setTimeout(()=>setOverlayRes(null),2500);
+    },gapMsRef.current);
   },[]);
-
   const iniciarSesion=useCallback(()=>{
     setSesionActiva(true);setSesionInicioTs(Date.now());setSesionContador(0);
     resetGapTimer();
     if(inputRef.current)inputRef.current.focus();
   },[resetGapTimer]);
-
   const cerrarSesion=useCallback(()=>{
     if(sesionGapRef.current)clearTimeout(sesionGapRef.current);
-    setSesionActiva(false);setSesionInicioTs(null);
+    setSesionActiva(false);setSesionInicioTs(null);setControladorSel(null);setPendiente(null);
   },[]);
 
   useEffect(()=>{if(inputRef.current)inputRef.current.focus();},[]);
+  useEffect(()=>{pausaRef.current=!!pendiente;},[pendiente]);
+  // El botón Deshacer vive 20 s
+  useEffect(()=>{
+    if(!ultimo)return;
+    const t=setTimeout(()=>setUltimo(null),20000);
+    return()=>clearTimeout(t);
+  },[ultimo]);
+  // Colectas ya armadas hoy (para avisar si se re-escanea una)
+  useEffect(()=>{
+    const q=query(collection(db,"colectas"),where("estado","==","armada"),limit(300));
+    const unsub=onSnapshot(q,snap=>setColectasArmadas(snap.docs.map(d=>({id:d.id,...d.data()})).filter(c=>c.fechaArmado===hoy)),()=>{});
+    return()=>unsub();
+  },[hoy]);
 
-  const ejecutarArmado=useCallback((envio,bultos)=>{
-    const ts=new Date().toISOString();
-    const ctrl=controladorSel||null;
-    setEnvios(pv=>pv.map(e=>e.id===envio.id?{...e,preparado:true,bultos,armadorId:armador.id,armadorNombre:armador.nombre,armadoTs:ts}:e));
-    const msg="✓ "+armador.nombre+(bultos>1?" · "+bultos+" bultos":"")+(ctrl?" — ctrl: "+ctrl.nombre:"");
-    setResultado({ok:true,envio,bultos,msg});
-    setOverlayRes({ok:true,msg});
-    setTimeout(()=>setOverlayRes(null),1800);
-    setTimeout(()=>setResultado(null),4000);
-    if(inputRef.current)inputRef.current.focus();
-    addDoc(collection(db,"armados"),{
-      envioId:envio.id,
-      nroSeguimiento:envio.nroSeguimiento||"",
-      nroOrdenTN:String(envio.nroOrdenTN||""),
-      armadorId:armador.id,armadorNombre:armador.nombre,
-      controladorId:ctrl?.id||"",controladorNombre:ctrl?.nombre||"",
-      ts,fecha:envio.fecha||envio.fechaVenta||"",
-      bultos,logistica:envio.trans||"",
-      direccion:envio.direccion||"",
-      partido:envio.partido||"",
-      esFlex:envio.origen==="ML",
-      esEdicion:false,
-    }).catch(err=>console.error("Error guardando armado:",err));
-    setDoc(doc(db,"envios",envio.id),{
-      preparado:true,bultos,
-      armadorId:armador.id,armadorNombre:armador.nombre,
-      armadoTs:ts,
-      controladorId:ctrl?.id||"",controladorNombre:ctrl?.nombre||"",
-    },{merge:true}).catch(err=>{console.error("Error persistiendo preparado:",err);alert("⚠️ El armado se registró pero no se pudo actualizar el estado del envío. Anotá el pedido y avisá al administrador.");});
-  },[setEnvios,armador,controladorSel]);
+  // Cuánto falta hoy (solo un número, sin listado)
+  const faltanHoy=useMemo(()=>envios.filter(e=>{const f=e.fecha||e.fechaVenta||"";return f===hoy&&getEstado(e)==="asignado"&&!e.preparado;}).length,[envios,hoy]);
 
-  // Armado de colectas ML (circuito separado de envíos) — sin panel, directo con el armador fijo de la vista.
-  const ejecutarArmadoColecta=useCallback((colecta)=>{
-    const ts=new Date().toISOString();
-    const ctrl=controladorSel||null;
-    if(setColectas)setColectas(pv=>pv.filter(c=>c.id!==colecta.id));
-    const msg="📋 Colecta · "+armador.nombre+(ctrl?" — ctrl: "+ctrl.nombre:"");
-    setResultado({ok:true,envio:colecta,bultos:1,msg});
-    setOverlayRes({ok:true,msg});
-    setTimeout(()=>setOverlayRes(null),1800);
-    setTimeout(()=>setResultado(null),4000);
-    if(inputRef.current)inputRef.current.focus();
-    updateDoc(doc(db,"colectas",colecta.id),{
-      estado:"armada",armadorId:armador.id,armadorNombre:armador.nombre,
-      controladorId:ctrl?.id||"",controladorNombre:ctrl?.nombre||"",
-      fechaArmado:fechaHoy(),horaArmado:ts,
-    }).catch(err=>console.error("Error actualizando colecta:",err));
-    addDoc(collection(db,"armados"),{
-      envioId:colecta.id,
-      nroSeguimiento:colecta.nroSeguimiento||"",
-      nroOrdenTN:"",
-      nroVenta:colecta.nroVenta||"",
-      nroPackId:colecta.nroPackId||"",
-      destinatario:colecta.destinatario||"",
-      usuario:colecta.usuario||"",
-      armadorId:armador.id,armadorNombre:armador.nombre,
-      controladorId:ctrl?.id||"",controladorNombre:ctrl?.nombre||"",
-      ts,fecha:colecta.fecha||fechaHoy(),
-      bultos:1,logistica:"Colecta",
-      direccion:colecta.direccion||"",
-      partido:colecta.partido||"",
-      esFlex:false,esColecta:true,esEdicion:false,
-    }).catch(err=>console.error("Error guardando armado:",err));
-  },[setColectas,armador,controladorSel]);
+  const feedback=(ok,msg)=>{
+    setOverlayRes({ok,msg});
+    setTimeout(()=>setOverlayRes(null),ok===true?1200:2200);
+  };
 
-  const procesarScan=useCallback((nro)=>{
-    const srch=nro.trim().replace(/^#/,"");if(!srch)return;
-    setResultado(null);
-    const nums=srch.replace(/\D/g,"");
-    const candidatos=envios
-      .map(e=>({e,score:scoreBusqueda(e,srch,nums)}))
-      .filter(x=>x.score>0)
-      .sort((a,b)=>b.score-a.score);
-    if(candidatos.length===0){
-      // Fallback: no matcheó en envíos → probar contra colectas pendientes (sin filtro de fecha)
-      const candColecta=colectas
-        .map(c=>({c,score:scoreBusqueda(c,srch,nums)}))
-        .filter(x=>x.score>0)
-        .sort((a,b)=>b.score-a.score);
-      if(candColecta.length===0){
-        const msg="No encontrado: "+srch.slice(0,20);
-        setResultado({ok:false,msg});
-        setOverlayRes({ok:false,msg});
-        setTimeout(()=>setOverlayRes(null),1800);
-        setTimeout(()=>setResultado(null),5000);return;
-      }
-      ejecutarArmadoColecta(candColecta[0].c);
-      setSesionContador(p=>p+1);
-      if(sesionActiva)resetGapTimer();
-      beepOK();
+  // Guarda con timeout y reintento visible. Los ids son fijos, así que reintentar no duplica.
+  const correr=useCallback(async(fn)=>{
+    setGuardado("guardando");setReintento(null);
+    try{
+      await Promise.race([fn(),new Promise((_,rej)=>setTimeout(()=>rej(new Error("timeout")),10000))]);
+      setGuardado("ok");setTimeout(()=>setGuardado(g=>g==="ok"?null:g),2500);
+    }catch(err){
+      console.error("guardar armado:",err);
+      setGuardado("error");
+      setReintento(()=>()=>correr(fn));
+    }
+  },[]);
+
+  const procesarScan=useCallback((raw)=>{
+    const srch=String(raw||"").trim().replace(/^#/,"");if(!srch)return;
+    resetGapTimer();
+    setUltimo(null);
+    // 1) Envíos
+    const cands=buscarEnviosParaArmar(envios,srch);
+    if(cands.length>0){
+      const e=cands[0].e;
+      const alertas=alertasArmado(e,hoy);
+      const bloqueado=alertas.some(a=>a.nivel==="bloqueo");
+      if(bloqueado)beepYaDespachado();
+      setPendiente({tipo:"envio",obj:e,bultos:e.bultos>1?e.bultos:1,alertas,bloqueado});
       return;
     }
-    const found=candidatos[0].e;
-    if(found.preparado&&found.armadorNombre){
-      const msg="Ya preparado por "+found.armadorNombre;
-      setResultado({ok:"ya",envio:found,msg});
-      setOverlayRes({ok:"ya",msg});
-      setTimeout(()=>setOverlayRes(null),1800);
-      setTimeout(()=>setResultado(null),4000);return;
-    }
-    ejecutarArmado(found,found.bultos||1);
-    setSesionContador(p=>p+1);
-    if(sesionActiva)resetGapTimer();
-    beepOK();
-  },[envios,colectas,ejecutarArmado,ejecutarArmadoColecta,sesionActiva,resetGapTimer]);
+    const n=srch.replace(/\D/g,"");
+    // 2) Colectas pendientes
+    const cc=colectas.map(c=>({c,score:scoreBusqueda(c,srch,n)})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score);
+    if(cc.length>0){setPendiente({tipo:"colecta",obj:cc[0].c,bultos:1,alertas:[],bloqueado:false});return;}
+    // 3) Otros pedidos
+    const oo=otrosPedidos.filter(p=>["en_expedicion","por_preparar"].includes(p.estado)&&(String(p.nroOrdenTN)===srch||String(p.id)===srch||String(p.nroOrdenTN).includes(srch)));
+    if(oo.length>0){setPendiente({tipo:"otro",obj:oo[0],bultos:1,alertas:[],bloqueado:false});return;}
+    // 4) Colecta ya armada
+    const ca=colectasArmadas.map(c=>({c,score:scoreBusqueda(c,srch,n)})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score);
+    if(ca.length>0){beepYaDespachado();feedback("ya","Colecta ya preparada por "+(ca[0].c.armadorNombre||"un armador"));return;}
+    beepError();
+    feedback(false,"No encontrado: "+srch.slice(0,20));
+  },[envios,colectas,otrosPedidos,colectasArmadas,hoy,resetGapTimer]);
+  procesarRef.current=procesarScan;
 
-  // Escaneo QR via cámara — usa BarcodeDetector nativo si está disponible (Chrome/Android);
-  // si no existe (Safari/iPhone) decodifica con jsQR leyendo los frames del video por canvas.
+  const cambiarBultos=(d)=>setPendiente(p=>p?{...p,bultos:Math.max(1,Math.min(99,(p.bultos||1)+d))}:p);
+
+  const confirmar=useCallback(()=>{
+    if(!pendiente||pendiente.bloqueado)return;
+    const {tipo,obj,bultos}=pendiente;
+    const ts=new Date().toISOString();
+    const ctrl=controladorSel||null;
+    const armId=doc(collection(db,"armados")).id;
+    const base={
+      armadorId:armador.id,armadorNombre:armador.nombre,
+      controladorId:ctrl?.id||"",controladorNombre:ctrl?.nombre||"",
+      ts,esEdicion:false,
+    };
+    if(tipo==="envio"){
+      const prev={preparado:!!obj.preparado,bultos:obj.bultos||1};
+      setEnvios(pv=>pv.map(x=>x.id===obj.id?{...x,preparado:true,bultos,armadorId:armador.id,armadorNombre:armador.nombre,armadoTs:ts}:x));
+      setUltimo({tipo,obj,armId,prev,label:nroVisibleEnvio(obj)});
+      correr(async()=>{
+        await setDoc(doc(db,"armados",armId),{...base,envioId:obj.id,nroSeguimiento:obj.nroSeguimiento||"",nroOrdenTN:String(obj.nroOrdenTN||""),fecha:obj.fecha||obj.fechaVenta||"",bultos,logistica:obj.trans||"",direccion:obj.direccion||"",partido:obj.partido||"",esFlex:obj.origen==="ML"});
+        await setDoc(doc(db,"envios",obj.id),{preparado:true,bultos,armadorId:armador.id,armadorNombre:armador.nombre,armadoTs:ts,controladorId:ctrl?.id||"",controladorNombre:ctrl?.nombre||""},{merge:true});
+      });
+    }else if(tipo==="colecta"){
+      if(setColectas)setColectas(pv=>pv.filter(c=>c.id!==obj.id));
+      setUltimo({tipo,obj,armId,prev:{estado:obj.estado},label:"Colecta"});
+      correr(async()=>{
+        await updateDoc(doc(db,"colectas",obj.id),{estado:"armada",armadorId:armador.id,armadorNombre:armador.nombre,controladorId:ctrl?.id||"",controladorNombre:ctrl?.nombre||"",fechaArmado:hoy,horaArmado:ts});
+        await setDoc(doc(db,"armados",armId),{...base,envioId:obj.id,nroSeguimiento:obj.nroSeguimiento||"",nroOrdenTN:"",nroVenta:obj.nroVenta||"",nroPackId:obj.nroPackId||"",destinatario:obj.destinatario||"",usuario:obj.usuario||"",fecha:obj.fecha||hoy,bultos:1,logistica:"Colecta",direccion:obj.direccion||"",partido:obj.partido||"",esFlex:false,esColecta:true});
+      });
+    }else{
+      setUltimo({tipo,obj,armId,prev:{estado:obj.estado},label:"#"+obj.nroOrdenTN});
+      correr(async()=>{
+        await updateDoc(doc(db,"otrosPedidos",obj.id),{estado:"preparado",armadorId:armador.id||"",armadorNombre:armador.nombre||"",controladorId:ctrl?.id||"",controladorNombre:ctrl?.nombre||"",armadoTs:ts,bultos});
+        await setDoc(doc(db,"armados",armId),{...base,envioId:obj.id,nroSeguimiento:"",nroOrdenTN:String(obj.nroOrdenTN||""),clienteNombre:obj.clienteNombre||"",fecha:hoy,bultos,logistica:obj.carrier||obj.tipoOtro||"",direccion:obj.direccion||"",partido:obj.partido||"",esFlex:false,esOtro:true,tipoOtro:obj.tipoOtro||"",carrier:obj.carrier||""});
+      });
+    }
+    setSesionContador(c=>c+1);
+    setPendiente(null);
+    resetGapTimer();
+    beepOK();
+    if(inputRef.current)inputRef.current.focus();
+  },[pendiente,controladorSel,armador,hoy,setEnvios,setColectas,correr,resetGapTimer]);
+
+  const deshacer=useCallback(()=>{
+    if(!ultimo)return;
+    const {tipo,obj,armId,prev}=ultimo;
+    setUltimo(null);setSesionContador(c=>Math.max(0,c-1));resetGapTimer();
+    if(tipo==="envio"){
+      setEnvios(pv=>pv.map(x=>x.id===obj.id?{...x,preparado:prev.preparado,bultos:prev.bultos,armadorId:null,armadorNombre:null,armadoTs:null}:x));
+      correr(async()=>{
+        await setDoc(doc(db,"envios",obj.id),{preparado:prev.preparado,bultos:prev.bultos,armadorId:null,armadorNombre:null,armadoTs:null,controladorId:"",controladorNombre:""},{merge:true});
+        await deleteDoc(doc(db,"armados",armId));
+      });
+    }else if(tipo==="colecta"){
+      if(setColectas)setColectas(pv=>pv.some(c=>c.id===obj.id)?pv:[...pv,obj]);
+      correr(async()=>{
+        await updateDoc(doc(db,"colectas",obj.id),{estado:prev.estado||"pendiente",armadorId:null,armadorNombre:null,controladorId:"",controladorNombre:"",fechaArmado:null,horaArmado:null});
+        await deleteDoc(doc(db,"armados",armId));
+      });
+    }else{
+      correr(async()=>{
+        await updateDoc(doc(db,"otrosPedidos",obj.id),{estado:prev.estado||"por_preparar",armadorId:"",armadorNombre:"",controladorId:"",controladorNombre:"",armadoTs:null});
+        await deleteDoc(doc(db,"armados",armId));
+      });
+    }
+    feedback("ya","Armado deshecho");
+  },[ultimo,setEnvios,setColectas,correr,resetGapTimer]);
+
+  // Cámara continua: el stream queda abierto; se pausa la lectura mientras hay una tarjeta abierta.
   useEffect(()=>{
     if(!camara)return;
-    let stream=null;let rafId=null;let activo=true;
-    const startCam=async()=>{
+    let stream=null,rafId=null,activo=true;
+    const start=async()=>{
       try{
         stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment",width:{ideal:1280},height:{ideal:720}}});
         if(!videoRef.current||!activo)return;
@@ -7208,47 +7270,39 @@ function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armado
         const canvas=canvasRef.current;
         const ctx=canvas.getContext("2d",{willReadFrequently:true});
         const scan=async()=>{
-          if(!activo||!videoRef.current||videoRef.current.readyState<2){rafId=requestAnimationFrame(scan);return;}
+          if(!activo)return;
+          const v=videoRef.current;
+          if(!v||v.readyState<2||pausaRef.current){rafId=requestAnimationFrame(scan);return;}
           try{
             let val=null;
-            if(nativo){
-              const barcodes=await detector.detect(videoRef.current);
-              if(barcodes.length>0)val=barcodes[0].rawValue;
-            }else{
-              const w=videoRef.current.videoWidth,h=videoRef.current.videoHeight;
-              if(w&&h){
-                canvas.width=w;canvas.height=h;
-                ctx.drawImage(videoRef.current,0,0,w,h);
-                const imgData=ctx.getImageData(0,0,w,h);
-                const code=jsQR(imgData.data,w,h);
-                if(code)val=code.data;
-              }
+            if(nativo){const b=await detector.detect(v);if(b.length>0)val=b[0].rawValue;}
+            else{
+              const w=v.videoWidth,h=v.videoHeight;
+              if(w&&h){canvas.width=w;canvas.height=h;ctx.drawImage(v,0,0,w,h);const code=jsQR(ctx.getImageData(0,0,w,h).data,w,h);if(code)val=code.data;}
             }
-            if(val){
-              setResultado({ok:"scanning",msg:"Escaneando..."});
-              await new Promise(r=>setTimeout(r,800));
-              if(!activo)return;
-              procesarScan(val);
-              setCamara(false);return;
+            const now=Date.now();
+            if(val&&!(val===ultimoLeidoRef.current.v&&now-ultimoLeidoRef.current.t<3000)){
+              ultimoLeidoRef.current={v:val,t:now};
+              if(navigator.vibrate)navigator.vibrate(60);
+              procesarRef.current(val);
             }
           }catch(e){}
-          if(activo)rafId=requestAnimationFrame(scan);
+          if(activo)rafId=setTimeout(()=>requestAnimationFrame(scan),nativo?0:120);
         };
         rafId=requestAnimationFrame(scan);
       }catch(err){
-        setResultado({ok:false,msg:"No se pudo acceder a la cámara. Verificá los permisos."});
+        feedback(false,"No se pudo acceder a la cámara");
         setCamara(false);
       }
     };
-    startCam();
+    start();
     return()=>{
       activo=false;
-      if(rafId)cancelAnimationFrame(rafId);
+      if(rafId){cancelAnimationFrame(rafId);clearTimeout(rafId);}
       if(stream)stream.getTracks().forEach(t=>t.stop());
     };
-  },[camara,procesarScan]);
+  },[camara]);
 
-  // Tu usuario no está (o ya no está) vinculado a un armador válido
   if(!armador){
     return(
       <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"2rem",textAlign:"center"}}>
@@ -7260,44 +7314,102 @@ function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armado
     );
   }
 
+  const ctrls=(armadores.some(a=>a.puedeControlar)?armadores.filter(a=>a.puedeControlar):armadores).filter(a=>a.id!==armador?.id);
+  const colorArm=armador.color||"#06b6d4";
+  const nivelC={bloqueo:{bg:"#1c0404",b:"#7f1d1d",c:"#f87171"},aviso:{bg:"#1c1200",b:"#78350f",c:"#fbbf24"},info:{bg:"#0c1a2e",b:"#0c4a6e",c:"#7dd3fc"}};
+
+  // Tarjeta de confirmación
+  const renderPendiente=()=>{
+    if(!pendiente)return null;
+    const {tipo,obj,bultos,alertas,bloqueado}=pendiente;
+    const t=tipo==="envio"?tipoEnvioInfo(obj):tipo==="colecta"?{l:"Colecta",bg:"#1a1400",c:"#fbbf24",b:"#78350f"}:{l:"Otro pedido",bg:"#1a1f2e",c:"#9ca3af",b:"#374151"};
+    const nro=tipo==="envio"?nroVisibleEnvio(obj):tipo==="colecta"?(obj.nroSeguimiento||obj.nroVenta||""):("#"+(obj.nroOrdenTN||""));
+    const cliente=tipo==="colecta"?obj.destinatario:obj.clienteNombre;
+    const dir=obj.direccion||"";
+    const enviaPV=tipo==="envio"&&obj.pvCasoId?(String(obj.observaciones||"").split(" | ").find(p=>p.startsWith("Envía:"))||""):"";
+    return(
+      <div style={{...S.card,padding:"0.9rem",marginBottom:"0.75rem",border:"2px solid "+(bloqueado?"#7f1d1d":"#6366f1")}}>
+        <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap",marginBottom:"6px"}}>
+          <span style={{background:t.bg,color:t.c,border:"1px solid "+t.b,padding:"2px 9px",borderRadius:"5px",fontSize:"0.78rem",fontWeight:800}}>{t.l}</span>
+          <span style={{fontFamily:"monospace",fontSize:"1.05rem",fontWeight:800,color:"#fff"}}>{nro}</span>
+        </div>
+        {cliente&&<div style={{fontWeight:700,fontSize:"0.95rem",color:"#e5e7eb"}}>{cliente}</div>}
+        {dir&&<div style={{fontSize:"0.85rem",color:"#9ca3af",marginTop:"2px"}}>{dir}</div>}
+        <div style={{display:"flex",gap:"10px",flexWrap:"wrap",marginTop:"4px",fontSize:"0.8rem"}}>
+          {obj.trans&&<span style={{color:lc[obj.trans]?.color||"#9ca3af",fontWeight:800}}>🚚 {obj.trans}</span>}
+          {obj.turno&&<span style={{color:"#a78bfa",fontWeight:700}}>{obj.turno}</span>}
+        </div>
+        {enviaPV&&<div style={{marginTop:"6px",padding:"6px 8px",background:"#0d1c04",border:"1px solid #3f6212",borderRadius:"6px",color:"#bef264",fontSize:"0.85rem",fontWeight:700}}>{enviaPV}</div>}
+        {alertas.map((a,i)=>(
+          <div key={i} style={{marginTop:"6px",padding:"7px 10px",borderRadius:"7px",background:nivelC[a.nivel].bg,border:"1px solid "+nivelC[a.nivel].b,color:nivelC[a.nivel].c,fontWeight:800,fontSize:"0.85rem"}}>
+            {a.nivel==="bloqueo"?"⛔ ":a.nivel==="aviso"?"⚠ ":"ℹ "}{a.msg}
+          </div>
+        ))}
+        {!bloqueado&&tipo!=="colecta"&&(
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:"18px",margin:"12px 0 4px"}}>
+            <button onClick={()=>cambiarBultos(-1)} style={{width:"52px",height:"52px",borderRadius:"12px",background:"#12172a",border:"1px solid #374151",color:"#e5e7eb",fontSize:"1.6rem",fontWeight:800,cursor:"pointer"}}>−</button>
+            <div style={{textAlign:"center",minWidth:"80px"}}>
+              <div style={{fontSize:"2.2rem",fontWeight:900,lineHeight:1,color:"#fff"}}>{bultos}</div>
+              <div style={{fontSize:"0.65rem",color:"#6b7280",textTransform:"uppercase"}}>bulto{bultos!==1?"s":""}</div>
+            </div>
+            <button onClick={()=>cambiarBultos(1)} style={{width:"52px",height:"52px",borderRadius:"12px",background:"#12172a",border:"1px solid #374151",color:"#e5e7eb",fontSize:"1.6rem",fontWeight:800,cursor:"pointer"}}>+</button>
+          </div>
+        )}
+        <div style={{display:"flex",gap:"8px",marginTop:"10px"}}>
+          <button onClick={()=>{setPendiente(null);if(inputRef.current)inputRef.current.focus();}} style={{flex:1,padding:"0.8rem",borderRadius:"10px",background:"#12172a",border:"1px solid #374151",color:"#9ca3af",fontWeight:800,fontSize:"0.9rem",cursor:"pointer"}}>{bloqueado?"Cerrar":"Cancelar"}</button>
+          {!bloqueado&&<button onClick={confirmar} style={{flex:2,padding:"0.8rem",borderRadius:"10px",background:"linear-gradient(135deg,#10b981,#059669)",border:"none",color:"#fff",fontWeight:900,fontSize:"1rem",cursor:"pointer"}}>✓ Confirmar armado</button>}
+        </div>
+      </div>
+    );
+  };
+
   return(
     <div style={{minHeight:"100vh",background:"#0a0e1a",color:"#fff",fontFamily:"sans-serif",maxWidth:modo==="salida"?"720px":"500px",margin:"0 auto"}}>
       <style>{`*{box-sizing:border-box;}`}</style>
 
-      {/* ── Overlay fullscreen resultado ───────────────────────────── */}
       {overlayRes&&(
         <div onClick={()=>setOverlayRes(null)} style={{position:"fixed",inset:0,zIndex:9999,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
-          background:overlayRes.ok===true?"rgba(4,31,20,0.96)":overlayRes.ok==="ya"?"rgba(10,14,26,0.96)":"rgba(28,4,4,0.96)",
-          cursor:"pointer"}}>
-          <div style={{fontSize:"5rem",lineHeight:1,marginBottom:"0.5rem"}}>
-            {overlayRes.ok===true?"✓":overlayRes.ok==="ya"?"⏸":"✗"}
-          </div>
-          <div style={{fontSize:"1.1rem",fontWeight:700,color:overlayRes.ok===true?"#34d399":overlayRes.ok==="ya"?"#9ca3af":"#f87171",textAlign:"center",padding:"0 2rem",maxWidth:"340px"}}>
-            {overlayRes.msg}
-          </div>
+          background:overlayRes.ok===true?"rgba(4,31,20,0.96)":overlayRes.ok==="ya"?"rgba(10,14,26,0.96)":"rgba(28,4,4,0.96)",cursor:"pointer"}}>
+          <div style={{fontSize:"5rem",lineHeight:1,marginBottom:"0.5rem"}}>{overlayRes.ok===true?"✓":overlayRes.ok==="ya"?"⏸":"✗"}</div>
+          <div style={{fontSize:"1.1rem",fontWeight:700,color:overlayRes.ok===true?"#34d399":overlayRes.ok==="ya"?"#9ca3af":"#f87171",textAlign:"center",padding:"0 2rem",maxWidth:"340px"}}>{overlayRes.msg}</div>
         </div>
       )}
 
       {/* Header */}
       <div style={{position:"sticky",top:0,zIndex:100,background:"#0f1420",borderBottom:"1px solid #1a1f2e"}}>
-        <div style={{padding:"0.7rem 1rem",display:"flex",alignItems:"center",gap:"0.75rem",flexWrap:"wrap"}}>
-          <div style={{width:"26px",height:"26px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:"7px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:"14px"}}>📦</div>
+        <div style={{padding:"0.6rem 1rem",display:"flex",alignItems:"center",gap:"0.6rem",flexWrap:"wrap"}}>
           <div>
-            <div style={{fontWeight:800,fontSize:"0.92rem"}}>EnviosHub <span style={{color:"#374151",fontSize:"0.6rem",fontWeight:400}}>v{VERSION} <span style={{color:"#374151",fontSize:"0.55rem",fontWeight:400}}>({BUILD_HASH})</span></span></div>
-            <div style={{color:armador.color||"#06b6d4",fontSize:"0.7rem",fontWeight:700}}>{armador.nombre}</div>
+            <div style={{fontWeight:800,fontSize:"0.9rem"}}>EnviosHub <span style={{color:"#374151",fontSize:"0.58rem",fontWeight:400}}>v{VERSION} ({BUILD_HASH})</span></div>
+            <div style={{color:colorArm,fontSize:"0.72rem",fontWeight:700}}>{armador.nombre}</div>
           </div>
           {sesion.puedeSalida&&(
-            <button onClick={()=>setModo(p=>p==="armado"?"salida":"armado")}
+            <button onClick={()=>{if(modo==="armado"){cerrarSesion();setCamara(false);}setModo(p=>p==="armado"?"salida":"armado");}}
               style={{padding:"0.35rem 0.7rem",borderRadius:"8px",fontWeight:700,fontSize:"0.72rem",cursor:"pointer",
                 background:modo==="salida"?"#1a0f2e":"#0d1c04",color:modo==="salida"?"#a78bfa":"#84cc16",border:"1px solid "+(modo==="salida"?"#a78bfa":"#84cc16")}}>
               {modo==="salida"?"📦 Volver a Armado":"🚚 Modo Salida"}
             </button>
           )}
-          <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:"0.75rem"}}>
+          <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:"0.6rem"}}>
             <span style={{color:"#4b5563",fontSize:"0.7rem"}}>{sesion.usuario}</span>
             <button onClick={()=>{clearSession();window.location.reload();}} style={{...S.btnSm(false),color:"#f87171"}}>Salir</button>
           </div>
         </div>
+        {modo==="armado"&&sesionActiva&&(
+          <div style={{padding:"0 1rem 0.55rem",display:"flex",alignItems:"center",gap:"10px",flexWrap:"wrap",fontSize:"0.72rem"}}>
+            <span style={{color:colorArm,fontWeight:900,fontSize:"1.1rem"}}>{sesionContador}</span><span style={{color:"#6b7280"}}>armado{sesionContador!==1?"s":""}</span>
+            <span style={{color:"#374151"}}>·</span>
+            <span style={{color:"#f59e0b",fontWeight:800}}>Faltan {faltanHoy} hoy</span>
+            <span style={{marginLeft:"auto",color:controladorSel?"#34d399":"#4b5563",fontWeight:700}}>
+              {controladorSel?<>🔍 Ctrl: {controladorSel.nombre} <span onClick={()=>setControladorSel(null)} style={{cursor:"pointer",color:"#f87171"}}>✕</span></>:"Sin controlador"}
+            </span>
+          </div>
+        )}
+        {guardado&&modo==="armado"&&(
+          <div style={{padding:"4px 1rem",fontSize:"0.72rem",fontWeight:800,background:guardado==="error"?"#1c0404":guardado==="ok"?"#041f14":"#12172a",color:guardado==="error"?"#f87171":guardado==="ok"?"#34d399":"#9ca3af",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span>{guardado==="guardando"?"Guardando…":guardado==="ok"?"✓ Guardado":"⚠ No se pudo guardar. Revisá la conexión."}</span>
+            {guardado==="error"&&reintento&&<button onClick={reintento} style={{padding:"2px 10px",borderRadius:"6px",background:"#7f1d1d",border:"none",color:"#fff",fontWeight:800,fontSize:"0.72rem",cursor:"pointer"}}>Reintentar</button>}
+          </div>
+        )}
       </div>
 
       {modo==="salida"?(
@@ -7306,84 +7418,60 @@ function VistaArmador({envios,setEnvios,colectas=[],setColectas,sesion,lc,armado
         </div>
       ):(
       <div style={{padding:"14px"}}>
-        {/* Sesión + contador */}
         {!sesionActiva?(
-          <div style={{...S.card,padding:"1.1rem 1rem",marginBottom:"0.85rem",textAlign:"center",borderLeft:"3px solid "+(armador.color||"#06b6d4")}}>
+          <div style={{...S.card,padding:"1.1rem 1rem",marginBottom:"0.85rem",textAlign:"center",borderLeft:"3px solid "+colorArm}}>
             <div style={{color:"#4b5563",fontSize:"0.65rem",textTransform:"uppercase",marginBottom:"0.5rem"}}>Sesión no iniciada</div>
-            <button onClick={iniciarSesion}
-              style={{padding:"0.7rem 2rem",borderRadius:"12px",fontWeight:800,fontSize:"1rem",cursor:"pointer",
-                background:"linear-gradient(135deg,#6366f1,#8b5cf6)",border:"none",color:"#fff",letterSpacing:".02em"}}>
-              ▶ Iniciar sesión
-            </button>
+            <button onClick={iniciarSesion} style={{padding:"0.7rem 2rem",borderRadius:"12px",fontWeight:800,fontSize:"1rem",cursor:"pointer",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",border:"none",color:"#fff"}}>▶ Iniciar sesión</button>
           </div>
         ):(
-          <div style={{...S.card,padding:"0.7rem 1rem",marginBottom:"0.85rem",display:"flex",alignItems:"center",gap:"12px",borderLeft:"3px solid "+(armador.color||"#06b6d4")}}>
-            <div style={{flex:1}}>
-              <div style={{display:"flex",alignItems:"baseline",gap:"8px"}}>
-                <span style={{fontWeight:900,fontSize:"2rem",color:armador.color||"#06b6d4",lineHeight:1}}>{sesionContador}</span>
-                <span style={{color:"#6b7280",fontSize:"0.65rem",textTransform:"uppercase"}}>armado{sesionContador!==1?"s":""}</span>
+          <>
+            {/* Controlador */}
+            {ctrls.length>0&&(
+              <div style={{...S.card,padding:"0.5rem 0.7rem",marginBottom:"0.6rem",display:"flex",alignItems:"center",gap:"6px",flexWrap:"wrap"}}>
+                <span style={{fontSize:"0.6rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase"}}>🔍 Ctrl:</span>
+                {ctrls.map(a=>(
+                  <button key={a.id} onClick={()=>setControladorSel(c=>c?.id===a.id?null:a)}
+                    style={{padding:"4px 10px",borderRadius:"6px",fontWeight:700,fontSize:"0.75rem",cursor:"pointer",background:controladorSel?.id===a.id?"#13102a":"#12172a",border:"1px solid "+(controladorSel?.id===a.id?"#6366f1":"#252d40"),color:controladorSel?.id===a.id?(a.color||"#a78bfa"):"#6b7280"}}>{a.nombre}</button>
+                ))}
               </div>
-              {sesionInicioTs&&<div style={{color:"#4b5563",fontSize:"0.62rem",marginTop:"1px"}}>
-                desde {new Date(sesionInicioTs).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})} · cierra en {Math.round(GAP_MS/60000)} min sin escanear
-              </div>}
-            </div>
-            <button onClick={cerrarSesion} style={{padding:"4px 10px",borderRadius:"7px",background:"none",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:"0.7rem",fontWeight:700}}>⏹ Cerrar</button>
-          </div>
-        )}
-
-        {/* Selector de controlador (solo si hay armadores configurados) */}
-        {(()=>{const ctrls=(armadores.some(a=>a.puedeControlar)?armadores.filter(a=>a.puedeControlar):armadores).filter(a=>a.id!==armador?.id);
-        return sesionActiva&&ctrls.length>0&&(
-          <div style={{...S.card,padding:"0.6rem 0.8rem",marginBottom:"0.75rem",display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
-            <span style={{fontSize:"0.58rem",color:"#6b7280",fontWeight:700,textTransform:"uppercase",whiteSpace:"nowrap"}}>🔍 Ctrl:</span>
-            {ctrls.map(a=>(
-              <button key={a.id} onClick={()=>setControladorSel(c=>c?.id===a.id?null:a)}
-                style={{padding:"3px 9px",borderRadius:"6px",fontWeight:700,fontSize:"0.72rem",cursor:"pointer",
-                  background:controladorSel?.id===a.id?"#13102a":"#12172a",
-                  border:"1px solid "+(controladorSel?.id===a.id?"#6366f1":"#252d40"),
-                  color:controladorSel?.id===a.id?(a.color||"#a78bfa"):"#6b7280"}}>
-                {a.nombre}
-              </button>
-            ))}
-            {controladorSel&&<span style={{color:"#10b981",fontSize:"0.65rem",fontWeight:700}}>✓ {controladorSel.nombre}</span>}
-          </div>
-        );})()}
-
-        {/* Input escaneo */}
-        <div style={{...S.card,padding:"0.85rem 1rem",marginBottom:"0.75rem",border:"1px solid #6366f133"}}>
-          <div style={{color:"#a78bfa",fontWeight:700,fontSize:"0.7rem",textTransform:"uppercase",letterSpacing:".06em",marginBottom:"8px"}}>Escanear pedido</div>
-          <div style={{display:"flex",gap:"8px",marginBottom:(camara||resultado)?"8px":"0"}}>
-            <input ref={inputRef} value={qrInput} onChange={e=>setQrInput(e.target.value)}
-              onKeyDown={e=>{if(e.key==="Enter"){procesarScan(qrInput);setQrInput("");}}}
-              placeholder="Escaneá el código de barras o ingresá el nro..."
-              style={{...S.input,flex:1,fontSize:"0.88rem",padding:"10px 12px"}} autoComplete="off"/>
-            <button onClick={()=>{procesarScan(qrInput);setQrInput("");}}
-              style={{...S.btn(true),background:"#12172a",border:"1px solid #6366f1",color:"#a78bfa",padding:"8px 14px",fontWeight:700,fontSize:"0.8rem"}}>OK</button>
-            {soportaCamera&&(
-              <button onClick={()=>setCamara(p=>!p)}
-                title="Escanear con cámara"
-                style={{...S.btn(camara),background:camara?"#0d1c04":"#0f1420",border:"1px solid "+(camara?"#84cc16":"#252d40"),color:camara?"#84cc16":"#6b7280",padding:"8px 12px",fontSize:"1.1rem"}}>📷</button>
             )}
-          </div>
-          {camara&&(
-            <div style={{marginBottom:"8px",borderRadius:"10px",overflow:"hidden",background:"#000",position:"relative"}}>
-              <video ref={videoRef} style={{width:"100%",maxHeight:"220px",objectFit:"cover",display:"block"}} playsInline muted/>
-              <div style={{position:"absolute",inset:0,border:"2px solid #84cc16",borderRadius:"10px",pointerEvents:"none"}}/>
-              <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"150px",height:"150px",border:"2px solid #84cc16",borderRadius:"8px",boxShadow:"0 0 0 9999px rgba(0,0,0,0.45)"}}/>
-              <button onClick={()=>setCamara(false)} style={{position:"absolute",top:"8px",right:"8px",background:"rgba(0,0,0,0.75)",border:"1px solid #84cc16",color:"#84cc16",borderRadius:"6px",padding:"4px 10px",fontSize:"0.75rem",cursor:"pointer"}}>Cerrar</button>
+
+            {/* Escaneo */}
+            <div style={{...S.card,padding:"0.8rem 0.9rem",marginBottom:"0.75rem",border:"1px solid #6366f133"}}>
+              <div style={{display:"flex",gap:"8px",marginBottom:camara?"8px":"0"}}>
+                <input ref={inputRef} value={qrInput} onChange={e=>setQrInput(e.target.value)}
+                  onKeyDown={e=>{if(e.key==="Enter"){procesarScan(qrInput);setQrInput("");}}}
+                  placeholder="Escaneá o ingresá el nro..."
+                  style={{...S.input,flex:1,fontSize:"0.95rem",padding:"11px 12px"}} autoComplete="off"/>
+                <button onClick={()=>{procesarScan(qrInput);setQrInput("");}} style={{...S.btn(true),background:"#12172a",border:"1px solid #6366f1",color:"#a78bfa",padding:"8px 14px",fontWeight:700}}>OK</button>
+                {soportaCamera&&(
+                  <button onClick={()=>setCamara(p=>!p)} style={{...S.btn(camara),background:camara?"#0d1c04":"#0f1420",border:"1px solid "+(camara?"#84cc16":"#252d40"),color:camara?"#84cc16":"#6b7280",padding:"8px 12px",fontSize:"1.2rem"}}>📷</button>
+                )}
+              </div>
+              {camara&&(
+                <div style={{borderRadius:"10px",overflow:"hidden",background:"#000",position:"relative"}}>
+                  <video ref={videoRef} style={{width:"100%",maxHeight:"200px",objectFit:"cover",display:"block",opacity:pendiente?0.35:1}} playsInline muted/>
+                  <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"130px",height:"130px",border:"2px solid "+(pendiente?"#6b7280":"#84cc16"),borderRadius:"8px"}}/>
+                  <div style={{position:"absolute",bottom:"6px",left:0,right:0,textAlign:"center",fontSize:"0.7rem",fontWeight:700,color:pendiente?"#fbbf24":"#84cc16"}}>{pendiente?"Confirmá o cancelá para seguir":"Apuntá al código"}</div>
+                </div>
+              )}
             </div>
-          )}
-          {resultado&&(
-            <div onClick={()=>resultado.ok!==true&&setResultado(null)} style={{padding:"8px 12px",borderRadius:"8px",cursor:resultado.ok===true?"default":"pointer",
-              background:resultado.ok===true?"#041f14":resultado.ok==="ya"?"#12172a":"#1c0404",
-              border:"1px solid "+(resultado.ok===true?"#065f46":resultado.ok==="ya"?"#252d40":"#7f1d1d"),
-              color:resultado.ok===true?"#34d399":resultado.ok==="ya"?"#6b7280":"#f87171",
-              fontSize:"0.82rem",fontWeight:700,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"8px"}}>
-              <div>{resultado.msg}{resultado.envio&&<div style={{fontWeight:400,color:"#9ca3af",marginTop:"2px",fontSize:"0.75rem"}}>{resultado.envio.direccion}{resultado.envio.trans&&<span style={{color:lc[resultado.envio.trans]?.color||"#6b7280",fontWeight:700}}> · {resultado.envio.trans}</span>}{resultado.bultos>1&&<span style={{color:"#f59e0b",fontWeight:700}}> · {resultado.bultos} bultos</span>}</div>}</div>
-              {resultado.ok!==true&&<span style={{opacity:0.5,fontSize:"0.75rem",flexShrink:0}}>✕</span>}
+
+            {renderPendiente()}
+
+            {ultimo&&!pendiente&&(
+              <div style={{padding:"8px 12px",borderRadius:"8px",background:"#041f14",border:"1px solid #065f46",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px"}}>
+                <span style={{color:"#34d399",fontWeight:700,fontSize:"0.82rem"}}>✓ Armado {ultimo.label}</span>
+                <button onClick={deshacer} style={{padding:"6px 14px",borderRadius:"8px",background:"#1c1200",border:"1px solid #78350f",color:"#fbbf24",fontWeight:800,fontSize:"0.8rem",cursor:"pointer"}}>↩ Deshacer</button>
+              </div>
+            )}
+
+            <div style={{textAlign:"center",marginTop:"14px"}}>
+              <button onClick={cerrarSesion} style={{padding:"6px 14px",borderRadius:"7px",background:"none",border:"1px solid #374151",color:"#6b7280",cursor:"pointer",fontSize:"0.72rem",fontWeight:700}}>⏹ Cerrar sesión</button>
+              {sesionInicioTs&&<div style={{color:"#374151",fontSize:"0.62rem",marginTop:"4px"}}>desde {new Date(sesionInicioTs).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})} · cierra tras {gapUmbralMin} min sin actividad</div>}
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
       )}
     </div>
@@ -8412,6 +8500,11 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
     const srch=nro.trim().replace(/^#/,"");if(!srch)return;
     setResultado(null);
     const nums=srch.replace(/\D/g,"");
+    // Envío cancelado: no se arma
+    if(!envios.some(e=>getEstado(e)!=="cancelado"&&scoreBusqueda(e,srch,nums)>0)&&envios.some(e=>getEstado(e)==="cancelado"&&scoreBusqueda(e,srch,nums)===3)){
+      const msgC="Envío cancelado. No se arma.";
+      setResultado({ok:false,msg:msgC});showOverlay(false,msgC);beepError();setTimeout(()=>setResultado(null),5000);return;
+    }
     // Helper: busca contra colectas pendientes (ML, circuito separado) — SIN filtro de fecha,
     // porque Maxi puede cargar colectas para el día siguiente con anticipación.
     const buscarOtro=()=>otrosPedidos.filter(p=>["en_expedicion","por_preparar"].includes(p.estado)&&(String(p.nroOrdenTN)===srch||String(p.id)===srch||String(p.nroOrdenTN).includes(srch)));
@@ -8425,7 +8518,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
       .sort((a,b)=>b.score-a.score);
     // Modo armador activo: buscar y confirmar automáticamente sin panel
     if(armadorActivo){
-      const candidatos=envios
+      const candidatos=envios.filter(e=>getEstado(e)!=="cancelado")
         .map(e=>({e,score:scoreBusqueda(e,srch,nums)}))
         .filter(x=>x.score>0)
         .sort((a,b)=>b.score-a.score);
@@ -8476,7 +8569,7 @@ function VistaExpedicion({envios,setEnvios,colectas=[],setColectas,sesion,lc,con
       return;
     }
     // Puntuar todos los envíos y ordenar por relevancia
-    const candidatos=envios
+    const candidatos=envios.filter(e=>getEstado(e)!=="cancelado")
       .map(e=>({e,score:scoreBusqueda(e,srch,nums)}))
       .filter(x=>x.score>0)
       .sort((a,b)=>b.score-a.score);
@@ -12524,7 +12617,7 @@ export default function App(){
   if(sesion.rol==="expedicion")return<VistaExpedicion envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} configExpedicion={configExpedicion} otrosPedidos={otrosPedidos}/>;
   if(sesion.rol==="armador"){
     const arm=(configExpedicion.armadores||[]).find(a=>a.id===sesion.armadorId);
-    return<VistaArmador envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} armador={arm} armadores={(configExpedicion.armadores||[]).filter(a=>a.activo!==false)} gapUmbralMin={configExpedicion.gapUmbralMin||5}/>;
+    return<VistaArmador envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} armador={arm} armadores={(configExpedicion.armadores||[]).filter(a=>a.activo!==false)} gapUmbralMin={configExpedicion.gapUmbralMin||5} otrosPedidos={otrosPedidos}/>;
   }
 
   if(pantalla==="asignacion"){return<PantallaAsignacion borrador={borrador} fileName={fileName} onConfirmar={confirmarAsignacion} onCancelar={()=>setPantalla("dashboard")} lc={lc} envios={envios} sesion={sesion}/>;}
