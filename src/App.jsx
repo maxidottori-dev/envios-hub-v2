@@ -2582,15 +2582,15 @@ function imprimirFormularioArmadoPV(caso, envioDoc){
     @page{size:A4 landscape;margin:8mm 12mm}
     *{box-sizing:border-box}
     html,body{margin:0;padding:0}
-    body{font-family:Arial,sans-serif;color:#111;font-size:12pt;height:194mm}
-    .copia{height:96mm;overflow:hidden;display:flex;flex-direction:column;gap:2.5mm;page-break-inside:avoid;padding-bottom:2mm}
-    .copia+.copia{border-top:2px dashed #999;padding-top:4mm;padding-bottom:0}
+    body{font-family:Arial,sans-serif;color:#111;font-size:12pt;height:194mm;display:flex}
+    .copia{width:50%;height:194mm;overflow:hidden;display:flex;flex-direction:column;gap:3mm;padding:0 5mm 0 0;border-right:2px dashed #999}
+    .copia+.copia{border-right:none;padding:0 0 0 5mm}
     .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:2mm}
     .empresa{font-size:9pt;color:#666;text-transform:uppercase;letter-spacing:.5px}
     .doc-title{font-size:15pt;font-weight:800;color:#111}
     .pvid{font-size:18pt;font-weight:900;color:#6366f1}
     .sub{font-size:11pt;color:#555}
-    .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4mm}
+    .row3{display:grid;grid-template-columns:1fr 1fr;gap:3mm 4mm}.row3 .field:first-child{grid-column:1/-1}
     .row2{display:grid;grid-template-columns:1fr 1fr;gap:4mm}
     .flabel{font-size:9pt;color:#888;text-transform:uppercase;font-weight:700;margin-bottom:.8mm}
     .fval{font-size:12.5pt;font-weight:600;color:#111;border-bottom:1px solid #ddd;padding-bottom:1mm;min-height:6mm}
@@ -2648,17 +2648,17 @@ function imprimirFormularioLogisticaPV(caso, envioDoc){
     @page{size:A4 landscape;margin:8mm 12mm}
     *{box-sizing:border-box}
     html,body{margin:0;padding:0}
-    body{font-family:Arial,sans-serif;color:#111;font-size:12pt;height:194mm}
-    .copia{height:96mm;overflow:hidden;display:flex;flex-direction:column;gap:2mm;page-break-inside:avoid;padding-bottom:2mm}
-    .copia+.copia{border-top:2px dashed #999;padding-top:4mm;padding-bottom:0}
+    body{font-family:Arial,sans-serif;color:#111;font-size:12pt;height:194mm;display:flex}
+    .copia{width:50%;height:194mm;overflow:hidden;display:flex;flex-direction:column;gap:3mm;padding:0 5mm 0 0;border-right:2px dashed #999}
+    .copia+.copia{border-right:none;padding:0 0 0 5mm}
     .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:2mm}
     .empresa{font-size:9pt;color:#666;text-transform:uppercase;letter-spacing:.5px}
     .doc-title{font-size:15pt;font-weight:800;color:#111}
     .pvid{font-size:18pt;font-weight:900;color:#10b981}
     .sub{font-size:11pt;color:#555}
-    .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4mm}
+    .row3{display:grid;grid-template-columns:1fr 1fr;gap:3mm 4mm}.row3 .field:first-child{grid-column:1/-1}
     .row2{display:grid;grid-template-columns:1fr 1fr;gap:4mm}
-    .pair{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4mm}
+    .pair{display:grid;grid-template-columns:1fr;gap:3mm}
     .flabel{font-size:9pt;color:#888;text-transform:uppercase;font-weight:700;margin-bottom:.8mm}
     .fval{font-size:12.5pt;font-weight:600;color:#111;border-bottom:1px solid #ddd;padding-bottom:1mm;min-height:6mm}
     .fval.big{font-size:14pt;font-weight:700;min-height:9mm;padding:1.5mm 0}
