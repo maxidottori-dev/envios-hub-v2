@@ -2823,7 +2823,7 @@ function semanaActual(){
   const fmt=x=>x.toISOString().split("T")[0];
   return{desde:fmt(lun),hasta:fmt(dom)};
 }
-function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={},setConfigExpedicion=()=>{},esAdmin=false}){
+function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},zc={},configExpedicion={},setConfigExpedicion=()=>{},esAdmin=false}){
   const [casos,setCasos]=useState([]);
   const [loading,setLoading]=useState(true);
   const [modo,setModo]=useState("lista"); // "lista" | "nuevo" | "editar" | "stats"
@@ -2847,6 +2847,20 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
   const tiposPV=(configExpedicion.tiposPV&&configExpedicion.tiposPV.length)?configExpedicion.tiposPV:TIPOS_PV_DEFAULT;
   const tiposPVActivos=tiposPV.filter(t=>t.activo!==false);
   const tipoPVMap=useMemo(()=>Object.fromEntries(tiposPV.map(t=>[t.k,t])),[tiposPV]);
+  const tmapPV=useMemo(()=>buildTarifaMap(zc||{}),[zc]);
+  // Costo de logística del caso: lo cargado a mano manda; si no, se toma el costo del envío PV vinculado
+  // (importe manual del envío > tarifa guardada > tarifa calculada por zona). Envío cancelado o "sin costo" = 0.
+  const costoLogPV=(c)=>{
+    if(c.sinCostoLogistico)return 0;
+    if((c.costoLogisticoPV||0)>0)return c.costoLogisticoPV;
+    if(c.resolucion!=="envio"||!c.envioId)return 0;
+    const e=envios.find(x=>x.id===c.envioId);
+    if(!e||getEstado(e)==="cancelado")return 0;
+    if(e.importeOverride>0)return e.importeOverride;
+    const t=getTarifaLog(e);
+    return t>0?t:calcImp(e,tmapPV,lc,zc);
+  };
+  const costoCasoPV=(c)=>(c.costoResolucion||0)+costoLogPV(c);
 
   // ── Gestión de tipos (solo admin) ──
   const [nuevoTipoNombre,setNuevoTipoNombre]=useState("");
@@ -3441,7 +3455,7 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
       {modo==="stats"&&(()=>{
         const casosS=casos.filter(c=>{const f=(c.fechaCreacion||"").slice(0,10);return f>=statsDesde&&f<=statsHasta;});
         const totalCostoReintegro=casosS.reduce((s,c)=>s+(c.costoResolucion||0),0);
-        const totalCostoLog=casosS.reduce((s,c)=>s+(c.sinCostoLogistico?0:(c.costoLogisticoPV||0)),0);
+        const totalCostoLog=casosS.reduce((s,c)=>s+costoLogPV(c),0);
         const totalCosto=totalCostoReintegro+totalCostoLog;
         const porTipo=tiposPV.map(t=>({...t,n:casosS.filter(c=>c.tipoIncidente===t.k).length})).filter(x=>x.n>0);
         // Agrupación por armador
@@ -3450,7 +3464,7 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
           nombre:a,
           total:casosS.filter(c=>c.armador===a).length,
           porTipo:tiposPV.map(t=>({...t,n:casosS.filter(c=>c.armador===a&&c.tipoIncidente===t.k).length})).filter(x=>x.n>0),
-          costo:casosS.filter(c=>c.armador===a).reduce((s,c)=>s+(c.costoResolucion||0)+(c.sinCostoLogistico?0:(c.costoLogisticoPV||0)),0),
+          costo:casosS.filter(c=>c.armador===a).reduce((s,c)=>s+costoCasoPV(c),0),
         }));
         const sinArmador=casosS.filter(c=>!c.armador).length;
         const thS={padding:"5px 8px",textAlign:"left",fontSize:"0.65rem",fontWeight:700,textTransform:"uppercase",color:"#6b7280",borderBottom:"1px solid #252d40",background:"#12172a",whiteSpace:"nowrap"};
@@ -3525,7 +3539,7 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
                   <tbody>{casosS.map((c,i)=>{
                     const tc=tipoPVMap[c.tipoIncidente]||{bg:"#1a1f2e",t:"#9ca3af"};
                     const tipoL=tipoPVMap[c.tipoIncidente]?.l||c.tipoIncidente||"—";
-                    const costoNum=(c.costoResolucion||0)+(c.sinCostoLogistico?0:(c.costoLogisticoPV||0));
+                    const costoNum=costoCasoPV(c);
                     const costo=costoNum>0?"$"+costoNum.toLocaleString("es-AR"):"—";
                     const res=c.resolucion==="envio"?("Envío"+(c.envioId?" "+c.envioId:""))
                       :c.resolucion==="reintegro"?"Reintegro"
@@ -3538,7 +3552,7 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},configExpedicion={}
                       <td style={{...tdS,fontWeight:600}}>{c.armador||<span style={{color:"#374151"}}>—</span>}</td>
                       <td style={{...tdS,fontWeight:600}}>{c.controlador||<span style={{color:"#374151"}}>—</span>}</td>
                       <td style={{...tdS,color:"#9ca3af"}}>{res}</td>
-                      <td style={{...tdS,textAlign:"right",color:costo!=="—"?"#fbbf24":"#374151",fontWeight:costo!=="—"?700:400}}>{costo}</td>
+                      <td title={costoNum>0?"Reintegro: $"+(c.costoResolucion||0).toLocaleString("es-AR")+" · Logística: $"+costoLogPV(c).toLocaleString("es-AR"):""} style={{...tdS,textAlign:"right",color:costo!=="—"?"#fbbf24":"#374151",fontWeight:costo!=="—"?700:400}}>{costo}</td>
                       <td style={{...tdS,color:c.estado==="resuelto"?"#10b981":"#f59e0b",fontWeight:700}}>{c.estado==="resuelto"?"✓ Resuelto":"⏳ Pendiente"}</td>
                     </tr>;
                   })}</tbody>
@@ -13064,7 +13078,7 @@ export default function App(){
         {tab==="flex"    &&<TabEnvios   envios={envios.filter(e=>e.origen==="ML")}  setEnvios={setEnvios} zc={zc} lc={lc} onReasignar={reasignarSel} esAdmin={esAdmin} sesion={sesion} mostrarResumenFlex={true} facturaClientes={facturaClientes} mlTarifas={mlTarifas}/>}
         {tab==="imprimir"&&<TabImprimir envios={envios} setEnvios={setEnvios} zc={zc} lc={lc}/>}
         {tab==="manual"  &&<TabManual   setEnvios={setEnvios} onSuccess={()=>{mostrarToast("Envio agregado");}} lc={lc} enviosExistentes={envios} sesion={sesion}/>}
-        {tab==="postventa"&&<TabPostVenta envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc} configExpedicion={configExpedicion} setConfigExpedicion={setConfigExpedicion} esAdmin={esAdmin}/>}
+        {tab==="postventa"&&<TabPostVenta envios={envios} setEnvios={setEnvios} sesion={sesion} lc={lc} zc={zc} configExpedicion={configExpedicion} setConfigExpedicion={setConfigExpedicion} esAdmin={esAdmin}/>}
         {tab==="tarifas" &&<TabTarifas  zc={zc} setZc={setZcPersist} lc={lc} setLc={setLcPersist} mlTarifas={mlTarifas} setMlTarifas={setMlTarifasPersist}/>}
         {tab==="informe"     &&<TabInforme     envios={envios} zc={zc} lc={lc} mlTarifas={mlTarifas}/>}
         {tab==="liquidacion"    &&<TabLiquidacion    envios={envios} setEnvios={setEnvios} lc={lc} sesion={sesion}/>}
