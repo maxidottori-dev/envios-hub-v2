@@ -28,23 +28,34 @@ export default async function handler(req, res) {
     try { order = JSON.parse(raw.toString("utf8") || "{}"); } catch { order = null; }
   }
 
-  // Verificación de firma: se activa cuando existe la variable TN_WEBHOOK_SECRET
-  // (secret de la app de Tienda Nube). Sin la variable, solo avisa en el log (no rompe nada).
+  // Verificación de firma HMAC-SHA256 (header x-linkedstore-hmac-sha256) con TN_WEBHOOK_SECRET.
+  // Vercel ya entrega el body parseado, así que no tenemos los bytes originales: probamos las
+  // serializaciones JSON más habituales (TN firma con PHP: barras escapadas y unicode \uXXXX).
+  // MODO OBSERVACIÓN: si la firma no coincide solo se registra en el log y se procesa igual.
+  // Para rechazar firmas inválidas, definir TN_WEBHOOK_ENFORCE=1 (solo después de ver
+  // "WEBHOOK_FIRMA_OK" de forma consistente en los logs).
   const secret = process.env.TN_WEBHOOK_SECRET;
   const firma = String(req.headers["x-linkedstore-hmac-sha256"] || "");
   if (secret) {
-    if (raw) {
-      const calc = crypto.createHmac("sha256", secret).update(raw).digest("hex");
-      if (!safeEqual(firma, calc)) {
-        console.warn("WEBHOOK_FIRMA_INVALIDA");
-        return res.status(401).json({ error: "Firma inválida" });
-      }
+    const base = raw ? raw.toString("utf8") : JSON.stringify(order);
+    const conBarras = base.replace(/\//g, "\\/");
+    const aUnicode = t => t.replace(/[\u0080-\uffff]/g, c => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
+    const variantes = { base, barras: conBarras, unicode: aUnicode(base), barras_unicode: aUnicode(conBarras) };
+    let ok = null;
+    for (const [nombre, texto] of Object.entries(variantes)) {
+      const calc = crypto.createHmac("sha256", secret).update(texto).digest("hex");
+      if (safeEqual(firma, calc)) { ok = nombre; break; }
+    }
+    if (ok) {
+      console.log("WEBHOOK_FIRMA_OK variante=" + ok + (raw ? " (body crudo)" : " (body reconstruido)"));
     } else {
-      console.warn("WEBHOOK_SIN_BODY_CRUDO: no se pudo verificar la firma");
+      console.warn("WEBHOOK_FIRMA_NO_COINCIDE firmaRecibida=" + (firma ? "sí" : "no") + (raw ? " (body crudo)" : " (body reconstruido)"));
+      if (process.env.TN_WEBHOOK_ENFORCE === "1") return res.status(401).json({ error: "Firma inválida" });
     }
   } else {
     console.warn("WEBHOOK_SIN_VERIFICAR (falta TN_WEBHOOK_SECRET). Firma recibida:", firma ? "sí" : "no");
   }
+
   if (!order || !order.id) return res.status(200).json({ ok: true, skipped: "no order data" });
 
   const topic = req.headers["x-linkedstore-topic"]
