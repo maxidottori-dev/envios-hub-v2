@@ -2215,18 +2215,42 @@ function VistaLogisticaLote({sesion}){
       </div>
     );
   };
+  // Envío ya despachado: tarjeta compacta, apariencia apagada (amarillo)
+  const renderDesp=e=>{
+    const esFlex=e.origen==="ML";
+    const nro=esFlex?(e.nroSeguimiento||e.id.slice(-10)):("#"+(e.nroOrdenTN||e.id.slice(-8)));
+    const og=ORIG_TAG(e);
+    const hs=e.despachoTs?new Date(e.despachoTs).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"";
+    return(
+      <div key={e.id} style={{background:"#1c1400",border:"1px solid #78350f",borderRadius:"10px",padding:"8px 12px",opacity:0.85}}>
+        <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}}>
+          <span style={{background:"#3a2a00",color:"#fbbf24",borderRadius:"5px",padding:"2px 8px",fontSize:"0.8rem",fontWeight:900}}>🚚 DESPACHADO{hs?" "+hs:""}</span>
+          <span style={{color:"#d6b370",fontWeight:700,fontFamily:"monospace",fontSize:"0.9rem"}}>{nro}</span>
+          <span style={{color:og.c,fontSize:"0.75rem",fontWeight:800}}>{og.l}</span>
+        </div>
+        <div style={{color:"#b8a06a",fontSize:"0.88rem",marginTop:"2px"}}>{(e.direccion||"").split(" / ")[0]}{e.localidad&&!/referencia/i.test(e.localidad)?" · "+e.localidad:""}</div>
+      </div>
+    );
+  };
   // Grupo por turno: contraído por defecto, encabezado grande
   const renderGrupos=(items,pref)=>agrupar(items).map(g=>{
     const v=visT(g.t);
     const k=pref+"-"+(g.t||"sin");
     const abierto=!!abiertos[k];
+    const pend=g.items.filter(e=>!e.despachado);
+    const desp=g.items.filter(e=>e.despachado);
+    const kd=k+"-D";const verDesp=!!abiertos[kd];
     return(
       <div key={k} style={{marginBottom:"0.9rem"}}>
         <div onClick={()=>alternar(k)} style={{cursor:"pointer",position:"sticky",top:"54px",zIndex:40,background:v.bg,border:"2px solid "+v.c,borderRadius:"10px",padding:"14px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
           <span style={{color:v.c,fontWeight:900,fontSize:"1.2rem",letterSpacing:"0.03em"}}>{abierto?"▼":"▶"} {v.l}</span>
-          <span style={{color:v.c,fontWeight:800,fontSize:"1rem"}}>{g.items.length} envío{g.items.length!==1?"s":""} · {abierto?"tocá para cerrar":"tocá para abrir"}</span>
+          <span style={{color:v.c,fontWeight:800,fontSize:"1rem"}}>{g.items.length} envío{g.items.length!==1?"s":""}{desp.length>0?" · "+desp.length+" despachado"+(desp.length!==1?"s":""):""} · {abierto?"tocá para cerrar":"tocá para abrir"}</span>
         </div>
-        {abierto&&<div style={{display:"grid",gap:"6px"}}>{g.items.map((e,i)=>renderCard(e,i))}</div>}
+        {abierto&&<div style={{display:"grid",gap:"6px"}}>
+          {pend.map((e,i)=>renderCard(e,i))}
+          {desp.length>0&&<div onClick={()=>alternar(kd)} style={{cursor:"pointer",background:"#1c1400",border:"1px dashed #78350f",color:"#fbbf24",borderRadius:"10px",padding:"10px 14px",fontWeight:800,fontSize:"0.95rem",textAlign:"center"}}>{verDesp?"▼ Ocultar":"▶ Ver"} despachados ({desp.length})</div>}
+          {verDesp&&desp.map(renderDesp)}
+        </div>}
       </div>
     );
   });
