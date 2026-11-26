@@ -386,6 +386,17 @@ const ZONA_ML_BG    = {CABA:"#0d1c04",NOE:"#1c1400",SUR:"#1c0404",PL:"#021a0e",L
 function getZonaML(p) { return ZONA_ML[p] || ""; }
 // Devuelve la zona ML usando partido primero, y si no encuentra, intenta con el partido derivado del CP
 function getZonaMLExt(partido, cp) { return getZonaML(partido) || getZonaML(cpAPartido(cp)) || ""; }
+// Hora de asignación del envío (lote). Los viejos sin dato usan la hora de creación.
+const loteTs=e=>e.loteImportacion||e.asignadoTs||e.creadoTs||"";
+const horaLote=e=>{const t=loteTs(e);return t?new Date(t).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"";};
+// Columna "Tipo": COM/RES si viene de Flex con tipo de entrega; si no, el origen (Tienda / Manual / PostVenta)
+const tipoInfo=e=>{
+  if(e.tipoEntrega){const c=e.tipoEntrega==="COMERCIAL";return{l:c?"COM":"RES",fg:c?"#38bdf8":"#86efac",bg:c?"#0c1a40":"#0a1a0a",fgL:c?"#1d4ed8":"#15803d",bgL:c?"#dbeafe":"#dcfce7"};}
+  if(e.pvCasoId)return{l:"PostVenta",fg:"#e879f9",bg:"#2a0a2e",fgL:"#a21caf",bgL:"#fae8ff"};
+  if(e.origen==="Tienda Nube")return{l:"Tienda",fg:"#38bdf8",bg:"#0c1a40",fgL:"#0369a1",bgL:"#e0f2fe"};
+  if(e.origen==="ML")return{l:"Flex",fg:"#84cc16",bg:"#0d1c04",fgL:"#3f6212",bgL:"#ecfccb"};
+  return{l:"Manual",fg:"#f59e0b",bg:"#2a1c00",fgL:"#b45309",bgL:"#fef3c7"};
+};
 
 function fechaLocal()  { const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().split("T")[0]; }
 function fechaHoy()    { return fechaLocal(); }
@@ -1218,6 +1229,7 @@ function PanelEdit({envio,onSave,onClose,lc,envios=[],onSaveMultiple,getImp,esAd
     ...(esReprogramado?{reprogramado:true}:{}),
     ...(audit?{ultimaEdicionPor:audit}:{}),
     ...(transAsignado&&audit?{asignadoPor:audit}:{}),
+    ...(transAsignado&&!envio.loteImportacion?{loteImportacion:new Date().toISOString()}:{}),
     ...(costoOverride!==null&&costoOverride!==(envio.importeOverride||null)&&audit?{importeEditadoPor:audit}:{})});}
   const logActivas=Object.entries(lc).filter(([,v])=>v.activa).map(([k])=>k);
   const bloqueaReasignar=!!(envio.despachado&&envio.trans&&!esAdmin&&!puedeReasignarDespachado(sesion));
@@ -2144,7 +2156,7 @@ function VistaLogisticaLote({sesion}){
   const ordDespacho=(x,y)=>{
     const ox=x.origen==="ML"?1:0,oy=y.origen==="ML"?1:0;
     if(ox!==oy)return ox-oy;
-    const lx=x.loteImportacion||"9",ly=y.loteImportacion||"9";
+    const lx=loteTs(x)||"9",ly=loteTs(y)||"9";
     if(lx!==ly)return lx.localeCompare(ly);
     return(parseInt(x.nroOrdenTN||x.nroSeguimiento||x.id)||0)-(parseInt(y.nroOrdenTN||y.nroSeguimiento||y.id)||0);
   };
@@ -2170,7 +2182,7 @@ function VistaLogisticaLote({sesion}){
     const nro=esFlex?(e.nroSeguimiento||e.id.slice(-10)):("#"+(e.nroOrdenTN||e.id.slice(-8)));
     const og=ORIG_TAG(e);
     const zona=esFlex?(getZonaMLExt(e.partido,e.cp)||""):(e.partido||"");
-    const lote=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"";
+    const lote=horaLote(e);
     const refExtra=(e.referencia&&!(e.direccion||"").toLowerCase().includes(e.referencia.toLowerCase().slice(0,20)))?e.referencia:"";
     const B=(l,bg,c,x)=><span style={{background:bg,color:c,borderRadius:"5px",padding:"2px 8px",fontSize:"0.78rem",fontWeight:800,whiteSpace:"nowrap",...x}}>{l}</span>;
     return(
@@ -2316,8 +2328,8 @@ function TabImprimir({envios,setEnvios,zc,lc}){
     const orB=b.origen==="ML"?1:0;
     if(orA!==orB)return orA-orB;
     // Dentro de cada grupo: por lote ASC, sin lote al final
-    const la=a.loteImportacion||"9";
-    const lb=b.loteImportacion||"9";
+    const la=loteTs(a)||"9";
+    const lb=loteTs(b)||"9";
     if(la!==lb)return la.localeCompare(lb);
     const na=parseInt(a.nroOrdenTN||a.nroSeguimiento||a.id)||0;
     const nb=parseInt(b.nroOrdenTN||b.nroSeguimiento||b.id)||0;
@@ -2368,8 +2380,8 @@ function TabImprimir({envios,setEnvios,zc,lc}){
       const zml=esFlex?(getZonaMLExt(e.partido,e.cp)||""):(e.partido||"");
       const refExtra=(e.referencia&&!e.direccion.toLowerCase().includes(e.referencia.toLowerCase().slice(0,20)))?" — "+e.referencia:"";
       const cobrar=e.cobranza?"$"+Number(e.cobranza).toLocaleString("es-AR"):"—";
-      const loteCell=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"—";
-      const tipoCell=e.tipoEntrega?`<span style="background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":"#dcfce7"};color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":"#15803d"};border-radius:3px;padding:0 4px;font-size:${fs-2}px;font-weight:700;">${e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</span>`:"—";
+      const loteCell=horaLote(e)||"—";
+      const tI=tipoInfo(e);const tipoCell=`<span style="background:${tI.bgL};color:${tI.fgL};border-radius:3px;padding:0 4px;font-size:${fs-2}px;font-weight:700;">${tI.l}</span>`;
       const origenBadge=esFlex?`<span style="background:#1a3008;color:#84cc16;border-radius:3px;padding:0 4px;font-size:${fs-3}px;font-weight:700;">FLEX</span>`:`<span style="background:#0c1a40;color:#38bdf8;border-radius:3px;padding:0 4px;font-size:${fs-3}px;font-weight:700;">TN</span>`;
       const reprogBadge=e.reprogramado?`<span style="background:#1c1500;color:#d97706;border:1px solid #78350f;border-radius:3px;padding:0 4px;font-size:${fs-3}px;font-weight:700;margin-right:4px;white-space:nowrap;">&#x21BB; Reprog.</span>`:"";
 
@@ -2395,7 +2407,7 @@ function TabImprimir({envios,setEnvios,zc,lc}){
           ${td(20,"text-align:center;color:#888;",i+1)}
           ${td(55,"text-align:center;font-size:"+(fs-2)+"px;font-weight:700;color:#16a34a;",loteCell)}
           ${td(110,"font-family:monospace;font-size:"+(fs-1)+"px;color:#444;",nroRef)}
-          ${e.tipoEntrega?`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;font-size:${fs-2}px;font-weight:700;color:${e.tipoEntrega==="COMERCIAL"?"#1d4ed8":"#15803d"};background:${e.tipoEntrega==="COMERCIAL"?"#dbeafe":"#dcfce7"};">${e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</td>`:`<td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:38px;text-align:center;color:#aaa;">—</td>`}
+          <td style="border-bottom:0.5px solid #ddd;padding:3px 4px;text-align:center;font-size:${fs-2}px;font-weight:700;color:${tI.fgL};background:${tI.bgL};">${tI.l}</td>
           ${td(28,"text-align:center;font-weight:"+(e.preparado&&(e.bultos||1)>1?700:400)+";color:"+(e.preparado?"inherit":"#d97706")+";",e.preparado?(e.bultos||1):"N/P")}
           <td style="border-bottom:0.5px solid #ddd;padding:3px 4px;width:18px;text-align:center;"><div style="width:11px;height:11px;border:1px solid #aaa;border-radius:1px;display:inline-block;"></div></td>
           ${td("","font-weight:500;",reprogBadge+dir+refExtra+(!esFlex&&e.telefono?`<span style="display:block;font-weight:400;color:#555;font-size:${fs-2}px;">📞 ${e.telefono}</span>`:"")+(!esFlex&&e.notasCliente?`<span style="display:block;font-weight:400;color:#6b7280;font-size:${fs-2}px;font-style:italic;">📋 ${e.notasCliente}</span>`:""))}
@@ -2472,10 +2484,10 @@ function TabImprimir({envios,setEnvios,zc,lc}){
           <button onClick={()=>{
             const filas=lista.map((e,i)=>{
               const esFlex=e.origen==="ML";
-              const lote=esFlex&&e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"";
+              const lote=horaLote(e);
               return{"#":i+1,
                 Lote:lote,
-                Tipo:e.tipoEntrega==="COMERCIAL"?"COM":e.tipoEntrega==="RESIDENCIAL"?"RES":"",
+                Tipo:tipoInfo(e).l,
                 Reprogramado:e.reprogramado?"SI":"",
                 Direccion:[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · "),
                 Referencia:e.referencia||"",
@@ -2530,14 +2542,12 @@ function TabImprimir({envios,setEnvios,zc,lc}){
               <tr key={e.id} style={{borderBottom:"1px solid #1a1f2e",background:i%2===0?"transparent":"#0d1119"}}>
                 <td style={{...tdSt,textAlign:"center",color:"#4b5563"}}>{i+1}</td>
                 <td style={{...tdSt,textAlign:"center",width:"52px"}}>
-                  {e.loteImportacion
-                    ?<span style={{background:esFlex?"#0d1c04":"#0c1a40",color:esFlex?"#84cc16":"#38bdf8",padding:"1px 5px",borderRadius:"4px",fontSize:"0.68rem",fontWeight:700,whiteSpace:"nowrap"}}>{new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false})}</span>
+                  {loteTs(e)
+                    ?<span style={{background:esFlex?"#0d1c04":"#0c1a40",color:esFlex?"#84cc16":"#38bdf8",padding:"1px 5px",borderRadius:"4px",fontSize:"0.68rem",fontWeight:700,whiteSpace:"nowrap"}}>{horaLote(e)}</span>
                     :<span style={{color:"#374151"}}>—</span>}
                 </td>
                 <td style={{...tdSt,textAlign:"center"}}>
-                  {e.tipoEntrega
-                    ?<span style={{padding:"1px 6px",borderRadius:"3px",fontSize:"0.65rem",fontWeight:700,background:e.tipoEntrega==="COMERCIAL"?"#0c1a40":"#0a1a0a",color:e.tipoEntrega==="COMERCIAL"?"#38bdf8":"#86efac"}}>{e.tipoEntrega==="COMERCIAL"?"COM":"RES"}</span>
-                    :<span style={{color:"#374151"}}>—</span>}
+                  {(()=>{const t=tipoInfo(e);return<span style={{padding:"1px 6px",borderRadius:"3px",fontSize:"0.65rem",fontWeight:700,background:t.bg,color:t.fg}}>{t.l}</span>;})()}
                 </td>
                 <td style={{...tdSt,whiteSpace:"normal",lineHeight:1.3}}>
                   {e.reprogramado&&<span style={{background:"#1c1500",color:"#fbbf24",border:"1px solid #78350f",padding:"1px 5px",borderRadius:"4px",fontSize:"0.65rem",fontWeight:700,marginRight:"5px",whiteSpace:"nowrap"}}>⟳ Reprog.</span>}
@@ -3246,6 +3256,7 @@ function TabPostVenta({envios=[],setEnvios,sesion=null,lc={},zc={},configExpedic
           tarifaLog:0,pvCasoId:pvRef.id,
           horarioEntrega:f.horarioEntrega||"",
           retiro:f.queRetira||null,cambio:null,pvSubtipo:f.subtipoEnvio||"envio",
+          ...(f.envioTrans?{loteImportacion:new Date().toISOString()}:{}),
           creadoTs:new Date().toISOString(),
           ...(audit?{creadoPor:audit}:{}),
         };
