@@ -2066,7 +2066,7 @@ function calcAcuse(actuales,acuse){
 }
 const ACUSE_UI={
   sin_aceptar:{l:"Sin aceptar",c:"#f59e0b",bg:"#1c1200"},
-  con_cambios:{l:"Cambios sin aceptar",c:"#f87171",bg:"#1c0a0a"},
+  con_cambios:{l:"Con cambios",c:"#f87171",bg:"#1c0a0a"},
   aceptado:{l:"Aceptado",c:"#34d399",bg:"#041f14"},
   vacio:{l:"Sin envíos",c:"#6b7280",bg:"#12172a"},
 };
@@ -2190,7 +2190,10 @@ function VistaLogisticaLote({sesion}){
         <div style={{color:"#f9fafb",fontSize:"1rem",fontWeight:700,lineHeight:1.3}}>{e.direccion}{refExtra?<span style={{color:"#9ca3af",fontWeight:400}}> — {refExtra}</span>:null}</div>
         <div style={{color:"#9ca3af",fontSize:"0.85rem"}}>{[e.localidad&&!/referencia/i.test(e.localidad)?e.localidad:"",e.partido,e.cp?"CP "+e.cp:""].filter(Boolean).join(" · ")}{zona&&zona!==e.partido?" · Zona "+zona:""}</div>
         {(e.clienteNombre||e.telefono)&&<div style={{color:"#d1d5db",fontSize:"0.88rem",marginTop:"2px"}}>{e.clienteNombre}{e.telefono?<span> 📞 {e.telefono}</span>:null}</div>}
-        {e.notasCliente&&<div style={{color:"#d1d5db",fontSize:"0.85rem",fontStyle:"italic",marginTop:"2px"}}>📋 {e.notasCliente}</div>}
+        {e.retiro&&<div style={{background:"#2a1400",border:"1px solid #f97316",color:"#fdba74",borderRadius:"6px",padding:"4px 8px",fontSize:"0.95rem",fontWeight:800,marginTop:"4px"}}>🔄 HAY QUE RETIRAR{typeof e.retiro==="string"&&e.retiro!=="true"?": "+e.retiro:""}</div>}
+        {e.horarioEntrega&&<div style={{color:"#93c5fd",fontSize:"0.9rem",fontWeight:700,marginTop:"2px"}}>🕐 Horario: {e.horarioEntrega}</div>}
+        {e.notasCliente&&<div style={{color:"#d1d5db",fontSize:"0.9rem",fontStyle:"italic",marginTop:"2px"}}>📋 {e.notasCliente}</div>}
+        {(og.l==="MANUAL"||og.l==="POSTVENTA")&&e.observaciones&&e.observaciones!==e.notasCliente&&<div style={{color:"#fde68a",fontSize:"0.9rem",fontWeight:600,marginTop:"2px"}}>📝 Obs: {e.observaciones}</div>}
         <div style={{display:"flex",gap:"12px",flexWrap:"wrap",color:"#9ca3af",fontSize:"0.8rem",marginTop:"4px"}}>
           <span>Turno <b style={{color:visT(e.turno||"").c}}>{e.turno||"—"}</b></span>
           <span>Fecha <b style={{color:"#d1d5db"}}>{e.fecha?fmtCorta(e.fecha):"—"}</b></span>
@@ -2252,38 +2255,36 @@ function VistaLogisticaLote({sesion}){
         {cargando&&<div style={{textAlign:"center",color:"#6b7280",padding:"2rem"}}>Cargando…</div>}
 
         {!cargando&&<>
-          {/* Banner de estado del lote */}
-          <div style={{background:ui.bg,border:"1px solid "+ui.c,borderRadius:"12px",padding:"0.8rem 1rem",marginBottom:"0.8rem"}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"10px",flexWrap:"wrap"}}>
-              <div>
-                <div style={{color:ui.c,fontWeight:800,fontSize:"0.95rem",textTransform:"capitalize"}}>{fechaLarga(fechaSel)}</div>
-                <div style={{color:"#9ca3af",fontSize:"0.75rem",marginTop:"2px"}}>
-                  {ac.estado==="vacio"&&"No tenés envíos asignados para este día."}
-                  {ac.estado==="sin_aceptar"&&`${lista.length} envío${lista.length!==1?"s":""} asignado${lista.length!==1?"s":""} — confirmá que los leíste.`}
-                  {ac.estado==="con_cambios"&&"Hubo cambios desde tu última aceptación. Revisalos y volvé a aceptar."}
-                  {ac.estado==="aceptado"&&`Aceptado ${fmtHoraAcuse(acuse?.aceptadoTs)}${acuse?.aceptadoPor?" por "+acuse.aceptadoPor:""}.`}
-                </div>
-                {lista.length>0&&<div style={{color:"#e5e7eb",fontSize:"0.8rem",fontWeight:700,marginTop:"4px"}}>{lista.length} envíos · {resumenTurnos}{cobTot>0?<span style={{color:"#fbbf24"}}> · A cobrar: ${cobTot.toLocaleString("es-AR")}</span>:null}</div>}
-              </div>
-              {(ac.estado==="sin_aceptar"||ac.estado==="con_cambios")&&
-                <button onClick={aceptar} disabled={guardando} style={{padding:"10px 18px",background:"linear-gradient(135deg,#10b981,#059669)",border:"none",borderRadius:"10px",color:"#fff",fontWeight:800,fontSize:"0.88rem",cursor:guardando?"wait":"pointer"}}>
-                  {guardando?"Guardando…":ac.estado==="sin_aceptar"?`✓ Aceptar lote (${lista.length})`:"✓ Aceptar cambios"}
-                </button>}
-            </div>
-          </div>
-
-          {/* Cambios */}
-          {ac.estado==="con_cambios"&&<div style={{background:"#12100a",border:"1px solid #78350f",borderRadius:"10px",padding:"0.6rem 0.8rem",marginBottom:"0.8rem",display:"grid",gap:"4px"}}>
-            <div style={{color:"#fbbf24",fontWeight:800,fontSize:"0.72rem",textTransform:"uppercase"}}>Cambios</div>
-            {ac.nuevos.length>0&&<div style={{color:"#86efac",fontSize:"0.78rem",fontWeight:700}}>➕ {ac.nuevos.length} envío{ac.nuevos.length>1?"s":""} nuevo{ac.nuevos.length>1?"s":""} agregado{ac.nuevos.length>1?"s":""} (están arriba de todo, marcados NUEVO):</div>}
-            {ac.nuevos.slice(0,30).map(e=><div key={e.id} style={{color:"#bbf7d0",fontSize:"0.76rem",paddingLeft:"12px"}}>• {e.nroSeguimiento||(e.nroOrdenTN?"#"+e.nroOrdenTN:e.id)} — {e.direccion}{e.localidad?", "+e.localidad:""} <b style={{color:visT(e.turno||"").c}}>[{e.turno||"Sin turno"}]</b></div>)}
-            {ac.nuevos.length>30&&<div style={{color:"#86efac",fontSize:"0.74rem",paddingLeft:"12px"}}>…y {ac.nuevos.length-30} más (ver abajo)</div>}
-            {ac.cambiados.map(({e,antes})=><div key={e.id} style={{color:"#fcd34d",fontSize:"0.78rem"}}>✏ {antes.nro}: {(antes.turno||"")!==(e.turno||"")?`turno ${antes.turno||"—"} → ${e.turno||"—"}`:"cambió la dirección"}</div>)}
-            {ac.quitados.map(q=>{
-              const otroDia=envios.find(e=>e.id===q.id);
-              return<div key={q.id} style={{color:"#fca5a5",fontSize:"0.78rem"}}>➖ {q.nro} — {q.dir}: {otroDia?`pasó al ${fmtCorta(otroDia.fecha)}`:"ya no está asignado a vos para este día (reasignado, reprogramado o cancelado)"}</div>;
-            })}
-          </div>}
+          {/* Recuadro único: estado del lote + resumen + detalle de cambios + botón */}
+          {(()=>{
+            const nro=e=>e.nroSeguimiento||(e.nroOrdenTN?"#"+e.nroOrdenTN:e.id);
+            const cc=ac.estado==="con_cambios";
+            const titulo=ac.estado==="vacio"?"No tenés envíos asignados para este día"
+              :ac.estado==="sin_aceptar"?"Lote nuevo: falta que lo aceptes"
+              :cc?"Hay cambios desde tu última aceptación"
+              :"✓ Lote aceptado "+fmtHoraAcuse(acuse?.aceptadoTs)+(acuse?.aceptadoPor?" por "+acuse.aceptadoPor:"");
+            const chip=(t,c,bg)=><span style={{background:bg,color:c,border:"1px solid "+c,borderRadius:"8px",padding:"4px 10px",fontWeight:800,fontSize:"0.9rem"}}>{t}</span>;
+            const fila={fontSize:"0.9rem",padding:"3px 0",lineHeight:1.35};
+            return(
+          <div style={{background:ui.bg,border:"2px solid "+ui.c,borderRadius:"12px",padding:"0.9rem 1rem",marginBottom:"1rem"}}>
+            <div style={{color:"#9ca3af",fontSize:"0.8rem",textTransform:"capitalize"}}>{fechaLarga(fechaSel)}</div>
+            <div style={{color:ui.c,fontWeight:900,fontSize:"1.2rem",marginBottom:"6px"}}>{titulo}</div>
+            {lista.length>0&&<div style={{color:"#e5e7eb",fontSize:"0.95rem",fontWeight:700,marginBottom:"8px"}}>{lista.length} envío{lista.length!==1?"s":""} en total · {resumenTurnos}{cobTot>0?<span style={{color:"#fbbf24"}}> · A cobrar: ${cobTot.toLocaleString("es-AR")}</span>:null}</div>}
+            {cc&&<div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginBottom:"8px"}}>
+              {ac.nuevos.length>0&&chip("🆕 "+ac.nuevos.length+" nuevo"+(ac.nuevos.length>1?"s":""),"#4ade80","#052e16")}
+              {ac.cambiados.length>0&&chip("✏ "+ac.cambiados.length+" modificado"+(ac.cambiados.length>1?"s":""),"#fbbf24","#1c1200")}
+              {ac.quitados.length>0&&chip("➖ "+ac.quitados.length+" quitado"+(ac.quitados.length>1?"s":""),"#f87171","#1c0a0a")}
+            </div>}
+            {cc&&<div style={{maxHeight:"260px",overflowY:"auto",background:"#0a0e1a",borderRadius:"8px",padding:"6px 10px",marginBottom:"10px"}}>
+              {ac.nuevos.map(e=><div key={"n"+e.id} style={{...fila,color:"#bbf7d0"}}>🆕 <b>{nro(e)}</b> — {e.direccion}{e.localidad?", "+e.localidad:""} <b style={{color:visT(e.turno||"").c}}>[{e.turno||"Sin turno"}]</b></div>)}
+              {ac.cambiados.map(({e,antes})=><div key={"c"+e.id} style={{...fila,color:"#fcd34d"}}>✏ <b>{antes.nro}</b> — {(antes.turno||"")!==(e.turno||"")?`cambió de turno: ${antes.turno||"—"} → ${e.turno||"—"}`:"cambió la dirección"}: {e.direccion}</div>)}
+              {ac.quitados.map(q=>{const otroDia=envios.find(e=>e.id===q.id);return<div key={"q"+q.id} style={{...fila,color:"#fca5a5"}}>➖ <b>{q.nro}</b> — {q.dir}: {otroDia?`pasó al ${fmtCorta(otroDia.fecha)}`:"ya no es tuyo para este día (reasignado, reprogramado o cancelado)"}</div>;})}
+            </div>}
+            {(ac.estado==="sin_aceptar"||cc)&&
+              <button onClick={aceptar} disabled={guardando} style={{width:"100%",padding:"14px 18px",background:"linear-gradient(135deg,#10b981,#059669)",border:"none",borderRadius:"10px",color:"#fff",fontWeight:900,fontSize:"1.1rem",cursor:guardando?"wait":"pointer"}}>
+                {guardando?"Guardando…":ac.estado==="sin_aceptar"?`✓ Aceptar lote (${lista.length})`:"✓ Aceptar cambios"}
+              </button>}
+          </div>);})()}
 
           {/* Listado: NUEVOS pendientes arriba de todo; después AM / PM. Todo contraído al entrar */}
           {lNuevos.length>0&&<div style={{background:"#06170c",border:"2px solid #22c55e",borderRadius:"12px",padding:"10px",marginBottom:"1.2rem"}}>
