@@ -2080,6 +2080,8 @@ function VistaLogisticaLote({sesion}){
   const hoy=fechaHoy();
   const logNombre=sesion.logistica;
   const alias=sesion.alias||"Logística";
+  const [abiertos,setAbiertos]=useState({}); // todo contraído al entrar
+  const alternar=k=>setAbiertos(c=>({...c,[k]:!c[k]}));
   const fechas=useMemo(()=>Array.from({length:8},(_,i)=>{const d=new Date(hoy+"T12:00:00");d.setDate(d.getDate()+i);return d.toISOString().split("T")[0];}),[hoy]);
   const [envios,setEnvios]=useState([]);
   const [acuses,setAcuses]=useState({});
@@ -2138,48 +2140,78 @@ function VistaLogisticaLote({sesion}){
   const fechaLarga=f=>new Date(f+"T12:00:00").toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long"});
   const TURNO_VIS={AM:{c:"#fbbf24",bg:"#1f1a05",l:"☀️ TURNO AM"},PM:{c:"#818cf8",bg:"#14143a",l:"🌙 TURNO PM"}};
   const visT=t=>TURNO_VIS[t]||{c:"#9ca3af",bg:"#1a1f2e",l:t?("TURNO "+t):"SIN TURNO"};
+  // Mismo orden que el tab Despacho: no-Flex primero, después Flex; por lote y por número
+  const ordDespacho=(x,y)=>{
+    const ox=x.origen==="ML"?1:0,oy=y.origen==="ML"?1:0;
+    if(ox!==oy)return ox-oy;
+    const lx=x.loteImportacion||"9",ly=y.loteImportacion||"9";
+    if(lx!==ly)return lx.localeCompare(ly);
+    return(parseInt(x.nroOrdenTN||x.nroSeguimiento||x.id)||0)-(parseInt(y.nroOrdenTN||y.nroSeguimiento||y.id)||0);
+  };
   const agrupar=items=>{
     const otros=[...new Set(items.map(e=>e.turno||""))].filter(t=>t&&!TURNOS.includes(t));
-    return[...TURNOS,...otros,""].map(t=>({t,items:items.filter(e=>(e.turno||"")===t)})).filter(g=>g.items.length);
+    return[...TURNOS,...otros,""].map(t=>({t,items:items.filter(e=>(e.turno||"")===t).sort((x,y)=>{
+      const nx=nuevosVis.has(x.id)?0:1,ny=nuevosVis.has(y.id)?0:1;
+      return nx-ny||ordDespacho(x,y);
+    })})).filter(g=>g.items.length);
   };
-  const lNuevos=lista.filter(e=>nuevosVis.has(e.id));
-  const lResto=lista.filter(e=>!nuevosVis.has(e.id));
+  // Pendientes de aceptar (arriba de todo). Los ya aceptados pasan a su turno, con tag NUEVO y primeros.
+  const pendIds=new Set(ac.estado==="con_cambios"?ac.nuevos.map(e=>e.id):[]);
+  const lNuevos=lista.filter(e=>pendIds.has(e.id));
+  const lResto=lista.filter(e=>!pendIds.has(e.id));
   const resumenTurnos=agrupar(lista).map(g=>(g.t||"Sin turno")+" "+g.items.length).join("  ·  ");
+  const cobTot=lista.reduce((t,e)=>t+(e.cobranza>0?e.cobranza:0),0);
+  const ORIG_TAG=e=>e.pvCasoId?{l:"POSTVENTA",bg:"#2a0a2e",c:"#e879f9"}:e.origen==="ML"?{l:"FLEX",bg:"#1a3008",c:"#84cc16"}:e.origen==="Tienda Nube"?{l:"TIENDA",bg:"#0c1a40",c:"#38bdf8"}:{l:"MANUAL",bg:"#2a1c00",c:"#f59e0b"};
 
-  const renderCard=e=>{
+  const renderCard=(e,i)=>{
     const esNuevo=nuevosVis.has(e.id);
     const antes=cambIds.get(e.id);
-    const nro=e.nroSeguimiento||(e.nroOrdenTN?"#"+e.nroOrdenTN:e.id);
+    const esFlex=e.origen==="ML";
+    const nro=esFlex?(e.nroSeguimiento||e.id.slice(-10)):("#"+(e.nroOrdenTN||e.id.slice(-8)));
+    const og=ORIG_TAG(e);
+    const zona=esFlex?(getZonaMLExt(e.partido,e.cp)||""):(e.partido||"");
+    const lote=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"";
+    const refExtra=(e.referencia&&!(e.direccion||"").toLowerCase().includes(e.referencia.toLowerCase().slice(0,20)))?e.referencia:"";
+    const B=(l,bg,c,x)=><span style={{background:bg,color:c,borderRadius:"5px",padding:"2px 8px",fontSize:"0.78rem",fontWeight:800,whiteSpace:"nowrap",...x}}>{l}</span>;
     return(
-      <div key={e.id} style={{...S.card,padding:"0.6rem 0.75rem",borderLeft:esNuevo?"4px solid #22c55e":antes?"4px solid #f59e0b":undefined}}>
-        <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap",marginBottom:"2px"}}>
-          <span style={{color:e.origen==="ML"?"#84cc16":"#7dd3fc",fontWeight:700,fontSize:"0.8rem"}}>{nro}</span>
-          {esNuevo&&<Bdg label="🆕 NUEVO" bg="#052e16" t="#4ade80"/>}
-          {antes&&<Bdg label="CAMBIÓ" bg="#1c1200" t="#fbbf24"/>}
-          <Bdg label={e.turno||"Sin turno"} bg={visT(e.turno||"").bg} t={visT(e.turno||"").c}/>
-          {e.tipoEntrega&&<Bdg label={e.tipoEntrega==="COMERCIAL"?"COM":"RES"} bg={e.tipoEntrega==="COMERCIAL"?"#0c1a40":"#0a1a0a"} t={e.tipoEntrega==="COMERCIAL"?"#38bdf8":"#86efac"}/>}
-          {e.preparado?<Bdg label={(e.bultos||1)+" bulto"+((e.bultos||1)===1?"":"s")} bg="#0c1a2e" t="#60a5fa"/>:<Bdg label="No preparado" bg="#1c1200" t="#f59e0b"/>}
-          {e.cobranza>0&&<Bdg label={"Cobrar $"+Number(e.cobranza).toLocaleString("es-AR")} bg="#1c1500" t="#fbbf24"/>}
-          {(!!e.cambio||e.pvSubtipo==="cambio")&&<Bdg label="Cambio" bg="#1c0514" t="#ec4899"/>}
-          {e.retiro&&<Bdg label="Retiro" bg="#1c1000" t="#f97316"/>}
+      <div key={e.id} style={{...S.card,padding:"0.75rem 0.9rem",borderLeft:esNuevo?"5px solid #22c55e":antes?"5px solid #f59e0b":"5px solid transparent"}}>
+        <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap",marginBottom:"4px"}}>
+          <span style={{color:"#6b7280",fontWeight:700,fontSize:"0.85rem"}}>{i+1}.</span>
+          <span style={{color:"#f3f4f6",fontWeight:800,fontSize:"1rem",fontFamily:"monospace"}}>{nro}</span>
+          {B(og.l,og.bg,og.c)}
+          {esNuevo&&B("🆕 NUEVO","#052e16","#4ade80",{border:"1px solid #166534"})}
+          {e.reprogramado&&B("↻ REPROG.","#1c1500","#fbbf24",{border:"1px solid #78350f"})}
+          {antes&&B("CAMBIÓ","#1c1200","#fbbf24")}
+          {e.tipoEntrega&&B(e.tipoEntrega==="COMERCIAL"?"COMERCIAL":"RESIDENCIAL",e.tipoEntrega==="COMERCIAL"?"#0c1a40":"#0a1a0a",e.tipoEntrega==="COMERCIAL"?"#38bdf8":"#86efac")}
+          {(!!e.cambio||e.pvSubtipo==="cambio")&&B("CAMBIO","#1c0514","#ec4899")}
+          {e.retiro&&B("RETIRO","#1c1000","#f97316")}
+          {e.cobranza>0&&<span style={{marginLeft:"auto",background:"#1c1500",color:"#fbbf24",border:"1px solid #78350f",borderRadius:"6px",padding:"2px 10px",fontWeight:900,fontSize:"0.95rem"}}>COBRAR ${Number(e.cobranza).toLocaleString("es-AR")}</span>}
         </div>
-        <div style={{color:"#e5e7eb",fontSize:"0.84rem",fontWeight:600}}>{e.direccion}{e.referencia&&!(e.direccion||"").toLowerCase().includes(e.referencia.toLowerCase().slice(0,20))?<span style={{color:"#6b7280",fontWeight:400}}> — {e.referencia}</span>:null}</div>
-        <div style={{color:"#6b7280",fontSize:"0.72rem"}}>{e.localidad?e.localidad+" · ":""}{e.partido}{e.cp?" · CP "+e.cp:""}</div>
-        {(e.clienteNombre||e.telefono)&&<div style={{color:"#9ca3af",fontSize:"0.72rem"}}>{e.clienteNombre}{e.telefono?" · 📞 "+e.telefono:""}</div>}
-        {e.notasCliente&&<div style={{color:"#9ca3af",fontSize:"0.72rem",fontStyle:"italic"}}>"{e.notasCliente}"</div>}
+        <div style={{color:"#f9fafb",fontSize:"1rem",fontWeight:700,lineHeight:1.3}}>{e.direccion}{refExtra?<span style={{color:"#9ca3af",fontWeight:400}}> — {refExtra}</span>:null}</div>
+        <div style={{color:"#9ca3af",fontSize:"0.85rem"}}>{[e.localidad&&!/referencia/i.test(e.localidad)?e.localidad:"",e.partido,e.cp?"CP "+e.cp:""].filter(Boolean).join(" · ")}{zona&&zona!==e.partido?" · Zona "+zona:""}</div>
+        {(e.clienteNombre||e.telefono)&&<div style={{color:"#d1d5db",fontSize:"0.88rem",marginTop:"2px"}}>{e.clienteNombre}{e.telefono?<span> 📞 {e.telefono}</span>:null}</div>}
+        {e.notasCliente&&<div style={{color:"#d1d5db",fontSize:"0.85rem",fontStyle:"italic",marginTop:"2px"}}>📋 {e.notasCliente}</div>}
+        <div style={{display:"flex",gap:"12px",flexWrap:"wrap",color:"#9ca3af",fontSize:"0.8rem",marginTop:"4px"}}>
+          <span>Turno <b style={{color:visT(e.turno||"").c}}>{e.turno||"—"}</b></span>
+          <span>Fecha <b style={{color:"#d1d5db"}}>{e.fecha?fmtCorta(e.fecha):"—"}</b></span>
+          {lote&&<span>Lote <b style={{color:"#4ade80"}}>{lote}</b></span>}
+          <span>Bultos <b style={{color:e.preparado?"#60a5fa":"#f59e0b"}}>{e.preparado?(e.bultos||1):"No preparado"}</b></span>
+        </div>
       </div>
     );
   };
-  // Un bloque por turno, con encabezado grande y pegajoso para no perder la separación con muchos envíos
-  const renderGrupos=items=>agrupar(items).map(g=>{
+  // Grupo por turno: contraído por defecto, encabezado grande
+  const renderGrupos=(items,pref)=>agrupar(items).map(g=>{
     const v=visT(g.t);
+    const k=pref+"-"+(g.t||"sin");
+    const abierto=!!abiertos[k];
     return(
-      <div key={g.t||"sin"} style={{marginBottom:"1.1rem"}}>
-        <div style={{position:"sticky",top:"54px",zIndex:40,background:v.bg,border:"2px solid "+v.c,borderRadius:"10px",padding:"8px 14px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <span style={{color:v.c,fontWeight:900,fontSize:"1.05rem",letterSpacing:"0.04em"}}>{v.l}</span>
-          <span style={{color:v.c,fontWeight:800,fontSize:"0.9rem"}}>{g.items.length} envío{g.items.length!==1?"s":""}</span>
+      <div key={k} style={{marginBottom:"0.9rem"}}>
+        <div onClick={()=>alternar(k)} style={{cursor:"pointer",position:"sticky",top:"54px",zIndex:40,background:v.bg,border:"2px solid "+v.c,borderRadius:"10px",padding:"14px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
+          <span style={{color:v.c,fontWeight:900,fontSize:"1.2rem",letterSpacing:"0.03em"}}>{abierto?"▼":"▶"} {v.l}</span>
+          <span style={{color:v.c,fontWeight:800,fontSize:"1rem"}}>{g.items.length} envío{g.items.length!==1?"s":""} · {abierto?"tocá para cerrar":"tocá para abrir"}</span>
         </div>
-        <div style={{display:"grid",gap:"4px"}}>{g.items.map(renderCard)}</div>
+        {abierto&&<div style={{display:"grid",gap:"6px"}}>{g.items.map((e,i)=>renderCard(e,i))}</div>}
       </div>
     );
   });
@@ -2231,7 +2263,7 @@ function VistaLogisticaLote({sesion}){
                   {ac.estado==="con_cambios"&&"Hubo cambios desde tu última aceptación. Revisalos y volvé a aceptar."}
                   {ac.estado==="aceptado"&&`Aceptado ${fmtHoraAcuse(acuse?.aceptadoTs)}${acuse?.aceptadoPor?" por "+acuse.aceptadoPor:""}.`}
                 </div>
-                {lista.length>0&&<div style={{color:"#e5e7eb",fontSize:"0.8rem",fontWeight:700,marginTop:"4px"}}>{resumenTurnos}</div>}
+                {lista.length>0&&<div style={{color:"#e5e7eb",fontSize:"0.8rem",fontWeight:700,marginTop:"4px"}}>{lista.length} envíos · {resumenTurnos}{cobTot>0?<span style={{color:"#fbbf24"}}> · A cobrar: ${cobTot.toLocaleString("es-AR")}</span>:null}</div>}
               </div>
               {(ac.estado==="sin_aceptar"||ac.estado==="con_cambios")&&
                 <button onClick={aceptar} disabled={guardando} style={{padding:"10px 18px",background:"linear-gradient(135deg,#10b981,#059669)",border:"none",borderRadius:"10px",color:"#fff",fontWeight:800,fontSize:"0.88rem",cursor:guardando?"wait":"pointer"}}>
@@ -2253,13 +2285,12 @@ function VistaLogisticaLote({sesion}){
             })}
           </div>}
 
-          {/* Listado: NUEVOS arriba de todo, después el resto; cada bloque separado por turno */}
+          {/* Listado: NUEVOS pendientes arriba de todo; después AM / PM. Todo contraído al entrar */}
           {lNuevos.length>0&&<div style={{background:"#06170c",border:"2px solid #22c55e",borderRadius:"12px",padding:"10px",marginBottom:"1.2rem"}}>
-            <div style={{color:"#4ade80",fontWeight:900,fontSize:"1.05rem",marginBottom:"8px"}}>🆕 NUEVOS · {lNuevos.length} envío{lNuevos.length!==1?"s":""}</div>
-            {renderGrupos(lNuevos)}
+            <div onClick={()=>alternar("NUEVOS")} style={{cursor:"pointer",color:"#4ade80",fontWeight:900,fontSize:"1.2rem",display:"flex",justifyContent:"space-between",gap:"8px",flexWrap:"wrap"}}><span>{abiertos.NUEVOS?"▼":"▶"} 🆕 NUEVOS</span><span style={{fontSize:"1rem"}}>{lNuevos.length} envío{lNuevos.length!==1?"s":""} · {abiertos.NUEVOS?"tocá para cerrar":"tocá para abrir"}</span></div>
+            {abiertos.NUEVOS&&<div style={{marginTop:"8px"}}>{renderGrupos(lNuevos,"N")}</div>}
           </div>}
-          {lNuevos.length>0&&lResto.length>0&&<div style={{color:"#6b7280",fontWeight:800,fontSize:"0.8rem",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:"8px"}}>Resto del día · {lResto.length} envío{lResto.length!==1?"s":""}</div>}
-          {renderGrupos(lResto)}
+          {renderGrupos(lResto,"R")}
         </>}
       </div>
     </div>
