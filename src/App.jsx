@@ -12249,11 +12249,13 @@ export default function App(){
 
   // configExpedicion: {impresionHabilitada: bool, armadores: [{id,nombre,color}]}
   const [configExpedicion,setConfigExpedicionLocal]=useState({impresionHabilitada:false,armadores:[]});
+  const [cfgExpCargada,setCfgExpCargada]=useState(false); // evita mostrar "sin armador vinculado" mientras carga
   useEffect(()=>{
     if(sesion?.rol==="logistica")return; // la logística solo usa VistaLogisticaLote (consulta propia)
     const unsub=onSnapshot(doc(db,"config","expedicion"),snap=>{
       if(snap.exists())setConfigExpedicionLocal(snap.data());
-    });
+      setCfgExpCargada(true);
+    },()=>setCfgExpCargada(true));
     return()=>unsub();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[sesion?.rol]);
@@ -12444,6 +12446,7 @@ export default function App(){
   }
   if(sesion.rol==="expedicion")return<VistaExpedicion envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} configExpedicion={configExpedicion} otrosPedidos={otrosPedidos}/>;
   if(sesion.rol==="armador"){
+    if(!cfgExpCargada)return<div style={{minHeight:"100vh",background:"#0a0e1a",display:"flex",alignItems:"center",justifyContent:"center",color:"#6b7280",fontFamily:"sans-serif"}}>Cargando…</div>;
     const arm=(configExpedicion.armadores||[]).find(a=>a.id===sesion.armadorId);
     return<VistaArmador envios={envios} setEnvios={setEnvios} colectas={colectas} setColectas={setColectas} sesion={sesion} lc={lc} armador={arm} armadores={(configExpedicion.armadores||[]).filter(a=>a.activo!==false)} gapUmbralMin={configExpedicion.gapUmbralMin||5} otrosPedidos={otrosPedidos}/>;
   }
