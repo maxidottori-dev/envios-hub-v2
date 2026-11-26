@@ -9,6 +9,22 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   if (!(await exigirAuth(req, res, ["admin"]))) return;
 
+  // Mantenimiento de webhooks registrados en TN (solo admin, ya validado arriba):
+  //   { accion: "listar" }            → devuelve [{id, event, url}]
+  //   { accion: "eliminar", id }      → borra ese webhook
+  const accion = req.body?.accion;
+  if (accion === "listar" || accion === "eliminar") {
+    const h = { "Authentication": `bearer ${TN_TOKEN}`, "User-Agent": "EnviosHub (maxidottori@gmail.com)", "Content-Type": "application/json" };
+    if (accion === "listar") {
+      const r = await fetch(`https://api.tiendanube.com/v1/${TN_STOREID}/webhooks`, { headers: h });
+      const lista = r.ok ? await r.json() : [];
+      return res.status(200).json({ ok: r.ok, webhooks: lista.map(w => ({ id: w.id, event: w.event, url: w.url })) });
+    }
+    if (!req.body?.id) return res.status(400).json({ error: "Falta id" });
+    const r = await fetch(`https://api.tiendanube.com/v1/${TN_STOREID}/webhooks/${req.body.id}`, { method: "DELETE", headers: h });
+    return res.status(r.ok ? 200 : 502).json({ ok: r.ok, status: r.status });
+  }
+
   const webhookUrl = `https://${APP_URL}/api/webhook`;
   const eventos = ["order/created", "order/updated", "order/cancelled"];
   const headers = {

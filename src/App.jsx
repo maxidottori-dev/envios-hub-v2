@@ -35,6 +35,8 @@ async function apiFetch(path, opts = {}) {
   const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
   return fetch(path, { ...opts, headers: { ...(opts.headers || {}), ...(token ? { Authorization: "Bearer " + token } : {}) } });
 }
+// Utilidad de mantenimiento para el admin desde la consola del navegador (requiere sesión iniciada).
+if (typeof window !== "undefined") window.envhubApi = (path, opts) => apiFetch(path, opts);
 
 // ════════════════════════════════════════════════════════════════════
 // SISTEMA DE PERMISOS — features por usuario
