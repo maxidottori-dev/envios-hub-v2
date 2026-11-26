@@ -36,13 +36,6 @@ export default async function handler(req, res) {
   // "WEBHOOK_FIRMA_OK" de forma consistente en los logs).
   const secret = process.env.TN_WEBHOOK_SECRET;
   const firma = String(req.headers["x-linkedstore-hmac-sha256"] || "");
-  // Diagnóstico de entregas duplicadas: huella de cabeceras (sin secretos ni la firma).
-  try {
-    const h = req.headers || {};
-    const huella = Object.fromEntries(Object.entries(h).filter(([k]) => !/^(authorization|cookie|x-linkedstore-hmac-sha256|x-vercel-(oidc|proxy|sc)|x-forwarded-(for|host|proto)|x-real-ip)/i.test(k)).map(([k, v]) => [k, String(v).slice(0, 80)]));
-    console.log("WEBHOOK_HDR " + JSON.stringify({ id: order?.id, topic: h["x-linkedstore-topic"] || null, ua: h["user-agent"] || null, store: order?.store_id || null, claves: Object.keys(order || {}).length, huella }));
-  } catch (e) {}
-
   if (secret) {
     const base = raw ? raw.toString("utf8") : JSON.stringify(order);
     const conBarras = base.replace(/\//g, "\\/");
