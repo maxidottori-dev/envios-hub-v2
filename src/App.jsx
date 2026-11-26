@@ -6792,7 +6792,7 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{},esAdmin=
     await setDoc(doc(db,"usuarios",id),{...resto,usuario:form.usuario.toLowerCase().trim()},{merge:true});
     if(pw){
       try{
-        const r=await apiFetch("/api/set-password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,password:pw})});
+        const r=await apiFetch("/api/admin-usuarios",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accion:"set-password",id,password:pw})});
         if(!r.ok){const d=await r.json().catch(()=>({}));mostrarToast("⚠ No se pudo guardar la contraseña: "+(d.error||r.status));return;}
       }catch(e){mostrarToast("⚠ No se pudo guardar la contraseña");return;}
     }
@@ -6954,7 +6954,7 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{},esAdmin=
           <button onClick={guardar} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)"}}>{editId?"Guardar cambios":"Crear usuario"}</button>
           <button onClick={async()=>{
             if(!window.confirm("Convierte todas las contraseñas que sigan en texto plano a formato protegido (hash). No cambia ninguna contraseña. ¿Continuar?"))return;
-            try{const r=await apiFetch("/api/migrar-passwords",{method:"POST"});const d=await r.json();mostrarToast(r.ok?`🔒 ${d.migrados} contraseña(s) protegidas (de ${d.total} usuarios)`:"⚠ "+(d.error||r.status));}catch(e){mostrarToast("⚠ Error de conexión");}
+            try{const r=await apiFetch("/api/admin-usuarios",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accion:"migrar"})});const d=await r.json();mostrarToast(r.ok?`🔒 ${d.migrados} contraseña(s) protegidas (de ${d.total} usuarios)`:"⚠ "+(d.error||r.status));}catch(e){mostrarToast("⚠ Error de conexión");}
           }} style={{...S.btn(false),color:"#10b981",borderColor:"#065f46"}}>🔒 Proteger contraseñas</button>
           {editId&&<button onClick={()=>{setEditId(null);setForm({usuario:"",password:"",rol:"colaborador",logistica:"",alias:"",armadorId:"",esChofer:false,activo:true});}} style={S.btn(false)}>Cancelar</button>}
         </div>
