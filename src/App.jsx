@@ -46,7 +46,7 @@ const FEATURES=[
   {key:"tab_tablero",     grupo:"tabs",    label:"Tablero",           desc:"Dashboard principal: métricas, resumen de envíos del día y estadísticas rápidas"},
   {key:"tab_noflex",      grupo:"tabs",    label:"NO FLEX",           desc:"Lista de envíos NO FLEX: Tienda Nube y manuales. Permite editar, filtrar y exportar"},
   {key:"tab_flex",        grupo:"tabs",    label:"FLEX",              desc:"Lista de envíos FLEX (Mercado Libre). Permite editar, filtrar y exportar"},
-  {key:"tab_despacho",    grupo:"tabs",    label:"Despacho",          desc:"Preparar despachos del día: confirmar envíos, generar hojas de ruta y notificar por WhatsApp"},
+  {key:"tab_despacho",    grupo:"tabs",    label:"Despacho",          desc:"Preparar despachos del día: ver los envíos por logística, generar hojas de ruta (PDF/Excel) y ver la aceptación de lotes"},
   {key:"tab_manual",      grupo:"tabs",    label:"+ Manual",          desc:"Formulario para agregar envíos manualmente al sistema"},
   {key:"tab_tarifas",     grupo:"tabs",    label:"Tarifas / Log.",    desc:"Configurar logísticas activas, zonas de reparto y tarifas por zona y bultos"},
   {key:"tab_informe",     grupo:"tabs",    label:"Informe",           desc:"Informes y estadísticas de envíos por período, logística y zona"},
@@ -2296,97 +2296,6 @@ function TabImprimir({envios,setEnvios,zc,lc}){
   };
   const chipsAcuse=logActivas.filter(l=>logsConApp.has(l)).map(l=>({l,...estadoAcuseLog(l)})).filter(x=>x.estado!=="vacio");
 
-  // WhatsApp: guardar despacho en Firestore y generar link copiable
-  const [waCopied,setWaCopied]=useState(false);
-  const [waSaving,setWaSaving]=useState(false);
-  const [waModal,setWaModal]=useState(null); // {msg, url, token}
-  const notificarWA=async()=>{
-    if(waSaving||trans==="TODOS"||lista.length===0)return;
-    setWaSaving(true);
-    try{
-      const token=Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-4);
-      const cfg=lc[trans];
-      const fechaStr=fecha?new Date(fecha+"T00:00:00").toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long"}):"hoy";
-      const url=window.location.origin+"/?d="+token;
-      const nombreMostrar=cfg?.nombreFormal||cfg?.nombre||trans;
-      const msg=`🛵 *${nombreMostrar} — ${fechaStr}*\n📋 ${lista.length} envío${lista.length!==1?"s":""} para entregar.\n\n📄 Descargá el detalle acá:\n${url}\n\n_EnviosHub_`;
-      await setDoc(doc(db,"despachos",token),{
-        token,
-        logistica:trans,
-        logisticaNombre:nombreMostrar,
-        fecha:fecha||fechaHoy(),
-        envios:lista.map(e=>({
-          id:e.id,
-          nroSeguimiento:e.nroSeguimiento||"",
-          nroOrdenTN:e.nroOrdenTN||"",
-          direccion:e.direccion||"",
-          localidad:e.localidad||"",
-          partido:e.partido||"",
-          cp:e.cp||"",
-          bultos:e.bultos||1,
-          preparado:e.preparado||false,
-          telefono:e.telefono||"",
-          cobranza:e.cobranza||0,
-          tarifaLog:getImp(e),
-          origen:e.origen||"",
-          loteImportacion:e.loteImportacion||"",
-          turno:e.turno||"",
-          referencia:e.referencia||"",
-          tipoEntrega:e.tipoEntrega||"",
-          fecha:e.fecha||"",
-        })),
-        pdfOrient,
-        pdfFontSize,
-        pdfVersion,
-        creadoAt:new Date().toISOString(),
-        expiresAt:new Date(Date.now()+48*60*60*1000).toISOString(),
-      });
-      setWaModal({msg,url,token});
-    }catch(err){alert("Error al generar link: "+err.message);}
-    setWaSaving(false);
-  };
-  const puedeWA=trans!=="TODOS"&&lista.length>0;
-
-  // Cierre del día
-  const [cierreModal,setCierreModal]=useState(null);
-  const [cierreSaving,setCierreSaving]=useState(false);
-  const [cierreCopied,setCierreCopied]=useState(false);
-  const generarCierre=async()=>{
-    if(cierreSaving||trans==="TODOS"||lista.length===0)return;
-    setCierreSaving(true);
-    try{
-      const token=Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-4);
-      const cfg=lc[trans];
-      const fechaStr=fecha?new Date(fecha+"T00:00:00").toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long"}):"hoy";
-      const url=window.location.origin+"/?t="+token;
-      const nombreMostrarC=cfg?.nombreFormal||cfg?.nombre||trans;
-      const msg=`🛵 *${nombreMostrarC} — Cierre del ${fechaStr}*\n📋 ${lista.length} envío${lista.length!==1?"s":""} asignados.\n\n✅ Confirmá las entregas acá:\n${url}\n\n_EnviosHub · Solo confirmación_`;
-      await setDoc(doc(db,"cierres",token),{
-        token,
-        logistica:trans,
-        logisticaNombre:nombreMostrarC,
-        fecha:fecha||fechaHoy(),
-        envios:lista.map(e=>({
-          id:e.id,
-          nroSeguimiento:e.nroSeguimiento||"",
-          nroOrdenTN:e.nroOrdenTN||"",
-          direccion:e.direccion||"",
-          localidad:e.localidad||"",
-          partido:e.partido||"",
-          bultos:e.bultos||1,
-          cobranza:e.cobranza||0,
-          tarifaLog:getImp(e),
-        })),
-        confirmado:false,
-        confirmadoAt:null,
-        incidentes:[],
-        creadoAt:new Date().toISOString(),
-      });
-      setCierreModal({token,msg,url});
-    }catch(err){alert("Error al generar cierre: "+err.message);}
-    setCierreSaving(false);
-  };
-
   const [pdfOrient,setPdfOrient]=useState("landscape");
   const [pdfFontSize,setPdfFontSize]=useState(14);
   const [pdfVersion,setPdfVersion]=useState("completa"); // "completa" | "simple"
@@ -2534,52 +2443,8 @@ function TabImprimir({envios,setEnvios,zc,lc}){
             </select>
           </div>
           <button onClick={generarPDF} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)",padding:"0.5rem 1.1rem"}}>Generar PDF</button>
-          {puedeWA&&<button onClick={notificarWA} disabled={waSaving} style={{...S.btn(true),background:waSaving?"#1a2a1a":waCopied?"linear-gradient(135deg,#059669,#047857)":"linear-gradient(135deg,#25d366,#128c7e)",padding:"0.5rem 1.1rem",border:"none",opacity:waSaving?0.6:1}}>
-            {waSaving?"Generando...":"📲 Notificar WA"}
-          </button>}
-          {trans!=="TODOS"&&lista.length>0&&(
-            <button onClick={generarCierre} disabled={cierreSaving} style={{...S.btn(true),background:cierreSaving?"#1a1a2e":"linear-gradient(135deg,#4f46e5,#7c3aed)",padding:"0.5rem 1.1rem",border:"none",opacity:cierreSaving?0.6:1}}>
-              {cierreSaving?"Generando...":"🔒 Cierre del día"}
-            </button>
-          )}
         </div>
       </div>
-      {/* Modal Notificar WA */}
-      {waModal&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.72)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
-          <div style={{background:"#12172a",border:"1px solid #1e2640",borderRadius:"14px",padding:"1.5rem",maxWidth:"480px",width:"100%"}}>
-            <div style={{fontWeight:800,fontSize:"1rem",marginBottom:"0.25rem"}}>📲 Link generado</div>
-            <div style={{color:"#6b7280",fontSize:"0.8rem",marginBottom:"1rem"}}>Copiá el mensaje y envialo por WhatsApp. Al abrir el link se descarga el PDF de la hoja de ruta.</div>
-            <textarea value={waModal.msg} readOnly style={{width:"100%",background:"#0a0e1a",border:"1px solid #252d40",borderRadius:"8px",padding:"0.75rem",color:"#e5e7eb",fontSize:"0.78rem",resize:"none",height:"140px",outline:"none",lineHeight:1.6,fontFamily:"monospace"}} onClick={e=>e.target.select()}/>
-            <div style={{display:"flex",gap:"0.5rem",marginTop:"0.75rem",flexWrap:"wrap"}}>
-              <button onClick={()=>{navigator.clipboard.writeText(waModal.msg).catch(()=>{});setWaCopied(true);setTimeout(()=>setWaCopied(false),2500);}} style={{flex:2,padding:"0.6rem",borderRadius:"9px",background:waCopied?"#0d1c14":"#1e2640",border:`1px solid ${waCopied?"#10b981":"#374151"}`,color:waCopied?"#10b981":"#e5e7eb",fontWeight:700,cursor:"pointer",fontSize:"0.82rem"}}>
-                {waCopied?"✓ Copiado":"📋 Copiar mensaje"}
-              </button>
-              <button onClick={()=>{setWaModal(null);setWaCopied(false);}} style={{padding:"0.6rem 1rem",borderRadius:"9px",background:"transparent",border:"1px solid #374151",color:"#6b7280",fontWeight:600,cursor:"pointer",fontSize:"0.82rem"}}>
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Modal cierre del día */}
-      {cierreModal&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.72)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"}}>
-          <div style={{background:"#12172a",border:"1px solid #1e2640",borderRadius:"14px",padding:"1.5rem",maxWidth:"480px",width:"100%"}}>
-            <div style={{fontWeight:800,fontSize:"1rem",marginBottom:"0.25rem"}}>🔒 Cierre generado</div>
-            <div style={{color:"#6b7280",fontSize:"0.8rem",marginBottom:"1rem"}}>Copiá el mensaje y envialo por WhatsApp o al grupo que prefieras.</div>
-            <textarea value={cierreModal.msg} readOnly style={{width:"100%",background:"#0a0e1a",border:"1px solid #252d40",borderRadius:"8px",padding:"0.75rem",color:"#e5e7eb",fontSize:"0.78rem",resize:"none",height:"148px",outline:"none",lineHeight:1.6,fontFamily:"monospace"}} onClick={e=>e.target.select()}/>
-            <div style={{display:"flex",gap:"0.5rem",marginTop:"0.75rem",flexWrap:"wrap"}}>
-              <button onClick={()=>{navigator.clipboard.writeText(cierreModal.msg).catch(()=>{});setCierreCopied(true);setTimeout(()=>setCierreCopied(false),2500);}} style={{flex:2,padding:"0.6rem",borderRadius:"9px",background:cierreCopied?"#0d1c14":"#1e2640",border:`1px solid ${cierreCopied?"#10b981":"#374151"}`,color:cierreCopied?"#10b981":"#e5e7eb",fontWeight:700,cursor:"pointer",fontSize:"0.82rem"}}>
-                {cierreCopied?"✓ Copiado":"📋 Copiar mensaje"}
-              </button>
-              <button onClick={()=>{setCierreModal(null);setCierreCopied(false);}} style={{padding:"0.6rem 1rem",borderRadius:"9px",background:"transparent",border:"1px solid #374151",color:"#6b7280",fontWeight:600,cursor:"pointer",fontSize:"0.82rem"}}>
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       <div style={{...S.card,padding:"0.65rem 1rem",marginBottom:"0.9rem",display:"flex",gap:"1.5rem",flexWrap:"wrap"}}>
         <div><span style={{color:"#6b7280",fontSize:"0.72rem"}}>Envios: </span><span style={{color:"#e5e7eb",fontWeight:700}}>{lista.length}</span></div>
         <div><span style={{color:"#6b7280",fontSize:"0.72rem"}}>Total: </span><span style={{color:"#10b981",fontWeight:700}}>{fmt(totalImp)}</span></div>
@@ -10216,324 +10081,6 @@ function ScrollTop(){
 
 
 // ════════════════════════════════════════════════════════════════════
-// DESPACHO PAGE — página pública que abre el PDF de despacho
-// ════════════════════════════════════════════════════════════════════
-function DespachoPage({token}){
-  const [estado,setEstado]=useState("cargando"); // cargando | generando | listo | error | expirado
-  const [err,setErr]=useState("");
-  const [despachoData,setDespachoData]=useState(null);
-
-  // Carga datos de Firestore
-  useEffect(()=>{
-    if(!token){setErr("Token inválido.");setEstado("error");return;}
-    getDoc(doc(db,"despachos",token)).then(snap=>{
-      if(!snap.exists()){setErr("Despacho no encontrado.");setEstado("error");return;}
-      const data=snap.data();
-      // Verificar expiración (48 hs)
-      if(data.expiresAt&&new Date().toISOString()>data.expiresAt){
-        setEstado("expirado");return;
-      }
-      setDespachoData(data);
-      setEstado("generando");
-    }).catch(e=>{setErr("Error al cargar: "+e.message);setEstado("error");});
-  },[token]);
-
-  // Genera y descarga el PDF usando jsPDF + autotable (sin html2canvas)
-  useEffect(()=>{
-    if(estado!=="generando"||!despachoData)return;
-    const generar=async()=>{
-      const orient=despachoData?.pdfOrient||"landscape";
-      const nombre=despachoData?.logisticaNombre||despachoData?.logistica||"despacho";
-      const fecha=despachoData?.fecha||"hoy";
-      const filename=`${nombre}_${fecha}.pdf`;
-      const lista=despachoData.envios||[];
-
-      // Cargar jsPDF
-      if(!window.jspdf){
-        await new Promise((res,rej)=>{const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";s.onload=res;s.onerror=rej;document.head.appendChild(s);});
-      }
-      // Cargar autotable (extiende jsPDF.prototype)
-      if(!window.jspdf?.jsPDF?.prototype?.autoTable){
-        await new Promise((res,rej)=>{const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.7.0/jspdf.plugin.autotable.min.js";s.onload=res;s.onerror=rej;document.head.appendChild(s);});
-      }
-
-      const {jsPDF}=window.jspdf;
-      const doc=new jsPDF({orientation:orient,unit:"mm",format:"a4"});
-      const hayCobro=lista.some(e=>e.cobranza>0);
-      const totalImp=lista.reduce((s,e)=>s+(getTarifaLog(e)),0);
-      const cobTotal=lista.filter(e=>e.cobranza>0).reduce((s,e)=>s+(e.cobranza||0),0);
-      const ahora=new Date();
-      const ts=ahora.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+" "+ahora.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false});
-      const pageW=doc.internal.pageSize.getWidth();
-
-      // Encabezado
-      doc.setFontSize(11);doc.setFont("helvetica","bold");
-      doc.text(`${nombre} · ${ts}`,10,9);
-      doc.setFontSize(8);doc.setFont("helvetica","normal");
-      const resumen=`${lista.length} envíos · $${Math.round(totalImp).toLocaleString("es-AR")}${cobTotal?" · A cobrar: $"+cobTotal.toLocaleString("es-AR"):""}`;
-      doc.text(resumen,pageW-10,9,{align:"right"});
-
-      // Filas de datos
-      const body=lista.map((e,i)=>{
-        const esFlex=e.origen==="ML";
-        const dir=[e.direccion,e.localidad,e.partido,e.cp].filter(Boolean).join(" · ");
-        const refExtra=(e.referencia&&!(e.direccion||"").toLowerCase().includes((e.referencia||"").toLowerCase().slice(0,20)))?" — "+e.referencia:"";
-        const nroRef=esFlex?(e.nroSeguimiento||""):("#"+(e.nroOrdenTN||""));
-        const zml=esFlex?(getZonaMLExt(e.partido,e.cp)||""):(e.partido||"");
-        const loteCell=e.loteImportacion?new Date(e.loteImportacion).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"—";
-        const bultosCell=e.preparado?(e.bultos||1):"N/P";
-        const telCell=!esFlex&&e.telefono?" · Tel: "+e.telefono:"";
-        const row=[i+1,loteCell,nroRef,e.tipoEntrega==="COMERCIAL"?"COM":e.tipoEntrega==="RESIDENCIAL"?"RES":"—",bultosCell,"□",dir+(refExtra||"")+telCell,zml,e.turno||"—",e.fecha?fmtCorta(e.fecha):"—"];
-        if(hayCobro)row.push(e.cobranza?"$"+Number(e.cobranza).toLocaleString("es-AR"):"—");
-        return row;
-      });
-
-      const head=[["#","Lote","Nro envío","Tipo","Blts","Chk","Dirección · Localidad · Partido · CP","Zona","Turno","Fecha",...(hayCobro?["Cobrar"]:[])]];
-
-      doc.autoTable({
-        startY:13,
-        head,
-        body,
-        styles:{fontSize:8,cellPadding:1.5,overflow:"linebreak"},
-        headStyles:{fillColor:[232,232,232],textColor:[85,85,85],fontStyle:"bold",fontSize:7},
-        alternateRowStyles:{fillColor:[249,249,249]},
-        columnStyles:{
-          0:{cellWidth:7,halign:"center",textColor:[150,150,150]},
-          1:{cellWidth:15,halign:"center",textColor:[22,163,74],fontStyle:"bold"},
-          2:{cellWidth:32,halign:"left"},
-          3:{cellWidth:10,halign:"center"},
-          4:{cellWidth:9,halign:"center"},
-          5:{cellWidth:7,halign:"center"},
-          6:{cellWidth:"auto"},
-          7:{cellWidth:16},
-          8:{cellWidth:11,halign:"center"},
-          9:{cellWidth:13,halign:"center"},
-          ...(hayCobro?{10:{cellWidth:18,halign:"right"}}:{}),
-        },
-        didParseCell:(data)=>{
-          if(data.section==="body"){
-            // Dirección en negrita
-            if(data.column.index===6)data.cell.styles.fontStyle="bold";
-            // Nro envío en courier
-            if(data.column.index===2)data.cell.styles.font="courier";
-            // Bultos: negrita si >1, naranja si no preparado
-            if(data.column.index===4){
-              if(Number(data.cell.raw)>1)data.cell.styles.fontStyle="bold";
-              else if(data.cell.raw==="N/P")data.cell.styles.textColor=[220,100,0];
-            }
-            // Color tipo COM/RES
-            if(data.column.index===3){
-              if(data.cell.raw==="COM"){data.cell.styles.textColor=[29,78,216];data.cell.styles.fillColor=[219,234,254];}
-              else if(data.cell.raw==="RES"){data.cell.styles.textColor=[21,128,61];data.cell.styles.fillColor=[220,252,231];}
-            }
-          }
-        },
-        margin:{top:8,right:10,bottom:8,left:10},
-        didDrawPage:(data)=>{
-          doc.setFontSize(6);doc.setFont("helvetica","normal");doc.setTextColor(150,150,150);
-          doc.text(`${lista.length} envíos`,data.settings.margin.left,doc.internal.pageSize.getHeight()-4);
-          doc.text(`Pág. ${doc.internal.getCurrentPageInfo().pageNumber}`,pageW-data.settings.margin.right,doc.internal.pageSize.getHeight()-4,{align:"right"});
-          doc.setTextColor(0,0,0);
-        },
-      });
-
-      doc.save(filename);
-      setEstado("listo");
-      setTimeout(()=>window.close(),4000);
-    };
-    generar().catch(e=>{setErr("Error al generar PDF: "+e.message);setEstado("error");});
-  },[estado,despachoData]);
-
-  const bg="#0a0e1a",tx="#e5e7eb",muted="#6b7280",red="#f87171",yellow="#fbbf24";
-
-  if(estado==="expirado")return(
-    <div style={{minHeight:"100vh",background:bg,display:"flex",alignItems:"center",justifyContent:"center",color:tx,fontFamily:"sans-serif",padding:"1rem"}}>
-      <div style={{textAlign:"center",maxWidth:"320px"}}><div style={{fontSize:"2rem",marginBottom:"0.5rem"}}>⏰</div><div style={{color:yellow,fontWeight:700,marginBottom:"0.5rem"}}>Link expirado</div><div style={{color:muted,fontSize:"0.85rem"}}>Este link era válido por 48 hs. Pedí uno nuevo.</div></div>
-    </div>
-  );
-  if(estado==="error")return(
-    <div style={{minHeight:"100vh",background:bg,display:"flex",alignItems:"center",justifyContent:"center",color:tx,fontFamily:"sans-serif",padding:"1rem"}}>
-      <div style={{textAlign:"center",maxWidth:"320px"}}><div style={{fontSize:"2rem",marginBottom:"0.5rem"}}>❌</div><div style={{color:red,fontWeight:700,marginBottom:"0.5rem"}}>No se pudo cargar</div><div style={{color:muted,fontSize:"0.85rem"}}>{err}</div></div>
-    </div>
-  );
-
-  return(
-    <div style={{minHeight:"100vh",background:bg,color:tx,fontFamily:"sans-serif"}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",flexDirection:"column",gap:"0.75rem"}}>
-        <div style={{fontSize:"2.5rem"}}>{estado==="listo"?"✅":"📄"}</div>
-        <div style={{fontWeight:700,fontSize:"1rem"}}>{estado==="listo"?"PDF descargado":"Generando PDF..."}</div>
-        {estado==="listo"&&<div style={{color:muted,fontSize:"0.82rem",textAlign:"center"}}>Revisá tu carpeta de descargas.<br/>Esta pestaña se cierra en unos segundos.</div>}
-      </div>
-    </div>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════
-// CONFIRM PAGE — página pública para que logísticas confirmen cierre
-// ════════════════════════════════════════════════════════════════════
-function ConfirmPage({token}){
-  const [cierre,setCierre]=useState(null);
-  const [cargando,setCargando]=useState(true);
-  const [err,setErr]=useState("");
-  const [modo,setModo]=useState(null); // null | "ok" | "incidentes"
-  const [incidents,setIncidents]=useState({});
-  const [guardando,setGuardando]=useState(false);
-  const [done,setDone]=useState(false);
-
-  useEffect(()=>{
-    if(!token){setErr("Token inválido.");setCargando(false);return;}
-    getDoc(doc(db,"cierres",token)).then(snap=>{
-      if(!snap.exists()){setErr("Cierre no encontrado. El link puede ser incorrecto o ya fue eliminado.");setCargando(false);return;}
-      const d=snap.data();
-      setCierre(d);
-      if(d.confirmado)setDone(true);
-      setCargando(false);
-    }).catch(e=>{setErr("Error al cargar: "+e.message);setCargando(false);});
-  },[token]);
-
-  const fmtP=n=>n!=null?"$"+Number(n).toLocaleString("es-AR"):"";
-  const fechaLabel=cierre?.fecha?new Date(cierre.fecha+"T00:00:00").toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):"";
-  const bg="#0a0e1a",card="#12172a",brd="#1e2640",green="#10b981",yellow="#fbbf24",red="#f87171",tx="#e5e7eb",muted="#6b7280";
-  const cs={background:card,border:`1px solid ${brd}`,borderRadius:"12px",padding:"1rem",marginBottom:"0.75rem"};
-
-  const handleConfirmar=async()=>{
-    setGuardando(true);
-    const incs=Object.entries(incidents).filter(([,v])=>v.sel).map(([envioId,v])=>({envioId,motivo:v.motivo||"",nuevaFecha:v.nuevaFecha||""}));
-    try{
-      await updateDoc(doc(db,"cierres",token),{confirmado:true,confirmadoAt:new Date().toISOString(),incidentes:incs});
-      setDone(true);
-    }catch(e){alert("Error al confirmar: "+e.message);}
-    setGuardando(false);
-  };
-
-  if(cargando)return(
-    <div style={{minHeight:"100vh",background:bg,display:"flex",alignItems:"center",justifyContent:"center",color:tx,fontFamily:"sans-serif"}}>
-      <div style={{textAlign:"center"}}><div style={{fontSize:"2rem",marginBottom:"0.5rem"}}>⏳</div><div style={{color:muted}}>Cargando...</div></div>
-    </div>
-  );
-  if(err)return(
-    <div style={{minHeight:"100vh",background:bg,display:"flex",alignItems:"center",justifyContent:"center",color:tx,fontFamily:"sans-serif",padding:"1rem"}}>
-      <div style={{textAlign:"center",maxWidth:"320px"}}><div style={{fontSize:"2rem",marginBottom:"0.5rem"}}>❌</div><div style={{color:red,fontWeight:700,marginBottom:"0.5rem"}}>No se pudo cargar</div><div style={{color:muted,fontSize:"0.85rem"}}>{err}</div></div>
-    </div>
-  );
-  if(done)return(
-    <div style={{minHeight:"100vh",background:bg,color:tx,fontFamily:"sans-serif",padding:"1rem",maxWidth:"480px",margin:"0 auto"}}>
-      <style>{`*{box-sizing:border-box;}`}</style>
-      <div style={{textAlign:"center",padding:"2rem 0 1rem"}}>
-        <div style={{fontSize:"3rem",marginBottom:"0.5rem"}}>✅</div>
-        <div style={{fontWeight:800,fontSize:"1.2rem",marginBottom:"0.3rem"}}>Cierre confirmado</div>
-        <div style={{color:muted,fontSize:"0.85rem"}}>{fechaLabel}</div>
-      </div>
-      <div style={cs}>
-        <div style={{display:"flex",justifyContent:"space-between",marginBottom:"0.5rem"}}><span style={{color:muted,fontSize:"0.8rem"}}>Logística</span><span style={{fontWeight:700}}>{cierre.logisticaNombre}</span></div>
-        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:muted,fontSize:"0.8rem"}}>Envíos asignados</span><span style={{fontWeight:700}}>{cierre.envios?.length||0}</span></div>
-        {cierre.incidentes?.length>0&&(
-          <div style={{marginTop:"0.75rem",borderTop:`1px solid ${brd}`,paddingTop:"0.75rem"}}>
-            <div style={{color:yellow,fontWeight:700,fontSize:"0.85rem",marginBottom:"0.5rem"}}>⚠️ Incidentes reportados ({cierre.incidentes.length})</div>
-            {cierre.incidentes.map((inc,i)=>{
-              const e=cierre.envios?.find(x=>x.id===inc.envioId);
-              return(<div key={i} style={{background:"#1c1a0a",border:"1px solid #3d3200",borderRadius:"8px",padding:"0.5rem 0.75rem",marginBottom:"0.4rem",fontSize:"0.8rem"}}>
-                <div style={{color:tx,fontWeight:600}}>{e?.direccion||inc.envioId}</div>
-                {inc.motivo&&<div style={{color:muted,marginTop:"2px"}}>Motivo: {inc.motivo}</div>}
-                {inc.nuevaFecha&&<div style={{color:muted,marginTop:"2px"}}>Reprogramado: {inc.nuevaFecha}</div>}
-              </div>);
-            })}
-          </div>
-        )}
-      </div>
-      <div style={{textAlign:"center",color:muted,fontSize:"0.75rem",marginTop:"1rem"}}>EnviosHub · Solo lectura</div>
-    </div>
-  );
-
-  return(
-    <div style={{minHeight:"100vh",background:bg,color:tx,fontFamily:"sans-serif",padding:"1rem",maxWidth:"480px",margin:"0 auto"}}>
-      <style>{`*{box-sizing:border-box;}`}</style>
-      <div style={{textAlign:"center",padding:"1.5rem 0 1rem"}}>
-        <div style={{width:"40px",height:"40px",background:"linear-gradient(135deg,#6366f1,#8b5cf6)",borderRadius:"10px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"1.3rem",margin:"0 auto 0.75rem"}}>🛵</div>
-        <div style={{fontWeight:800,fontSize:"1.1rem",marginBottom:"0.2rem"}}>Cierre del día</div>
-        <div style={{color:muted,fontSize:"0.85rem"}}>{fechaLabel}</div>
-      </div>
-      <div style={cs}>
-        <div style={{display:"flex",justifyContent:"space-between",marginBottom:"0.4rem"}}><span style={{color:muted,fontSize:"0.8rem"}}>Logística</span><span style={{fontWeight:700}}>{cierre.logisticaNombre}</span></div>
-        <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:muted,fontSize:"0.8rem"}}>Envíos asignados</span><span style={{fontWeight:700}}>{cierre.envios?.length||0}</span></div>
-      </div>
-      <div style={cs}>
-        <div style={{fontWeight:700,fontSize:"0.8rem",marginBottom:"0.6rem",color:muted,textTransform:"uppercase",letterSpacing:"0.05em"}}>Detalle</div>
-        {cierre.envios?.map((e,i)=>(
-          <div key={e.id} style={{padding:"0.5rem 0",borderBottom:i<cierre.envios.length-1?`1px solid ${brd}`:"none",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"8px"}}>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:"0.82rem",fontWeight:600,color:tx,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{e.direccion||"(sin dirección)"}</div>
-              <div style={{fontSize:"0.72rem",color:muted,marginTop:"1px"}}>{[e.localidad,e.partido].filter(Boolean).join(" · ")}{" · "+(e.bultos||1)+" bulto"+((e.bultos||1)===1?"":"s")}</div>
-            </div>
-            <div style={{textAlign:"right",flexShrink:0}}>
-              <div style={{fontSize:"0.82rem",fontWeight:700,color:green}}>{fmtP(getTarifaLog(e))}</div>
-              {e.cobranza>0&&<div style={{fontSize:"0.7rem",color:yellow}}>COB {fmtP(e.cobranza)}</div>}
-            </div>
-          </div>
-        ))}
-      </div>
-      {modo===null&&(
-        <div style={{display:"flex",flexDirection:"column",gap:"0.6rem",marginTop:"0.25rem"}}>
-          <div style={{textAlign:"center",color:muted,fontSize:"0.85rem",marginBottom:"0.1rem"}}>¿Todos los envíos fueron entregados?</div>
-          <button onClick={()=>setModo("ok")} style={{width:"100%",padding:"0.9rem",borderRadius:"12px",background:"#0d1c14",border:"2px solid #10b981",color:"#10b981",fontWeight:800,fontSize:"1rem",cursor:"pointer"}}>✅ Sí, todo OK</button>
-          <button onClick={()=>setModo("incidentes")} style={{width:"100%",padding:"0.9rem",borderRadius:"12px",background:"#1c1200",border:"2px solid #f59e0b",color:"#f59e0b",fontWeight:800,fontSize:"1rem",cursor:"pointer"}}>⚠️ Hubo incidentes</button>
-        </div>
-      )}
-      {modo==="ok"&&(
-        <div style={{marginTop:"0.25rem"}}>
-          <div style={{...cs,background:"#0d1c14",border:"1px solid #10b981",textAlign:"center",padding:"1rem"}}>
-            <div style={{fontSize:"1.5rem",marginBottom:"0.3rem"}}>✅</div>
-            <div style={{fontWeight:700,color:green}}>Todo entregado correctamente</div>
-          </div>
-          <div style={{display:"flex",gap:"0.5rem"}}>
-            <button onClick={()=>setModo(null)} style={{flex:1,padding:"0.8rem",borderRadius:"10px",background:"transparent",border:`1px solid ${brd}`,color:muted,cursor:"pointer",fontWeight:600}}>Volver</button>
-            <button onClick={handleConfirmar} disabled={guardando} style={{flex:2,padding:"0.8rem",borderRadius:"10px",background:guardando?"#1a1a2e":"linear-gradient(135deg,#10b981,#059669)",border:"none",color:"#fff",fontWeight:800,cursor:guardando?"not-allowed":"pointer",fontSize:"0.95rem"}}>
-              {guardando?"Guardando...":"Confirmar y enviar"}
-            </button>
-          </div>
-        </div>
-      )}
-      {modo==="incidentes"&&(
-        <div>
-          <div style={{color:yellow,fontWeight:700,fontSize:"0.85rem",marginBottom:"0.5rem"}}>Marcá los envíos con incidentes:</div>
-          <div style={cs}>
-            {cierre.envios?.map((e,i)=>{
-              const inc=incidents[e.id]||{};
-              return(
-                <div key={e.id} style={{padding:"0.6rem 0",borderBottom:i<cierre.envios.length-1?`1px solid ${brd}`:"none"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:"10px",cursor:"pointer"}} onClick={()=>setIncidents(p=>({...p,[e.id]:{...p[e.id],sel:!inc.sel}}))}>
-                    <div style={{width:"22px",height:"22px",borderRadius:"5px",border:`2px solid ${inc.sel?"#f59e0b":brd}`,background:inc.sel?"#2a1a00":"transparent",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.85rem"}}>
-                      {inc.sel?"⚠️":""}
-                    </div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:"0.82rem",fontWeight:600,color:tx,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{e.direccion||"(sin dirección)"}</div>
-                      <div style={{fontSize:"0.7rem",color:muted}}>{[e.localidad,e.partido].filter(Boolean).join(" · ")}</div>
-                    </div>
-                  </div>
-                  {inc.sel&&(
-                    <div style={{marginTop:"0.5rem",paddingLeft:"32px",display:"flex",flexDirection:"column",gap:"6px"}}>
-                      <input placeholder="Motivo (ej: no había nadie, dirección incorrecta...)" value={inc.motivo||""} onChange={ev=>setIncidents(p=>({...p,[e.id]:{...p[e.id],motivo:ev.target.value}}))} style={{width:"100%",background:"#1a1f2e",border:`1px solid ${brd}`,borderRadius:"7px",padding:"6px 10px",color:tx,fontSize:"0.78rem",outline:"none"}}/>
-                      <input type="date" value={inc.nuevaFecha||""} onChange={ev=>setIncidents(p=>({...p,[e.id]:{...p[e.id],nuevaFecha:ev.target.value}}))} style={{width:"100%",background:"#1a1f2e",border:`1px solid ${brd}`,borderRadius:"7px",padding:"6px 10px",color:tx,fontSize:"0.78rem",outline:"none"}}/>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          <div style={{display:"flex",gap:"0.5rem"}}>
-            <button onClick={()=>setModo(null)} style={{flex:1,padding:"0.8rem",borderRadius:"10px",background:"transparent",border:`1px solid ${brd}`,color:muted,cursor:"pointer",fontWeight:600}}>Volver</button>
-            <button onClick={handleConfirmar} disabled={guardando} style={{flex:2,padding:"0.8rem",borderRadius:"10px",background:guardando?"#1a1a2e":"linear-gradient(135deg,#f59e0b,#d97706)",border:"none",color:"#fff",fontWeight:800,cursor:guardando?"not-allowed":"pointer",fontSize:"0.95rem"}}>
-              {guardando?"Guardando...":"Confirmar y enviar"}
-            </button>
-          </div>
-        </div>
-      )}
-      <div style={{textAlign:"center",color:muted,fontSize:"0.72rem",marginTop:"1.5rem",paddingBottom:"1rem"}}>EnviosHub · Link de solo confirmación</div>
-    </div>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════
 // TAB OTROS PEDIDOS — retiro_deposito / courier / a_convenir
 // ════════════════════════════════════════════════════════════════════
 // TAB PENDIENTES — alertas operativas para colaboradores
@@ -12525,8 +12072,6 @@ function TabSalida({envios,setEnvios,lc,sesion}){
 }
 
 export default function App(){
-  const [confirmToken]=useState(()=>new URLSearchParams(window.location.search).get('t'));
-  const [despachoToken]=useState(()=>new URLSearchParams(window.location.search).get('d'));
   const [sesion,setSesion]=useState(()=>getSession());
   const [pantalla,setPantalla]=useState("dashboard");
   const [ahora,setAhora]=useState(()=>new Date());
@@ -12683,7 +12228,7 @@ export default function App(){
   const [fileName,setFileName]=useState("");
   const [fechaImport,setFechaImport]=useState(fechaHoy());
   const [pagosCC,setPagosCC]=useState([]);
-  useEffect(()=>{if(sesion?.rol==="logistica")return;const unsub=onSnapshot(collection(db,"pagosCC"),snap=>{setPagosCC(snap.docs.map(d=>({...d.data(),_id:d.id})));});return()=>unsub();},[sesion?.rol]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{if(sesion?.rol!=="admin"&&sesion?.rol!=="colaborador")return;const unsub=onSnapshot(collection(db,"pagosCC"),snap=>{setPagosCC(snap.docs.map(d=>({...d.data(),_id:d.id})));});return()=>unsub();},[sesion?.rol]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // facturaClientes: {clienteKey: true} — guardado en config/clientesMeta
   const [facturaClientes,setFacturaClientesLocal]=useState({});
@@ -12893,8 +12438,6 @@ export default function App(){
   const reasignarSel=items=>{setBorrador(items);setPantalla("asignacion");};
 
   // Auth gates
-  if(despachoToken)return<DespachoPage token={despachoToken}/>;
-  if(confirmToken)return<ConfirmPage token={confirmToken}/>;
   if(!sesion)return<PantallaLogin onLogin={s=>{setSession(s);setSesion(s);}}/>;
   if(sesion.rol==="logistica"){
     return<VistaLogisticaLote sesion={sesion}/>;

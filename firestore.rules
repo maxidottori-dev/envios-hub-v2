@@ -1,0 +1,71 @@
+// ════════════════════════════════════════════════════════════════════
+// REGLAS DE FIRESTORE — EnviosHub
+// El rol viaja en el token de Firebase Auth (claims emitidos por /api/login):
+//   request.auth.token.rol       = admin | colaborador | armador | expedicion | logistica
+//   request.auth.token.logistica = nombre de la logística (solo rol logistica)
+// El servidor (Vercel Functions, Admin SDK) NO pasa por estas reglas.
+//
+// Cómo aplicar: Firebase Console → Firestore → Reglas → pegar TODO este archivo → Publicar.
+// Cómo volver atrás: pestaña Reglas → historial (menú izquierdo) → elegir la versión anterior → Publicar.
+// ════════════════════════════════════════════════════════════════════
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function logueado()   { return request.auth != null; }
+    function rol()        { return request.auth.token.rol; }
+    function esAdmin()    { return logueado() && rol() == 'admin'; }
+    function esStaff()    { return logueado() && rol() in ['admin', 'colaborador']; }
+    function esPlanta()   { return logueado() && rol() in ['admin', 'colaborador', 'armador', 'expedicion']; }
+    function esLogistica(){ return logueado() && rol() == 'logistica'; }
+    function miLogistica(){ return request.auth.token.logistica; }
+
+    // ── Usuarios: staff lista (sin credenciales); cada uno lee su propio doc; solo admin escribe ──
+    match /usuarios/{id} {
+      allow get:   if esStaff() || (logueado() && request.auth.uid == id);
+      allow list:  if esStaff();
+      allow write: if esAdmin();
+    }
+    // Hashes de contraseña e intentos fallidos: SOLO servidor (Admin SDK)
+    match /credenciales/{id} {
+      allow read, write: if false;
+    }
+
+    // ── Envíos: planta lee/escribe todo; la logística solo lee los suyos (consulta con where trans == su logística) ──
+    match /envios/{id} {
+      allow read:  if esPlanta() || (esLogistica() && resource.data.trans == miLogistica());
+      allow write: if esPlanta();
+    }
+
+    // ── Aceptación de lotes por la logística ──
+    match /acuses/{id} {
+      allow read:   if esStaff() || (esLogistica() && resource.data.logistica == miLogistica());
+      allow create: if esLogistica() && request.resource.data.logistica == miLogistica();
+      allow update: if esLogistica() && resource.data.logistica == miLogistica() && request.resource.data.logistica == miLogistica();
+      allow delete: if esAdmin();
+    }
+
+    // ── Operación de depósito/despacho: armadores y expedición también ──
+    match /armados/{id}               { allow read, write: if esPlanta(); }
+    match /colectas/{id}              { allow read, write: if esPlanta(); }
+    match /otrosPedidos/{id}          { allow read, write: if esPlanta(); }
+    match /sesionesSalida/{id}        { allow read, write: if esPlanta(); }
+    match /sesionesSalidaActiva/{id}  { allow read, write: if esPlanta(); }
+
+    // ── Gestión: solo admin y colaboradores ──
+    match /postventa/{id}  { allow read, write: if esStaff(); }
+    match /clientes/{id}   { allow read, write: if esStaff(); }
+    match /pagosCC/{id}    { allow read, write: if esStaff(); }
+
+    // ── Configuración: la lee la planta (tarifas, zonas, expedición); la escribe staff ──
+    match /config/{doc} {
+      allow read:  if esPlanta();
+      allow write: if esStaff();
+    }
+
+    // Todo lo demás (reservasTurno, despachos, cierres, etc.): solo servidor
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
