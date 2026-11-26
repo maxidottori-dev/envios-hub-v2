@@ -1,3 +1,4 @@
+import { exigirAuth } from "./_auth.js";
 // Script de alta única — crea los 3 Order Custom Fields del datepicker propio en Tiendanube.
 // Llamar una sola vez vía POST /api/crear-custom-fields-tn (desde curl o desde el navegador).
 // Guardar los IDs devueltos como constantes en _tn-custom-fields.js.
@@ -18,6 +19,7 @@ const CAMPOS = [
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (!(await exigirAuth(req, res, ["admin"]))) return;
   if (!TN_TOKEN || !TN_STOREID) return res.status(500).json({ error: "Faltan env vars TN_ACCESS_TOKEN / TN_STORE_ID" });
 
   const resultados = [];

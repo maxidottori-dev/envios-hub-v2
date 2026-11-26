@@ -1,3 +1,4 @@
+import { exigirAuth } from "./_auth.js";
 import { initDb } from "./_firebase.js";
 import { ordenAEnvio } from "./_tn.js";
 
@@ -6,6 +7,7 @@ const TN_STOREID = process.env.TN_STORE_ID;
 
 export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
+  if (!(await exigirAuth(req, res, ["admin"]))) return;
 
   let db;
   try { db = initDb(); } catch(e) { return res.status(500).json({ error: "Firebase init failed", detail: e.message }); }

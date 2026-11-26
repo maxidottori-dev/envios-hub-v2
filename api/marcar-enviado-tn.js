@@ -1,3 +1,4 @@
+import { exigirAuth } from "./_auth.js";
 // Marca un pedido de Tienda Nube como enviado (fulfill) al cierre de sesión de Salida.
 // Llamado desde TabSalida > generarYCerrar() — best effort, no bloquea el cierre.
 //
@@ -24,6 +25,7 @@ const HEADERS = {
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (!(await exigirAuth(req, res, ["admin","colaborador","armador","expedicion"]))) return;
 
   const { orderTNId, nroSeguimiento } = req.body || {};
   if (!orderTNId) return res.status(400).json({ error: "orderTNId requerido" });

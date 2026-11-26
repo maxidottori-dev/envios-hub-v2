@@ -2,7 +2,8 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import * as XLSXLib from "xlsx";
 import jsQR from "jsqr";
 import { jsPDF } from "jspdf";
-import { db } from "./firebase.js";
+import { db, auth } from "./firebase.js";
+import { signInWithCustomToken, signOut, onAuthStateChanged } from "firebase/auth";
 import qrcode from "qrcode-generator";
 import { collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, updateDoc, query, where, getDocs, addDoc, serverTimestamp, limit, orderBy, writeBatch, runTransaction } from "firebase/firestore";
 
@@ -27,20 +28,13 @@ function getSession() {
   try { return JSON.parse(localStorage.getItem(AUTH_KEY) || "null"); } catch { return null; }
 }
 function setSession(u) { localStorage.setItem(AUTH_KEY, JSON.stringify(u)); }
-function clearSession() { localStorage.removeItem(AUTH_KEY); }
+function clearSession() { localStorage.removeItem(AUTH_KEY); try { signOut(auth); } catch(e) {} }
 
-async function loginUsuario(usuario, password) {
-  try {
-    const snap = await getDocs(
-      query(collection(db,"usuarios"), where("usuario","==",usuario), where("activo","==",true), limit(1))
-    );
-    if (snap.empty) return null;
-    const data = snap.docs[0].data();
-    if (data.password !== password) return null;
-    return { id: snap.docs[0].id, ...data };
-  } catch(e) { console.error("login error:", e); return null; }
+// Llamada a /api/* con el ID token de Firebase (las funciones protegidas lo exigen).
+async function apiFetch(path, opts = {}) {
+  const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+  return fetch(path, { ...opts, headers: { ...(opts.headers || {}), ...(token ? { Authorization: "Bearer " + token } : {}) } });
 }
-
 
 // ════════════════════════════════════════════════════════════════════
 // SISTEMA DE PERMISOS — features por usuario
@@ -756,11 +750,11 @@ function PantallaLogin({onLogin}){
     if(!usuario||!password){setError("Completá usuario y contraseña");return;}
     setLoading(true);setError("");
     try{
-      const snap=await getDocs(query(collection(db,"usuarios"),where("usuario","==",usuario),where("activo","==",true),limit(1)));
-      if(snap.empty){setError("Usuario o contraseña incorrectos");setLoading(false);return;}
-      const data=snap.docs[0].data();
-      if(data.password!==password){setError("Usuario o contraseña incorrectos");setLoading(false);return;}
-      const sesion={id:snap.docs[0].id,...data};
+      const resp=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({usuario,password})});
+      const data=await resp.json().catch(()=>({}));
+      if(!resp.ok||!data.token){setError(data.error||"Usuario o contraseña incorrectos");setLoading(false);return;}
+      await signInWithCustomToken(auth,data.token);
+      const sesion=data.sesion;
       setSession(sesion);
       onLogin(sesion);
     }catch(e){setError("Error de conexion. Intentá de nuevo.");}
@@ -5544,7 +5538,7 @@ function TabCtasCtes({envios,lc,sesion=null,pagosInicial=[],facturaClientes={},s
     setSyncPagos("cargando");
     setSyncDetalleOpen(false);
     try{
-      const resp=await fetch("/api/sync-pagos-pendientes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})});
+      const resp=await apiFetch("/api/sync-pagos-pendientes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})});
       const d=await resp.json();
       setSyncPagos(d);
     }catch(e){
@@ -6788,21 +6782,30 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{},esAdmin=
   },[]);
 
   const guardar=async()=>{
-    if(!form.usuario||!form.password){mostrarToast("Completá usuario y contraseña");return;}
+    if(!form.usuario||(!editId&&!form.password)){mostrarToast("Completá usuario y contraseña");return;}
+    if(form.password&&form.password.length<6){mostrarToast("La contraseña debe tener al menos 6 caracteres");return;}
     if(form.rol==="logistica"&&!form.logistica){mostrarToast("Selecciona la logistica para este usuario");return;}
     if(form.rol==="armador"&&!form.armadorId){mostrarToast("Selecciona el armador para este usuario");return;}
     const id=editId||("usr_"+Date.now());
-    await setDoc(doc(db,"usuarios",id),{...form,usuario:form.usuario.toLowerCase().trim()});
+    const {password:pw,...resto}=form;
+    // La contraseña NUNCA se guarda en texto plano: se manda al servidor, que la hashea.
+    await setDoc(doc(db,"usuarios",id),{...resto,usuario:form.usuario.toLowerCase().trim()},{merge:true});
+    if(pw){
+      try{
+        const r=await apiFetch("/api/set-password",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,password:pw})});
+        if(!r.ok){const d=await r.json().catch(()=>({}));mostrarToast("⚠ No se pudo guardar la contraseña: "+(d.error||r.status));return;}
+      }catch(e){mostrarToast("⚠ No se pudo guardar la contraseña");return;}
+    }
     setForm({usuario:"",password:"",rol:"colaborador",logistica:"",alias:"",armadorId:"",esChofer:false,activo:true});
     setEditId(null);
     mostrarToast(editId?"Usuario actualizado":"Usuario creado");
   };
 
   const toggleActivo=async(u)=>{
-    await setDoc(doc(db,"usuarios",u.id),{...u,activo:!u.activo});
+    await setDoc(doc(db,"usuarios",u.id),{activo:!u.activo},{merge:true});
   };
 
-  const editar=u=>{setForm({usuario:u.usuario,password:u.password,rol:u.rol,logistica:u.logistica||"",alias:u.alias||"",armadorId:u.armadorId||"",esChofer:u.esChofer||false,activo:u.activo});setEditId(u.id);};
+  const editar=u=>{setForm({usuario:u.usuario,password:"",rol:u.rol,logistica:u.logistica||"",alias:u.alias||"",armadorId:u.armadorId||"",esChofer:u.esChofer||false,activo:u.activo});setEditId(u.id);};
 
   const togglePerm=async(u,featureKey)=>{
     const actual=(u.permisos||{})[featureKey];
@@ -6915,7 +6918,7 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{},esAdmin=
           </div>
           <div>
             <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Contraseña</div>
-            <input value={form.password} onChange={e=>setForm(p=>({...p,password:e.target.value}))} placeholder="contraseña" style={{...S.input,width:"100%"}}/>
+            <input type="password" autoComplete="new-password" value={form.password} onChange={e=>setForm(p=>({...p,password:e.target.value}))} placeholder={editId?"(dejar vacío para no cambiarla)":"contraseña (mín. 6)"} style={{...S.input,width:"100%"}}/>
           </div>
           <div>
             <div style={{color:"#6b7280",fontSize:"0.62rem",fontWeight:700,textTransform:"uppercase",marginBottom:"4px"}}>Rol</div>
@@ -6949,6 +6952,10 @@ function TabUsuarios({lc,configExpedicion={},setConfigExpedicion=()=>{},esAdmin=
         </div>
         <div style={{display:"flex",gap:"0.5rem"}}>
           <button onClick={guardar} style={{...S.btn(true),background:"linear-gradient(135deg,#6366f1,#8b5cf6)"}}>{editId?"Guardar cambios":"Crear usuario"}</button>
+          <button onClick={async()=>{
+            if(!window.confirm("Convierte todas las contraseñas que sigan en texto plano a formato protegido (hash). No cambia ninguna contraseña. ¿Continuar?"))return;
+            try{const r=await apiFetch("/api/migrar-passwords",{method:"POST"});const d=await r.json();mostrarToast(r.ok?`🔒 ${d.migrados} contraseña(s) protegidas (de ${d.total} usuarios)`:"⚠ "+(d.error||r.status));}catch(e){mostrarToast("⚠ Error de conexión");}
+          }} style={{...S.btn(false),color:"#10b981",borderColor:"#065f46"}}>🔒 Proteger contraseñas</button>
           {editId&&<button onClick={()=>{setEditId(null);setForm({usuario:"",password:"",rol:"colaborador",logistica:"",alias:"",armadorId:"",esChofer:false,activo:true});}} style={S.btn(false)}>Cancelar</button>}
         </div>
       </div>
@@ -12051,7 +12058,7 @@ function TabSalida({envios,setEnvios,lc,sesion}){
       if(conTN.length>0){
         await Promise.all(conTN.map(e=>{
           const orderTNId=e.idTN||e.id;
-          return fetch("/api/marcar-enviado-tn",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({orderTNId})})
+          return apiFetch("/api/marcar-enviado-tn",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({orderTNId})})
             .then(r=>r.json().catch(()=>({})))
             .then(d=>console.log("TN dispatch result",orderTNId,d))
             .catch(err=>console.warn("TN dispatch warn",orderTNId,err));
@@ -12523,6 +12530,13 @@ export default function App(){
   const [ahora,setAhora]=useState(()=>new Date());
   useEffect(()=>{const t=setInterval(()=>setAhora(new Date()),1000);return()=>clearInterval(t);},[]);
 
+  // Si hay sesión guardada pero Firebase Auth no tiene usuario (sesión anterior al login seguro) → pedir login de nuevo
+  useEffect(()=>{
+    if(!sesion?.id)return;
+    const unsub=onAuthStateChanged(auth,u=>{unsub();if(!u){clearSession();setSesion(null);}});
+    return()=>unsub();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
   // Validar sesión contra Firebase al arrancar — si el usuario fue desactivado, forzar logout
   // También sincroniza los permisos más recientes para que puedeVer() tenga datos frescos
   useEffect(()=>{
@@ -12572,7 +12586,7 @@ export default function App(){
         if(Date.now()-last<minutos*60*1000)return;
         localStorage.setItem(key,String(Date.now()));
       }catch(e){}
-      fetch("/api/"+nombre,{method:"POST"})
+      apiFetch("/api/"+nombre,{method:"POST"})
         .then(r=>r.json())
         .then(d=>{if(d?.actualizados>0||d?.archivados>0)console.log(nombre+":",d);})
         .catch(err=>console.warn(nombre+" error:",err));

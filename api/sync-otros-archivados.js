@@ -1,3 +1,4 @@
+import { exigirAuth } from "./_auth.js";
 import { initDb } from "./_firebase.js";
 
 const TN_TOKEN   = process.env.TN_ACCESS_TOKEN;
@@ -7,6 +8,7 @@ const TN_STOREID = process.env.TN_STORE_ID;
 // Se llama automáticamente desde el frontend al cargar la app.
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (!(await exigirAuth(req, res, ["admin","colaborador"]))) return;
 
   let db;
   try { db = initDb(); } catch(e) { return res.status(500).json({ error: "Firebase init failed", detail: e.message }); }

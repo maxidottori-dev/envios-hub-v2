@@ -4,10 +4,47 @@ import { ordenAEnvio, ordenAOtroPedido, parsearDatepicker, getPagoEstadoInicial,
 const TN_TOKEN   = process.env.TN_ACCESS_TOKEN;
 const TN_STOREID = process.env.TN_STORE_ID;
 
+import crypto from "node:crypto";
+import { safeEqual } from "./_auth.js";
+
+// Necesitamos el body CRUDO para verificar la firma HMAC de Tienda Nube.
+export const config = { api: { bodyParser: false } };
+
+async function leerRaw(req) {
+  const chunks = [];
+  for await (const c of req) chunks.push(typeof c === "string" ? Buffer.from(c) : c);
+  return Buffer.concat(chunks);
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  let order = req.body;
+  // Body: crudo (para firmar) o ya parseado si la plataforma lo hizo igual.
+  let raw = null, order = null;
+  if (req.body && typeof req.body === "object" && Object.keys(req.body).length) {
+    order = req.body;
+  } else {
+    raw = await leerRaw(req);
+    try { order = JSON.parse(raw.toString("utf8") || "{}"); } catch { order = null; }
+  }
+
+  // Verificación de firma: se activa cuando existe la variable TN_WEBHOOK_SECRET
+  // (secret de la app de Tienda Nube). Sin la variable, solo avisa en el log (no rompe nada).
+  const secret = process.env.TN_WEBHOOK_SECRET;
+  const firma = String(req.headers["x-linkedstore-hmac-sha256"] || "");
+  if (secret) {
+    if (raw) {
+      const calc = crypto.createHmac("sha256", secret).update(raw).digest("hex");
+      if (!safeEqual(firma, calc)) {
+        console.warn("WEBHOOK_FIRMA_INVALIDA");
+        return res.status(401).json({ error: "Firma inválida" });
+      }
+    } else {
+      console.warn("WEBHOOK_SIN_BODY_CRUDO: no se pudo verificar la firma");
+    }
+  } else {
+    console.warn("WEBHOOK_SIN_VERIFICAR (falta TN_WEBHOOK_SECRET). Firma recibida:", firma ? "sí" : "no");
+  }
   if (!order || !order.id) return res.status(200).json({ ok: true, skipped: "no order data" });
 
   const topic = req.headers["x-linkedstore-topic"]
