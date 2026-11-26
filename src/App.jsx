@@ -12077,6 +12077,8 @@ export default function App(){
   // (con las reglas activas, un listener sin credenciales falla y no se reintenta).
   const [authListo,setAuthListo]=useState(false);
   useEffect(()=>{const unsub=onAuthStateChanged(auth,()=>setAuthListo(true));return()=>unsub();},[]);
+  // Solo suscribirse a Firestore cuando hay un usuario logueado Y Firebase Auth ya lo restauró
+  const puedeSuscribir=authListo&&!!sesion&&!!auth.currentUser;
   const [pantalla,setPantalla]=useState("dashboard");
   const [ahora,setAhora]=useState(()=>new Date());
   useEffect(()=>{const t=setInterval(()=>setAhora(new Date()),1000);return()=>clearInterval(t);},[]);
@@ -12117,7 +12119,7 @@ export default function App(){
   const [colectas,setColectas]=useState([]); // colectas ML pendientes de armado (estado=pendiente)
   const [otrosPedidos,setOtrosPedidos]=useState([]);
   useEffect(()=>{
-    if(!authListo||sesion?.rol==="logistica")return; // la logística solo usa VistaLogisticaLote (consulta propia)
+    if(!puedeSuscribir||sesion?.rol==="logistica")return; // la logística solo usa VistaLogisticaLote (consulta propia)
     // Traer todos salvo convertido_a_ump/despachado (incluye archivado/cancelado para que el filtro local los excluya en tiempo real)
     const q=query(collection(db,"otrosPedidos"),where("estado","not-in",["convertido_a_ump","despachado"]));
     const unsub=onSnapshot(q,snap=>{
@@ -12152,9 +12154,9 @@ export default function App(){
     const syncInterval=setInterval(syncAll,30*60*1000);
     return()=>{unsub();clearInterval(syncInterval);};
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[sesion?.rol,authListo]);
+  },[sesion?.rol,puedeSuscribir]);
   useEffect(()=>{
-    if(!authListo||sesion?.rol==="logistica")return; // la logística solo usa VistaLogisticaLote (consulta propia)
+    if(!puedeSuscribir||sesion?.rol==="logistica")return; // la logística solo usa VistaLogisticaLote (consulta propia)
     const unsub=onSnapshot(
       query(collection(db,"colectas"),where("estado","==","pendiente")),
       snap=>{setColectas(snap.docs.map(d=>({...d.data(),id:d.id})));},
@@ -12162,7 +12164,7 @@ export default function App(){
     );
     return()=>unsub();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[sesion?.rol,authListo]);
+  },[sesion?.rol,puedeSuscribir]);
   const [zc,setZc]=useState(ZONAS_INIT);
   const [lc,setLc]=useState(LOGISTICAS_INIT);
   const [mlTarifas,setMlTarifas]=useState(ML_TARIFAS_INIT);
@@ -12170,7 +12172,7 @@ export default function App(){
 
   // Cargar lc, zc y cpExtra desde Firebase al iniciar
   useEffect(()=>{
-    if(!authListo||sesion?.rol==="logistica")return; // la logística solo usa VistaLogisticaLote (consulta propia)
+    if(!puedeSuscribir||sesion?.rol==="logistica")return; // la logística solo usa VistaLogisticaLote (consulta propia)
     const unsubLc=onSnapshot(doc(db,"config","logisticas"),snap=>{
       if(snap.exists()){setLc(snap.data());}
     });
@@ -12200,7 +12202,7 @@ export default function App(){
     });
     return()=>{unsubLc();unsubZc();unsubCp();unsubMl();};
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[sesion?.rol,authListo]);
+  },[sesion?.rol,puedeSuscribir]);
 
   const setLcPersist=useCallback((updater)=>{
     setLc(prev=>{
@@ -12232,18 +12234,18 @@ export default function App(){
   const [fileName,setFileName]=useState("");
   const [fechaImport,setFechaImport]=useState(fechaHoy());
   const [pagosCC,setPagosCC]=useState([]);
-  useEffect(()=>{if(!authListo||(sesion?.rol!=="admin"&&sesion?.rol!=="colaborador"))return;const unsub=onSnapshot(collection(db,"pagosCC"),snap=>{setPagosCC(snap.docs.map(d=>({...d.data(),_id:d.id})));});return()=>unsub();},[sesion?.rol,authListo]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{if(!puedeSuscribir||(sesion?.rol!=="admin"&&sesion?.rol!=="colaborador"))return;const unsub=onSnapshot(collection(db,"pagosCC"),snap=>{setPagosCC(snap.docs.map(d=>({...d.data(),_id:d.id})));});return()=>unsub();},[sesion?.rol,puedeSuscribir]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // facturaClientes: {clienteKey: true} — guardado en config/clientesMeta
   const [facturaClientes,setFacturaClientesLocal]=useState({});
   useEffect(()=>{
-    if(!authListo||sesion?.rol==="logistica")return; // la logística solo usa VistaLogisticaLote (consulta propia)
+    if(!puedeSuscribir||sesion?.rol==="logistica")return; // la logística solo usa VistaLogisticaLote (consulta propia)
     const unsub=onSnapshot(doc(db,"config","clientesMeta"),snap=>{
       if(snap.exists())setFacturaClientesLocal(snap.data().facturaImpresa||{});
     });
     return()=>unsub();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[sesion?.rol,authListo]);
+  },[sesion?.rol,puedeSuscribir]);
   const setFacturaCliente=(key,val)=>{
     const next=val?{...facturaClientes,[key]:true}:{...facturaClientes};
     if(!val)delete next[key];
@@ -12256,14 +12258,15 @@ export default function App(){
   const [cfgExpCargada,setCfgExpCargada]=useState(false); // evita mostrar "sin armador vinculado" mientras carga
   const [cfgExpError,setCfgExpError]=useState("");
   useEffect(()=>{
-    if(!authListo||sesion?.rol==="logistica")return; // la logística solo usa VistaLogisticaLote (consulta propia)
+    if(!puedeSuscribir||sesion?.rol==="logistica")return; // la logística solo usa VistaLogisticaLote (consulta propia)
+    setCfgExpError("");
     const unsub=onSnapshot(doc(db,"config","expedicion"),snap=>{
       if(snap.exists())setConfigExpedicionLocal(snap.data());
       setCfgExpCargada(true);
     },err=>{console.error("config/expedicion:",err);setCfgExpError(err?.code||err?.message||"error");setCfgExpCargada(true);});
     return()=>unsub();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[sesion?.rol,authListo]);
+  },[sesion?.rol,puedeSuscribir]);
   const cfgSaveTimerRef=useRef(null);
   const cfgPendingRef=useRef(null);
   const setConfigExpedicion=useCallback((updater)=>{
@@ -12291,7 +12294,7 @@ export default function App(){
 
   useEffect(()=>{
     prevEnviosRef.current=null; // reset para no disparar alertas falsas al montar
-    if(!authListo){return;}
+    if(!puedeSuscribir){return;}
     if(sesion?.rol==="logistica"){setSyncLoading(false);return;} // la logística hace su propia consulta (VistaLogisticaLote)
     setSyncLoading(true);
     // Filtro 60 días: sólo carga los últimos 60 días en tiempo real (~10k docs vs 27k)
@@ -12327,7 +12330,7 @@ export default function App(){
     },(err)=>{console.error(err);setSyncLoading(false);});
     return()=>unsub();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[sesion?.rol,authListo]);
+  },[sesion?.rol,puedeSuscribir]);
 
   const [pendingSaves,setPendingSaves]=useState(0);
 
