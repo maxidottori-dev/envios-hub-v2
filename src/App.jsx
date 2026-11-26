@@ -2112,7 +2112,7 @@ function VistaLogisticaLote({sesion}){
   // Tag NUEVO: los pendientes de aceptar + los que entraron en la última aceptación
   const idsNuevosDia=(f,a,st)=>new Set([...(st.estado==="con_cambios"?st.nuevos.map(e=>e.id):[]),...(st.estado!=="sin_aceptar"?(a?.nuevos||[]):[])]);
   const nuevosVis=idsNuevosDia(fechaSel,acuse,ac);
-  const cantNuevosDia=f=>{const a=acuses[f];const st=calcAcuse(enviosDe(f),a);const ids=idsNuevosDia(f,a,st);return enviosDe(f).filter(e=>ids.has(e.id)).length;};
+  const cantNuevosDia=f=>{const a=acuses[f];const st=calcAcuse(enviosDe(f),a);if(st.estado==="con_cambios")return st.nuevos.length;const ids=idsNuevosDia(f,a,st);return enviosDe(f).filter(e=>ids.has(e.id)).length;};
   const cambIds=new Map(ac.cambiados.map(x=>[x.e.id,x.antes]));
   const pendientesTotal=dias.filter(f=>{const s=estadoDe(f).estado;return s==="sin_aceptar"||s==="con_cambios";}).length;
 
@@ -2158,7 +2158,7 @@ function VistaLogisticaLote({sesion}){
   // Pendientes de aceptar (arriba de todo). Los ya aceptados pasan a su turno, con tag NUEVO y primeros.
   const pendIds=new Set(ac.estado==="con_cambios"?ac.nuevos.map(e=>e.id):[]);
   const lNuevos=lista.filter(e=>pendIds.has(e.id));
-  const lResto=lista.filter(e=>!pendIds.has(e.id));
+  const lResto=lista.filter(e=>!pendIds.has(e.id)); // los nuevos pendientes no se listan hasta que se aceptan
   const resumenTurnos=agrupar(lista).map(g=>(g.t||"Sin turno")+" "+g.items.length).join("  ·  ");
   const cobTot=lista.reduce((t,e)=>t+(e.cobranza>0?e.cobranza:0),0);
   const ORIG_TAG=e=>e.pvCasoId?{l:"POSTVENTA",bg:"#2a0a2e",c:"#e879f9"}:e.origen==="ML"?{l:"FLEX",bg:"#1a3008",c:"#84cc16"}:e.origen==="Tienda Nube"?{l:"TIENDA",bg:"#0c1a40",c:"#38bdf8"}:{l:"MANUAL",bg:"#2a1c00",c:"#f59e0b"};
@@ -2261,7 +2261,7 @@ function VistaLogisticaLote({sesion}){
             const cc=ac.estado==="con_cambios";
             const titulo=ac.estado==="vacio"?"No tenés envíos asignados para este día"
               :ac.estado==="sin_aceptar"?"Lote nuevo: falta que lo aceptes"
-              :cc?"Hay cambios desde tu última aceptación"
+              :cc?"Hay cambios: "+[ac.nuevos.length?ac.nuevos.length+" envío"+(ac.nuevos.length>1?"s":"")+" nuevo"+(ac.nuevos.length>1?"s":""):"",ac.cambiados.length?ac.cambiados.length+" modificado"+(ac.cambiados.length>1?"s":""):"",ac.quitados.length?ac.quitados.length+" quitado"+(ac.quitados.length>1?"s":""):""].filter(Boolean).join(", ")
               :"✓ Lote aceptado "+fmtHoraAcuse(acuse?.aceptadoTs)+(acuse?.aceptadoPor?" por "+acuse.aceptadoPor:"");
             const chip=(t,c,bg)=><span style={{background:bg,color:c,border:"1px solid "+c,borderRadius:"8px",padding:"4px 10px",fontWeight:800,fontSize:"0.9rem"}}>{t}</span>;
             const fila={fontSize:"0.9rem",padding:"3px 0",lineHeight:1.35};
@@ -2269,14 +2269,9 @@ function VistaLogisticaLote({sesion}){
           <div style={{background:ui.bg,border:"2px solid "+ui.c,borderRadius:"12px",padding:"0.9rem 1rem",marginBottom:"1rem"}}>
             <div style={{color:"#9ca3af",fontSize:"0.8rem",textTransform:"capitalize"}}>{fechaLarga(fechaSel)}</div>
             <div style={{color:ui.c,fontWeight:900,fontSize:"1.2rem",marginBottom:"6px"}}>{titulo}</div>
-            {lista.length>0&&<div style={{color:"#e5e7eb",fontSize:"0.95rem",fontWeight:700,marginBottom:"8px"}}>{lista.length} envío{lista.length!==1?"s":""} en total · {resumenTurnos}{cobTot>0?<span style={{color:"#fbbf24"}}> · A cobrar: ${cobTot.toLocaleString("es-AR")}</span>:null}</div>}
-            {cc&&<div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginBottom:"8px"}}>
-              {ac.nuevos.length>0&&chip("🆕 "+ac.nuevos.length+" nuevo"+(ac.nuevos.length>1?"s":""),"#4ade80","#052e16")}
-              {ac.cambiados.length>0&&chip("✏ "+ac.cambiados.length+" modificado"+(ac.cambiados.length>1?"s":""),"#fbbf24","#1c1200")}
-              {ac.quitados.length>0&&chip("➖ "+ac.quitados.length+" quitado"+(ac.quitados.length>1?"s":""),"#f87171","#1c0a0a")}
-            </div>}
+            {lista.length>0&&!cc&&<div style={{color:"#e5e7eb",fontSize:"0.95rem",fontWeight:700,marginBottom:"8px"}}>{lista.length} envío{lista.length!==1?"s":""} en total · {resumenTurnos}{cobTot>0?<span style={{color:"#fbbf24"}}> · A cobrar: ${cobTot.toLocaleString("es-AR")}</span>:null}</div>}
             {cc&&<div style={{maxHeight:"260px",overflowY:"auto",background:"#0a0e1a",borderRadius:"8px",padding:"6px 10px",marginBottom:"10px"}}>
-              {ac.nuevos.map(e=><div key={"n"+e.id} style={{...fila,color:"#bbf7d0"}}>🆕 <b>{nro(e)}</b> — {e.direccion}{e.localidad?", "+e.localidad:""} <b style={{color:visT(e.turno||"").c}}>[{e.turno||"Sin turno"}]</b></div>)}
+              {ac.nuevos.map(e=><div key={"n"+e.id} style={{...fila,color:"#bbf7d0",fontSize:"0.85rem"}}>• <b>{nro(e)}</b> — {(e.direccion||"").split(" / ")[0].split(", Piso")[0]}{e.localidad&&!/referencia/i.test(e.localidad)?", "+e.localidad:""} <b style={{color:visT(e.turno||"").c}}>[{e.turno||"Sin turno"}]</b></div>)}
               {ac.cambiados.map(({e,antes})=><div key={"c"+e.id} style={{...fila,color:"#fcd34d"}}>✏ <b>{antes.nro}</b> — {(antes.turno||"")!==(e.turno||"")?`cambió de turno: ${antes.turno||"—"} → ${e.turno||"—"}`:"cambió la dirección"}: {e.direccion}</div>)}
               {ac.quitados.map(q=>{const otroDia=envios.find(e=>e.id===q.id);return<div key={"q"+q.id} style={{...fila,color:"#fca5a5"}}>➖ <b>{q.nro}</b> — {q.dir}: {otroDia?`pasó al ${fmtCorta(otroDia.fecha)}`:"ya no es tuyo para este día (reasignado, reprogramado o cancelado)"}</div>;})}
             </div>}
@@ -2287,10 +2282,6 @@ function VistaLogisticaLote({sesion}){
           </div>);})()}
 
           {/* Listado: NUEVOS pendientes arriba de todo; después AM / PM. Todo contraído al entrar */}
-          {lNuevos.length>0&&<div style={{background:"#06170c",border:"2px solid #22c55e",borderRadius:"12px",padding:"10px",marginBottom:"1.2rem"}}>
-            <div onClick={()=>alternar("NUEVOS")} style={{cursor:"pointer",color:"#4ade80",fontWeight:900,fontSize:"1.2rem",display:"flex",justifyContent:"space-between",gap:"8px",flexWrap:"wrap"}}><span>{abiertos.NUEVOS?"▼":"▶"} 🆕 NUEVOS</span><span style={{fontSize:"1rem"}}>{lNuevos.length} envío{lNuevos.length!==1?"s":""} · {abiertos.NUEVOS?"tocá para cerrar":"tocá para abrir"}</span></div>
-            {abiertos.NUEVOS&&<div style={{marginTop:"8px"}}>{renderGrupos(lNuevos,"N")}</div>}
-          </div>}
           {renderGrupos(lResto,"R")}
         </>}
       </div>
