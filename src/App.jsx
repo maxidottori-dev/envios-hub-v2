@@ -388,6 +388,14 @@ function getZonaML(p) { return ZONA_ML[p] || ""; }
 function getZonaMLExt(partido, cp) { return getZonaML(partido) || getZonaML(cpAPartido(cp)) || ""; }
 // Hora de asignación del envío (lote). Los viejos sin dato usan la hora de creación.
 const loteTs=e=>e.loteImportacion||e.asignadoTs||e.creadoTs||"";
+// Despachado "vigente": un reprogramado cuyo despacho es anterior a la fecha nueva vuelve a estar pendiente
+const despVigente=e=>{
+  if(!e.despachado)return false;
+  if(!e.reprogramado||!e.despachoTs||!e.fecha)return true;
+  const dia=new Date(e.despachoTs).toLocaleDateString("sv-SE");
+  return dia>=e.fecha;
+};
+const fmtDespAnterior=e=>e.despachoTs?new Date(e.despachoTs).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}):"";
 const horaLote=e=>{const t=loteTs(e);return t?new Date(t).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit",hour12:false}):"";};
 // Columna "Tipo": COM/RES si viene de Flex con tipo de entrega; si no, el origen (Tienda / Manual / PostVenta)
 const tipoInfo=e=>{
@@ -2199,6 +2207,7 @@ function VistaLogisticaLote({sesion}){
           {e.retiro&&B("RETIRO","#1c1000","#f97316")}
           {e.cobranza>0&&<span style={{marginLeft:"auto",background:"#1c1500",color:"#fbbf24",border:"1px solid #78350f",borderRadius:"6px",padding:"2px 10px",fontWeight:900,fontSize:"0.95rem"}}>COBRAR ${Number(e.cobranza).toLocaleString("es-AR")}</span>}
         </div>
+        {e.reprogramado&&e.despachado&&!despVigente(e)&&<div style={{background:"#1c1500",border:"1px solid #78350f",color:"#fbbf24",borderRadius:"6px",padding:"3px 8px",fontSize:"0.85rem",fontWeight:700,marginBottom:"4px"}}>↻ Reprogramado: ya se había despachado el {fmtDespAnterior(e)}. Hay que volver a entregarlo.</div>}
         <div style={{color:"#f9fafb",fontSize:"1rem",fontWeight:700,lineHeight:1.3}}>{e.direccion}{refExtra?<span style={{color:"#9ca3af",fontWeight:400}}> — {refExtra}</span>:null}</div>
         <div style={{color:"#9ca3af",fontSize:"0.85rem"}}>{[e.localidad&&!/referencia/i.test(e.localidad)?e.localidad:"",e.partido,e.cp?"CP "+e.cp:""].filter(Boolean).join(" · ")}{zona&&zona!==e.partido?" · Zona "+zona:""}</div>
         {(e.clienteNombre||e.telefono)&&<div style={{color:"#d1d5db",fontSize:"0.88rem",marginTop:"2px"}}>{e.clienteNombre}{e.telefono?<span> 📞 {e.telefono}</span>:null}</div>}
@@ -2237,8 +2246,8 @@ function VistaLogisticaLote({sesion}){
     const v=visT(g.t);
     const k=pref+"-"+(g.t||"sin");
     const abierto=!!abiertos[k];
-    const pend=g.items.filter(e=>!e.despachado);
-    const desp=g.items.filter(e=>e.despachado);
+    const pend=g.items.filter(e=>!despVigente(e));
+    const desp=g.items.filter(e=>despVigente(e));
     const kd=k+"-D";const verDesp=!!abiertos[kd];
     return(
       <div key={k} style={{marginBottom:"0.9rem"}}>
